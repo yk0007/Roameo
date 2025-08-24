@@ -191,12 +191,12 @@ export class WriteThroughDb implements Db {
   private async ensureSessionExists(sessionId: string) {
     if (!this.client) return;
     try {
-      // Check if session exists in chat_sessions table using 'id' column
+      // Check if session exists in chat_sessions table using 'session_id' column
       const { data: existingSession, error: selectError } = await this.client
         .from("chat_sessions")
-        .select("id")
-        .eq("id", sessionId)
-        .maybeSingle();
+        .select("session_id")
+        .eq("session_id", sessionId)
+        .single();
       
       if (selectError && selectError.code !== 'PGRST116') {
         console.error(`[persist] Error checking session existence:`, selectError);
@@ -207,10 +207,9 @@ export class WriteThroughDb implements Db {
         console.log(`[persist] Creating session ${sessionId} in chat_sessions table`);
         const session = this.mem.getSession(sessionId);
         const { error: insertError } = await this.client.from("chat_sessions").insert({
-          id: sessionId,
+          session_id: sessionId,
           user_id: session?.userId || '00000000-0000-0000-0000-000000000000',
-          title: session?.trip?.title || 'Trip',
-          metadata: session?.trip || {}
+          trip: session?.trip || {}
         });
         
         if (insertError) {

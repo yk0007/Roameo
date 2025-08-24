@@ -162,27 +162,52 @@ export function buildApiRouter(
     }
   });
 
-  r.get("/trips/list", (req: AuthenticatedRequest, res: Response) => {
-    // Filter sessions by authenticated user
-    const userSessions = req.userId ? db.listSessions().filter(s => s.userId === req.userId) : [];
-    const rows = userSessions.map((s) => {
-      const trip = (s.trip as any) || {};
-      const days: number | undefined = trip.days;
-      const duration: string | null = typeof days === "number" ? `${days} days` : (trip.duration || null);
-      const title: string = trip.title || trip.destination || "Untitled trip";
-      return {
-        id: s.sessionId,
-        sessionId: s.sessionId,
-        inviteId: s.inviteId,
-        title,
-        destination: trip.destination || null,
-        duration,
-        travelers: typeof trip.travelers === "number" ? trip.travelers : null,
-        image: trip.image || null,
-        updatedAt: (s.messages[s.messages.length - 1]?.createdAt || null),
-      };
-    });
-    res.json({ trips: rows });
+  r.get("/trips/list", async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.userId) {
+        return res.json({ trips: [] });
+      }
+
+      // Query sessions from database instead of memory
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(
+        process.env.SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      );
+
+      const { data: sessions, error } = await supabase
+        .from('chat_sessions')
+        .select('*')
+        .eq('user_id', req.userId)
+        .order('updated_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching user sessions:', error);
+        return res.status(500).json({ error: 'Failed to fetch trips' });
+      }
+
+      const rows = (sessions || []).map((s) => {
+        const trip = (s.trip as any) || {};
+        const days: number | undefined = trip.days;
+        const duration: string | null = typeof days === "number" ? `${days} days` : (trip.duration || null);
+        const title: string = trip.title || trip.destination || "Untitled trip";
+        return {
+          id: s.session_id,
+          sessionId: s.session_id,
+          inviteId: s.invite_id,
+          title,
+          destination: trip.destination || null,
+          duration,
+          createdAt: s.created_at,
+          updatedAt: s.updated_at,
+        };
+      });
+
+      res.json({ trips: rows });
+    } catch (error) {
+      console.error('Error in trips/list:', error);
+      res.status(500).json({ error: 'Failed to fetch trips' });
+    }
   });
 
   // Proxy endpoint for Google Photos API to fix CORS issues
