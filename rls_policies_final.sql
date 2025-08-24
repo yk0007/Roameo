@@ -1,3 +1,6 @@
+-- Step 1: First run add_user_columns.sql to add user_id columns
+-- Step 2: Then run this file to create RLS policies
+
 -- Enable RLS on all tables
 ALTER TABLE chat_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
@@ -50,35 +53,17 @@ CREATE POLICY "Users can only update their own messages" ON messages
 CREATE POLICY "Users can only delete their own messages" ON messages
     FOR DELETE USING (auth.uid() = user_id);
 
--- Saved POIs RLS Policies (join with chat_sessions to check ownership)
+-- Saved POIs RLS Policies
 CREATE POLICY "Users can only see their own saved POIs" ON saved_pois
-    FOR SELECT USING (
-        EXISTS (
-            SELECT 1 FROM chat_sessions 
-            WHERE chat_sessions.session_id = saved_pois.session_id 
-            AND chat_sessions.user_id = auth.uid()
-        )
-    );
+    FOR SELECT USING (auth.uid() = user_id);
 
 CREATE POLICY "Users can only insert their own saved POIs" ON saved_pois
-    FOR INSERT WITH CHECK (
-        EXISTS (
-            SELECT 1 FROM chat_sessions 
-            WHERE chat_sessions.session_id = saved_pois.session_id 
-            AND chat_sessions.user_id = auth.uid()
-        )
-    );
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "Users can only delete their own saved POIs" ON saved_pois
-    FOR DELETE USING (
-        EXISTS (
-            SELECT 1 FROM chat_sessions 
-            WHERE chat_sessions.session_id = saved_pois.session_id 
-            AND chat_sessions.user_id = auth.uid()
-        )
-    );
+    FOR DELETE USING (auth.uid() = user_id);
 
--- Sessions RLS Policies (compatibility table)
+-- Sessions RLS Policies
 CREATE POLICY "Users can only see their own sessions" ON sessions
     FOR SELECT USING (auth.uid() = user_id);
 
@@ -90,8 +75,3 @@ CREATE POLICY "Users can only update their own sessions" ON sessions
 
 CREATE POLICY "Users can only delete their own sessions" ON sessions
     FOR DELETE USING (auth.uid() = user_id);
-
--- Update default user_id to use auth.uid() instead of hardcoded UUID
-ALTER TABLE chat_sessions ALTER COLUMN user_id SET DEFAULT auth.uid();
-ALTER TABLE messages ALTER COLUMN user_id SET DEFAULT auth.uid();
-ALTER TABLE sessions ALTER COLUMN user_id SET DEFAULT auth.uid();
