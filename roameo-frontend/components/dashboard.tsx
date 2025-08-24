@@ -1,21 +1,51 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { CachedImage } from "@/components/cached-image"
 import { Plus, MapPin, Calendar, Users, Plane, Camera, Mountain, Send } from "lucide-react"
+import { supabase } from "@/lib/supabase/client"
 
 export function Dashboard() {
   const [message, setMessage] = useState("")
-  const [trips] = useState<Array<any>>([]) // TODO: load user trips when backend is ready
+  const [trips, setTrips] = useState<Array<any>>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchTrips = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) {
+          setLoading(false)
+          return
+        }
+
+        const response = await fetch('/api/trips/list', {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`
+          }
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          setTrips(data.trips || [])
+        }
+      } catch (error) {
+        console.error('Error fetching trips:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchTrips()
+  }, [])
 
   const handleSendMessage = () => {
     if (message.trim()) {
-      // Handle message sending logic here
-      console.log("Sending message:", message)
-      setMessage("")
+      // Redirect to chat page with the message
+      window.location.href = `/chat?message=${encodeURIComponent(message)}`
     }
   }
 
@@ -90,10 +120,21 @@ export function Dashboard() {
             <p className="text-muted-foreground">Manage and explore your planned adventures</p>
           </div>
 
-          {trips.length > 0 ? (
+          {loading ? (
+            <div className="text-center py-12">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+              <p className="text-muted-foreground">Loading your trips...</p>
+            </div>
+          ) : trips.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {trips.map((trip: any) => (
-                <Card key={trip.id} className="group hover:shadow-xl transition-all duration-300 border-border/50 overflow-hidden">
+                <Card 
+                  key={trip.id} 
+                  className="group hover:shadow-xl transition-all duration-300 border-border/50 overflow-hidden cursor-pointer"
+                  onClick={() => window.location.href = `/chat?sessionId=${trip.sessionId}`}
+                >
                   <div className="relative bg-gradient-to-br from-blue-500 to-purple-600">
                     {trip.image ? (
                       <CachedImage 
@@ -118,11 +159,11 @@ export function Dashboard() {
                     <div className="flex items-center justify-between text-sm text-muted-foreground">
                       <div className="flex items-center gap-1">
                         <Calendar className="w-4 h-4" />
-                        <span>{trip.duration}</span>
+                        <span>{trip.duration || 'Duration not set'}</span>
                       </div>
                       <div className="flex items-center gap-1">
                         <Users className="w-4 h-4" />
-                        <span>{trip.travelers}</span>
+                        <span>{trip.travelers || '1 traveler'}</span>
                       </div>
                     </div>
                   </CardContent>
@@ -134,9 +175,12 @@ export function Dashboard() {
               <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
                 <MapPin className="w-8 h-8 text-muted-foreground" />
               </div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">No trips planned yet</h3>
+              <h3 className="text-lg font-semibold text-foreground mb-2">No trips yet</h3>
               <p className="text-muted-foreground mb-4">Start planning your first adventure with Roameo</p>
-              <Button className="bg-primary hover:bg-primary/90" onClick={() => (window.location.href = "/chat")}>Plan Your First Trip</Button>
+              <Button className="bg-primary hover:bg-primary/90">
+                <Plus className="w-4 h-4 mr-2" />
+                Plan New Trip
+              </Button>
             </div>
           )}
         </div>
