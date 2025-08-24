@@ -162,12 +162,12 @@ export class WriteThroughDb implements Db {
   private async flushPatchTrip(sessionId: string, patch: Record<string, any>) {
     if (!this.client) return;
     const cur = this.mem.getSession(sessionId)?.trip || {};
-    await this.client.from("sessions").upsert({ session_id: sessionId, trip: cur });
+    await this.client.from("chat_sessions").upsert({ session_id: sessionId, trip: cur }, { onConflict: "session_id" });
   }
 
   private async flushSetInvite(sessionId: string, inviteId: string) {
     if (!this.client) return;
-    await this.client.from("sessions").upsert({ session_id: sessionId, invite_id: inviteId });
+    await this.client.from("chat_sessions").upsert({ session_id: sessionId, invite_id: inviteId }, { onConflict: "session_id" });
   }
 
   private async flushSetPoiSaved(sessionId: string, poiId: string, saved: boolean) {
@@ -186,7 +186,7 @@ export class WriteThroughDb implements Db {
     // Delete related rows first to avoid orphans
     await this.client.from("messages").delete().eq("session_id", sessionId);
     await this.client.from("saved_pois").delete().eq("session_id", sessionId);
-    await this.client.from("sessions").delete().eq("session_id", sessionId);
+    await this.client.from("chat_sessions").delete().eq("session_id", sessionId);
   }
 
   private async ensureSessionExists(sessionId: string) {

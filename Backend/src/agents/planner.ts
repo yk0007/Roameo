@@ -79,12 +79,12 @@ export async function plannerAgent(
 * **Meals:** [Restaurant recommendations with 📍 locations and price ranges]
 
 ### 💰 Estimated Budget (Per Person)
-* **Accommodation:** €[X]-€[Y] per night
-* **Food:** €[X]-€[Y] per day
-* **Transport:** €[X]-€[Y] total
-* **Activities:** €[X]-€[Y] total
-* **Miscellaneous:** €[X]-€[Y] total
-* **Total:** €[X]-€[Y] for ${days} days
+* **Accommodation:** ₹[X]-₹[Y] per night
+* **Food:** ₹[X]-₹[Y] per day
+* **Transport:** ₹[X]-₹[Y] total
+* **Activities:** ₹[X]-₹[Y] total
+* **Miscellaneous:** ₹[X]-₹[Y] total
+* **Total:** ₹[X]-₹[Y] for ${days} days
 
 ### 🤔 Got More Questions?
 "[Question 1 about transportation]"

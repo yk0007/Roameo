@@ -19,30 +19,34 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [trips, setTrips] = useState<Array<any>>([])
 
-  // Load trips from backend (MVP: global list, no user filter yet)
+  // Load trips from backend with proper authentication
   useEffect(() => {
     let mounted = true
-    const load = () => {
-      listTrips()
-        .then(({ trips }) => {
-          if (mounted) setTrips(trips)
-        })
-        .catch(() => {
-          if (mounted) setTrips([])
-        })
+    let isLoading = false
+    
+    const load = async () => {
+      if (isLoading || !user) return
+      isLoading = true
+      
+      try {
+        const { trips } = await listTrips()
+        if (mounted) setTrips(trips)
+      } catch (error) {
+        console.error('Failed to load trips:', error)
+        if (mounted) setTrips([])
+      } finally {
+        isLoading = false
+      }
     }
-    load()
-    // Refresh when window regains focus or tab becomes visible (after deletions/navigation)
-    const onFocus = () => load()
-    const onVis = () => { if (document.visibilityState === "visible") load() }
-    window.addEventListener("focus", onFocus)
-    document.addEventListener("visibilitychange", onVis)
+    
+    if (user) {
+      load()
+    }
+    
     return () => {
       mounted = false
-      window.removeEventListener("focus", onFocus)
-      document.removeEventListener("visibilitychange", onVis)
     }
-  }, [])
+  }, [user])
 
   useEffect(() => {
     const getUser = async () => {
@@ -73,10 +77,15 @@ export default function Dashboard() {
   }, [router])
 
   const handleSignOut = async () => {
-    // Navigate immediately for instant UX
-    router.push("/auth/login")
-    // Sign out in background
-    await supabase.auth.signOut()
+    try {
+      // Sign out first, then navigate
+      await supabase.auth.signOut()
+      router.push("/auth/login")
+    } catch (error) {
+      console.error('Sign out error:', error)
+      // Navigate anyway if sign out fails
+      router.push("/auth/login")
+    }
   }
 
   const handleSendMessage = () => {

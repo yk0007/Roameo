@@ -516,8 +516,8 @@ export default function ChatPage() {
         onDeleteTrip={handleDeleteTrip}
         isDeleting={isDeleting}
         onSignOut={async () => {
+          router.push("/auth/login")
           await supabase.auth.signOut()
-          router.replace("/auth/login")
         }}
       />
 

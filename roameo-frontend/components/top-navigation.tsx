@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase/client"
-import { ChevronDown, User, MapPin, Calendar, Users, IndianRupee, LogOut, Settings, Loader2 } from "lucide-react"
+import { ChevronDown, User, MapPin, Calendar, Users, DollarSign, LogOut, Settings, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -64,29 +64,12 @@ export function TopNavigation({
   })
   const [showInvitePopover, setShowInvitePopover] = useState(false)
   const router = useRouter()
-  const [isSigningOut, setIsSigningOut] = useState(false)
-
-  const formatINR = (val?: string) => {
-    if (!val) return "Budget"
-    const num = parseInt(String(val).replace(/[^0-9]/g, ""), 10)
-    if (Number.isNaN(num)) return val
-    try {
-      return `₹${num.toLocaleString("en-IN")}`
-    } catch {
-      return `₹${num}`
-    }
-  }
 
   const handleSignOut = async () => {
-    if (isSigningOut) return
-    setIsSigningOut(true)
-    try {
-      await supabase.auth.signOut()
-    } finally {
-      // Navigate after sign-out to avoid throttling/race
-      router.replace("/auth/login")
-      setIsSigningOut(false)
-    }
+    // Navigate immediately for instant UX
+    window.location.href = "/auth/login"
+    // Sign out in background
+    await supabase.auth.signOut()
   }
 
   const handleLogoClick = async () => {
@@ -325,8 +308,8 @@ export function TopNavigation({
               onClick={() => handleEdit("budget")}
               className="bg-white/80 backdrop-blur-sm text-gray-700 hover:bg-white/90 cursor-pointer border border-white/30 rounded-full"
             >
-              <IndianRupee className="w-3 h-3 mr-1" />
-              {formatINR(trip.budget)}
+              <DollarSign className="w-3 h-3 mr-1" />
+              {trip.budget || "Budget"}
             </Badge>
             {onReplan && (
               <Button
@@ -414,10 +397,10 @@ export function TopNavigation({
             <DropdownMenuSeparator />
             <DropdownMenuItem 
               className="flex items-center gap-2 cursor-pointer text-red-600"
-              onClick={isSigningOut ? undefined : (onSignOut || handleSignOut)}
+              onClick={onSignOut || handleSignOut}
             >
-              {isSigningOut ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogOut className="w-4 h-4" />}
-              {isSigningOut ? "Signing out…" : "Logout"}
+              <LogOut className="w-4 h-4" />
+              Logout
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
