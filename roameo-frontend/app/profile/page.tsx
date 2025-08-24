@@ -287,6 +287,12 @@ export default function Profile() {
                             month: "long",
                             day: "numeric",
                           })
+                        : user?.user_metadata?.created_at
+                        ? new Date(user.user_metadata.created_at).toLocaleDateString("en-US", {
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric",
+                          })
                         : "Not available"}
                     </p>
                   </div>

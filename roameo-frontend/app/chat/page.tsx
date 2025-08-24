@@ -515,6 +515,10 @@ export default function ChatPage() {
         onSaveTrip={handleSaveTrip}
         onDeleteTrip={handleDeleteTrip}
         isDeleting={isDeleting}
+        onSignOut={async () => {
+          router.push("/auth/login")
+          await supabase.auth.signOut()
+        }}
       />
 
       <div className="flex-1 flex overflow-hidden">

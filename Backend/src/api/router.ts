@@ -163,7 +163,9 @@ export function buildApiRouter(
   });
 
   r.get("/trips/list", (req: AuthenticatedRequest, res: Response) => {
-    const rows = db.listSessions().map((s) => {
+    // Filter sessions by authenticated user
+    const userSessions = req.userId ? db.listSessions().filter(s => s.userId === req.userId) : [];
+    const rows = userSessions.map((s) => {
       const trip = (s.trip as any) || {};
       const days: number | undefined = trip.days;
       const duration: string | null = typeof days === "number" ? `${days} days` : (trip.duration || null);

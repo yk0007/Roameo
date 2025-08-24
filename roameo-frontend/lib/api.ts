@@ -79,7 +79,18 @@ export async function getSavedPoiIds(sessionId: SessionId) {
 }
 
 export async function listTrips() {
-  const res = await fetch(`${BACKEND_URL}/api/trips/list`, { cache: "no-store" })
+  const { data: { session } } = await supabase.auth.getSession()
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+  }
+  if (session?.access_token) {
+    headers.Authorization = `Bearer ${session.access_token}`
+  }
+  
+  const res = await fetch(`${BACKEND_URL}/api/trips/list`, {
+    method: "GET",
+    headers,
+  })
   if (!res.ok) throw new Error(`listTrips failed: ${res.status}`)
-  return (await res.json()) as { trips: Array<{ id: string; title: string; destination?: string | null; duration?: string | null; travelers?: number | null; image?: string | null; updatedAt?: string | null }> }
+  return (await res.json()) as { trips: Array<any> }
 }

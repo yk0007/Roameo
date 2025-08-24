@@ -37,6 +37,7 @@ interface TopNavigationProps {
   onDeleteTrip?: () => void
   isDeleting?: boolean
   onReplan?: () => void
+  onSignOut?: () => void
 }
 
 export function TopNavigation({
@@ -50,6 +51,7 @@ export function TopNavigation({
   onDeleteTrip,
   isDeleting,
   onReplan,
+  onSignOut,
 }: TopNavigationProps) {
   const [editingField, setEditingField] = useState<string | null>(null)
   const [tempValues, setTempValues] = useState({
@@ -395,7 +397,7 @@ export function TopNavigation({
             <DropdownMenuSeparator />
             <DropdownMenuItem 
               className="flex items-center gap-2 cursor-pointer text-red-600"
-              onClick={handleSignOut}
+              onClick={onSignOut || handleSignOut}
             >
               <LogOut className="w-4 h-4" />
               Logout
