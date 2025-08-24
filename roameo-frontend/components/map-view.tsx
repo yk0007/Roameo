@@ -223,14 +223,14 @@ export function MapView({
       if (!poiId) return
       const marker = markersByIdRef.current[poiId]
       if (!marker) return
-      const pos = marker.getPosition()
+      const pos = marker.position ?? marker.getPosition?.()
       mapInstance.current!.panTo(pos)
       if (autoZoomOnHover) {
         const z = mapInstance.current.getZoom?.() ?? 2
         if (z < 13) mapInstance.current.setZoom(13)
       }
       if (!infoWindowRef.current) infoWindowRef.current = new window.google.maps.InfoWindow()
-      infoWindowRef.current.setContent(`<div style="font-weight:600">${marker.getTitle?.() || "Place"}</div>`)
+      infoWindowRef.current.setContent(`<div style="font-weight:600">${(marker.title ?? marker.getTitle?.()) || "Place"}</div>`)
       infoWindowRef.current.open({ map: mapInstance.current!, anchor: marker })
     }
     window.addEventListener("poi-hover", onPoiHover as any)
@@ -291,18 +291,22 @@ export function MapView({
     }
   }, [isVisible])
 
-  // Render POI markers
+  // Render POI markers (AdvancedMarkerElement)
   useEffect(() => {
     if (!mapInstance.current || !window.google?.maps) return
 
-    // Add a small delay to ensure map is fully ready after tab switch
     const timeoutId = setTimeout(() => {
-      // Clear existing markers and info windows
-      markersRef.current.forEach((m) => m.setMap(null))
+      // Clear existing markers
+      markersRef.current.forEach((m) => {
+        try {
+          if (m.setMap) m.setMap(null)
+          else if ("map" in m) (m as any).map = null
+        } catch {}
+      })
       markersRef.current = []
       markersByIdRef.current = {}
-      
-      // Close any open info windows when re-rendering markers
+
+      // Close any open info windows
       if (activeInfoWindowRef.current) {
         activeInfoWindowRef.current.close()
         activeInfoWindowRef.current = null
@@ -312,214 +316,172 @@ export function MapView({
         persistentInfoWindowRef.current = null
       }
 
-      filteredPois.forEach((poi) => {
-      if (!poi.lat || !poi.lng) return
+      filteredPois.forEach((poi, poiIndex) => {
+        if (!poi.lat || !poi.lng) return
 
-      const isSaved = savedIds?.has(poi.id)
-      const isAdded = itineraryPoiIds?.has(poi.id)
+        const isSaved = !!savedIds?.has(poi.id)
+        const isAdded = !!itineraryPoiIds?.has(poi.id)
+        const itineraryPois = itinerary?.daysPlan.flatMap(d => d.activities.map(a => a.poiId)).filter(Boolean) || []
+        const orderIndex = isAdded ? itineraryPois.indexOf(poi.id) : -1
 
-      const itineraryPois = itinerary?.daysPlan.flatMap(d => d.activities).map(a => a.poiId) || []
-      const poiIndex = isAdded ? itineraryPois.indexOf(poi.id) : -1
-
-      const marker = new window.google.maps.Marker({
-        position: { lat: poi.lat, lng: poi.lng },
-        map: mapInstance.current!,
-        title: poi.name,
-        icon: isAdded
-          ? {
-              url: `data:image/svg+xml;utf-8,${encodeURIComponent(
-                `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="black" stroke="white" stroke-width="2"/><text x="12" y="16" font-size="12" fill="white" text-anchor="middle" font-family="Arial, sans-serif" font-weight="bold">${poiIndex + 1}</text></svg>`
-              )}`,
-              scaledSize: new window.google.maps.Size(24, 24),
-              anchor: new window.google.maps.Point(12, 12),
-            }
-          : {
-              path: window.google.maps.SymbolPath.CIRCLE,
-              scale: 6,
-              fillColor: isSaved ? '#f9a8d4' : '#60a5fa',
-              fillOpacity: 1,
-              strokeColor: isSaved ? '#f472b6' : '#2563eb',
-              strokeWeight: 2,
-            },
-      })
-
-      const infoWindow = new window.google.maps.InfoWindow({
-        content: `<div id="info-window-content-${poi.id}"></div>`,
-        pixelOffset: new window.google.maps.Size(0, -15),
-        disableAutoPan: true,
-      })
-
-      const showInfoWindow = (e: google.maps.MapMouseEvent, isPersistent = false) => {
-        if (!mapInstance.current || !overlayRef.current) return
-
-        const projection = overlayRef.current.getProjection()
-        if (!projection || !e.latLng) return
-
-        const pixel = projection.fromLatLngToContainerPixel(e.latLng)
-        const mapDiv = mapInstance.current.getDiv()
-        const mapWidth = mapDiv.clientWidth
-        const mapHeight = mapDiv.clientHeight
-
-        const cardWidth = 240
-        const cardHeight = 180 // Compact card height
-        const markerSize = 12
-        const padding = 10
-
-        let newPixelOffset
-
-        // Check if card fits above the marker
-        const fitsAbove = pixel.y - cardHeight - markerSize - padding > 0
-        // Check if card fits below the marker  
-        const fitsBelow = pixel.y + cardHeight + markerSize + padding < mapHeight
-        // Check if card fits to the right
-        const fitsRight = pixel.x + cardWidth + markerSize + padding < mapWidth
-        // Check if card fits to the left
-        const fitsLeft = pixel.x - cardWidth - markerSize - padding > 0
-
-        if (fitsAbove) {
-          // Show above (preferred)
-          newPixelOffset = new window.google.maps.Size(0, -markerSize - 5)
-        } else if (fitsBelow) {
-          // Show below
-          newPixelOffset = new window.google.maps.Size(0, markerSize + 5)
-        } else if (fitsRight) {
-          // Show to the right
-          newPixelOffset = new window.google.maps.Size(markerSize + 5, -cardHeight / 2)
-        } else if (fitsLeft) {
-          // Show to the left
-          newPixelOffset = new window.google.maps.Size(-markerSize - 5, -cardHeight / 2)
-        } else {
-          // Default fallback - show above even if it clips
-          newPixelOffset = new window.google.maps.Size(0, -markerSize - 5)
-        }
-        
-        infoWindow.setOptions({ pixelOffset: newPixelOffset });
-
-        // Close any existing info windows
-        if (activeInfoWindowRef.current && activeInfoWindowRef.current !== persistentInfoWindowRef.current) {
-          activeInfoWindowRef.current.close()
-        }
-        if (persistentInfoWindowRef.current && persistentInfoWindowRef.current !== infoWindow) {
-          persistentInfoWindowRef.current.close()
-          persistentInfoWindowRef.current = null
-        }
-
-        infoWindow.addListener('domready', () => {
-          const content = document.getElementById(`info-window-content-${poi.id}`)
-          if (content) {
-            // Apply styles to remove InfoWindow chrome after DOM is ready
-            const iwContainer = content.closest('.gm-style-iw-c') as HTMLElement
-            const iwTitle = content.closest('.gm-style-iw')?.querySelector('.gm-style-iw-t') as HTMLElement
-            const iwCloseBtn = content.closest('.gm-style-iw')?.querySelector('.gm-ui-hover-effect') as HTMLElement
-            
-            if (iwContainer) {
-              iwContainer.style.padding = '0'
-              iwContainer.style.border = 'none'
-              iwContainer.style.borderRadius = '0'
-              iwContainer.style.boxShadow = 'none'
-              iwContainer.style.background = 'transparent'
-              iwContainer.style.maxWidth = '240px'
-              iwContainer.style.outline = 'none'
-            }
-            
-            if (iwTitle) iwTitle.style.display = 'none'
-            if (iwCloseBtn) iwCloseBtn.style.display = 'none'
-            
-            const iwContent = content.closest('.gm-style-iw-d') as HTMLElement
-            if (iwContent) {
-              iwContent.style.padding = '0'
-              iwContent.style.margin = '0'
-              iwContent.style.border = 'none'
-              iwContent.style.background = 'transparent'
-              iwContent.style.overflow = 'visible'
-              iwContent.style.outline = 'none'
-            }
-
-            // Remove any parent container borders
-            const iwWrapper = content.closest('.gm-style-iw') as HTMLElement
-            if (iwWrapper) {
-              iwWrapper.style.border = 'none'
-              iwWrapper.style.outline = 'none'
-              iwWrapper.style.boxShadow = 'none'
-            }
-            
-            const root = createRoot(content)
-            root.render(
-              <CompactPoiCard
-                poi={poi}
-                isSaved={isSaved || false}
-                isItineraryItem={isAdded || false}
-                onToggleSave={onToggleSave ?? (() => {})}
-                onAddPoi={onAddPoi ?? (() => {})}
-                onReplan={onReplan ?? (() => {})}
-              />
-            )
-            
-            // Add mouse listener only for non-persistent info windows
-            if (!isPersistent) {
-              const iwWrapperEl = content.closest('.gm-style-iw-wrapper');
-              if (iwWrapperEl) {
-                let hoverTimeout: NodeJS.Timeout | null = null;
-                
-                iwWrapperEl.addEventListener('mouseenter', () => {
-                  if (hoverTimeout) {
-                    clearTimeout(hoverTimeout);
-                    hoverTimeout = null;
-                  }
-                });
-                
-                iwWrapperEl.addEventListener('mouseleave', () => {
-                  hoverTimeout = setTimeout(() => {
-                    if (activeInfoWindowRef.current && activeInfoWindowRef.current !== persistentInfoWindowRef.current) {
-                      activeInfoWindowRef.current.close();
-                    }
-                  }, 200);
-                });
-              }
-            }
-          }
+        // Build a PinElement for AdvancedMarkerElement
+        const pin = new window.google.maps.marker.PinElement({
+          background: isAdded ? '#000000' : (isSaved ? '#f9a8d4' : '#60a5fa'),
+          borderColor: isAdded ? '#ffffff' : (isSaved ? '#f472b6' : '#2563eb'),
+          glyphColor: '#ffffff',
+          scale: isAdded ? 1.1 : 0.9,
+          glyph: isAdded && orderIndex >= 0 ? String(orderIndex + 1) : undefined,
         })
 
-        infoWindow.open(mapInstance.current, marker)
-        activeInfoWindowRef.current = infoWindow
-        
-        if (isPersistent) {
-          persistentInfoWindowRef.current = infoWindow
-        }
-      }
+        const marker = new window.google.maps.marker.AdvancedMarkerElement({
+          map: mapInstance.current!,
+          position: { lat: poi.lat, lng: poi.lng },
+          title: poi.name,
+          content: pin.element,
+        })
 
-      marker.addListener("mouseover", (e: google.maps.MapMouseEvent) => {
-        // Don't show hover card if there's already a persistent one
-        if (persistentInfoWindowRef.current) return
-        showInfoWindow(e, false)
-      })
+        const infoWindow = new window.google.maps.InfoWindow({
+          content: `<div id="info-window-content-${poi.id}"></div>`,
+          pixelOffset: new window.google.maps.Size(0, -15),
+          disableAutoPan: true,
+        })
 
-      marker.addListener("click", (e: google.maps.MapMouseEvent) => {
-        showInfoWindow(e, true)
-      })
+        const showInfoWindow = (e: { latLng?: google.maps.LatLng } | null, isPersistent = false) => {
+          if (!mapInstance.current || !overlayRef.current || !e?.latLng) return
 
-      marker.addListener("mouseout", () => {
-        // Only close hover cards, not persistent ones
-        setTimeout(() => {
+          const projection = overlayRef.current.getProjection()
+          if (!projection) return
+
+          const pixel = projection.fromLatLngToContainerPixel(e.latLng)
+          const mapDiv = mapInstance.current.getDiv()
+          const mapWidth = mapDiv.clientWidth
+          const mapHeight = mapDiv.clientHeight
+
+          const cardWidth = 240
+          const cardHeight = 180
+          const markerSize = 12
+          const padding = 10
+
+          let newPixelOffset
+
+          const fitsAbove = pixel.y - cardHeight - markerSize - padding > 0
+          const fitsBelow = pixel.y + cardHeight + markerSize + padding < mapHeight
+          const fitsRight = pixel.x + cardWidth + markerSize + padding < mapWidth
+          const fitsLeft = pixel.x - cardWidth - markerSize - padding > 0
+
+          if (fitsAbove) newPixelOffset = new window.google.maps.Size(0, -markerSize - 5)
+          else if (fitsBelow) newPixelOffset = new window.google.maps.Size(0, markerSize + 5)
+          else if (fitsRight) newPixelOffset = new window.google.maps.Size(markerSize + 5, -cardHeight / 2)
+          else if (fitsLeft) newPixelOffset = new window.google.maps.Size(-markerSize - 5, -cardHeight / 2)
+          else newPixelOffset = new window.google.maps.Size(0, -markerSize - 5)
+
+          infoWindow.setOptions({ pixelOffset: newPixelOffset })
+
           if (activeInfoWindowRef.current && activeInfoWindowRef.current !== persistentInfoWindowRef.current) {
-            const iwWrapper = document.querySelector('.gm-style-iw-wrapper');
-            
-            // Only close if not hovering over the card
-            if (!iwWrapper || !iwWrapper.matches(':hover')) {
-              activeInfoWindowRef.current.close();
-            }
+            activeInfoWindowRef.current.close()
           }
-        }, 200);
-      })
+          if (persistentInfoWindowRef.current && persistentInfoWindowRef.current !== infoWindow) {
+            persistentInfoWindowRef.current.close()
+            persistentInfoWindowRef.current = null
+          }
 
-      markersRef.current.push(marker)
-      markersByIdRef.current[poi.id] = marker
-    })
-    }, 100) // Small delay to ensure map is ready
+          infoWindow.addListener('domready', () => {
+            const content = document.getElementById(`info-window-content-${poi.id}`)
+            if (content) {
+              const iwContainer = content.closest('.gm-style-iw-c') as HTMLElement
+              const iwTitle = content.closest('.gm-style-iw')?.querySelector('.gm-style-iw-t') as HTMLElement
+              const iwCloseBtn = content.closest('.gm-style-iw')?.querySelector('.gm-ui-hover-effect') as HTMLElement
+              if (iwContainer) {
+                iwContainer.style.padding = '0'
+                iwContainer.style.border = 'none'
+                iwContainer.style.borderRadius = '0'
+                iwContainer.style.boxShadow = 'none'
+                iwContainer.style.background = 'transparent'
+                iwContainer.style.maxWidth = '240px'
+                iwContainer.style.outline = 'none'
+              }
+              if (iwTitle) iwTitle.style.display = 'none'
+              if (iwCloseBtn) iwCloseBtn.style.display = 'none'
+              const iwContent = content.closest('.gm-style-iw-d') as HTMLElement
+              if (iwContent) {
+                iwContent.style.padding = '0'
+                iwContent.style.margin = '0'
+                iwContent.style.border = 'none'
+                iwContent.style.background = 'transparent'
+                iwContent.style.overflow = 'visible'
+                iwContent.style.outline = 'none'
+              }
+              const iwWrapper = content.closest('.gm-style-iw') as HTMLElement
+              if (iwWrapper) {
+                iwWrapper.style.border = 'none'
+                iwWrapper.style.outline = 'none'
+                iwWrapper.style.boxShadow = 'none'
+              }
+              const root = createRoot(content)
+              root.render(
+                <CompactPoiCard
+                  poi={poi}
+                  isSaved={isSaved}
+                  isItineraryItem={isAdded}
+                  onToggleSave={onToggleSave ?? (() => {})}
+                  onAddPoi={onAddPoi ?? (() => {})}
+                  onReplan={onReplan ?? (() => {})}
+                />
+              )
+              if (!isPersistent) {
+                const iwWrapperEl = content.closest('.gm-style-iw-wrapper')
+                if (iwWrapperEl) {
+                  let hoverTimeout: NodeJS.Timeout | null = null
+                  iwWrapperEl.addEventListener('mouseenter', () => {
+                    if (hoverTimeout) { clearTimeout(hoverTimeout); hoverTimeout = null }
+                  })
+                  iwWrapperEl.addEventListener('mouseleave', () => {
+                    hoverTimeout = setTimeout(() => {
+                      if (activeInfoWindowRef.current && activeInfoWindowRef.current !== persistentInfoWindowRef.current) {
+                        activeInfoWindowRef.current.close()
+                      }
+                    }, 200)
+                  })
+                }
+              }
+            }
+          })
+
+          infoWindow.open(mapInstance.current, marker)
+          activeInfoWindowRef.current = infoWindow
+          if (isPersistent) persistentInfoWindowRef.current = infoWindow
+        }
+
+        // AdvancedMarkerElement uses gmp-* event names
+        marker.addListener('gmp-pointerenter', () => {
+          if (persistentInfoWindowRef.current) return
+          const latLng = new window.google.maps.LatLng(poi.lat!, poi.lng!)
+          showInfoWindow({ latLng }, false)
+        })
+        marker.addListener('gmp-click', () => {
+          const latLng = new window.google.maps.LatLng(poi.lat!, poi.lng!)
+          showInfoWindow({ latLng }, true)
+        })
+        marker.addListener('gmp-pointerleave', () => {
+          setTimeout(() => {
+            if (activeInfoWindowRef.current && activeInfoWindowRef.current !== persistentInfoWindowRef.current) {
+              const iwWrapper = document.querySelector('.gm-style-iw-wrapper')
+              if (!iwWrapper || !(iwWrapper as any).matches?.(':hover')) {
+                activeInfoWindowRef.current.close()
+              }
+            }
+          }, 200)
+        })
+
+        markersRef.current.push(marker)
+        markersByIdRef.current[poi.id] = marker
+      })
+    }, 100)
 
     return () => clearTimeout(timeoutId)
-  }, [filteredPois, gmapsReady, savedIds, itineraryPoiIds, onToggleSave, onAddPoi, onReplan])
+  }, [filteredPois, gmapsReady, savedIds, itineraryPoiIds, onToggleSave, onAddPoi, onReplan, itinerary])
 
+// ... (rest of the code remains the same)
   // Auto-zoom to fit markers and routes
   useEffect(() => {
     if (!mapInstance.current || !window.google?.maps) return
@@ -529,8 +491,11 @@ export function MapView({
 
     // Include markers in bounds
     markersRef.current.forEach((marker) => {
-      bounds.extend(marker.getPosition()!)
-      hasContent = true
+      const pos = marker.position ?? marker.getPosition?.()
+      if (pos) {
+        bounds.extend(pos)
+        hasContent = true
+      }
     })
 
     // Include routes in bounds

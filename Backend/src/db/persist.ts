@@ -102,7 +102,8 @@ export class WriteThroughDb implements Db {
     const base: any = { session_id: sessionId };
     if (data.inviteId !== undefined) base.invite_id = data.inviteId;
     if (data.trip !== undefined) base.trip = data.trip as any;
-    await this.client.from("sessions").upsert(base, { onConflict: "session_id" });
+    if (data.userId !== undefined) base.user_id = data.userId;
+    await this.client.from("chat_sessions").upsert(base, { onConflict: "session_id" });
 
     if (data.messages && data.messages.length) {
       try {
@@ -196,7 +197,7 @@ export class WriteThroughDb implements Db {
         .from("chat_sessions")
         .select("session_id")
         .eq("session_id", sessionId)
-        .single();
+        .maybeSingle();
       
       if (selectError && selectError.code !== 'PGRST116') {
         console.error(`[persist] Error checking session existence:`, selectError);

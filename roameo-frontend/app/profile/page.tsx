@@ -15,6 +15,7 @@ export default function Profile() {
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
   const [tripCount, setTripCount] = useState(0)
+  const [isSigningOut, setIsSigningOut] = useState(false)
   const [formData, setFormData] = useState({
     first_name: "",
     last_name: "",
@@ -30,22 +31,19 @@ export default function Profile() {
         router.push("/auth/login")
         return
       }
+
       setUser(session.user)
-      // Debug: Log user data to see what's available (remove in production)
-      // console.log("User object:", session.user)
-      // console.log("User metadata:", session.user.user_metadata)
-      
       // Handle Google OAuth user metadata structure
       const metadata = session.user.user_metadata || {}
       const fullName = metadata.full_name || metadata.name || ""
       const [firstName, ...lastNameParts] = fullName.split(" ")
-      
+
       setFormData({
         first_name: metadata.first_name || firstName || "",
         last_name: metadata.last_name || lastNameParts.join(" ") || "",
         username: metadata.username || metadata.preferred_username || "",
       })
-      
+
       // Fetch user statistics
       try {
         const response = await fetch('/api/user/stats', {
@@ -60,7 +58,7 @@ export default function Profile() {
       } catch (error) {
         console.error('Failed to fetch user stats:', error)
       }
-      
+
       setLoading(false)
     }
 
@@ -83,6 +81,19 @@ export default function Profile() {
       setUser(session?.user)
     } catch (error) {
       console.error("Error updating profile:", error)
+    }
+  }
+
+  const handleLogout = async () => {
+    if (isSigningOut) return
+    setIsSigningOut(true)
+    try {
+      await supabase.auth.signOut()
+      router.replace("/auth/login")
+    } catch (err) {
+      console.error("Error during sign out:", err)
+    } finally {
+      setIsSigningOut(false)
     }
   }
 
@@ -121,6 +132,24 @@ export default function Profile() {
                 <div className="w-2 h-2 bg-white rounded-full"></div>
               </div>
               <span className="text-xl font-bold text-gray-900">roameo</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                className="rounded-full bg-white/80 hover:bg-white/90 shadow"
+                onClick={handleLogout}
+                disabled={isSigningOut}
+              >
+                {isSigningOut ? (
+                  <span className="inline-flex items-center gap-2">
+                    <span className="h-4 w-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></span>
+                    Signing out…
+                  </span>
+                ) : (
+                  <span>Sign out</span>
+                )}
+              </Button>
             </div>
           </div>
         </div>
