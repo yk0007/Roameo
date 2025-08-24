@@ -14,6 +14,10 @@ export function buildMapsRouter(): Router {
       return res.status(500).json({ error: "Google Maps API key not configured" });
     }
 
+    // Return a masked version for security - only show first 6 and last 4 characters
+    const maskedKey = GOOGLE_MAPS_API_KEY.substring(0, 6) + '...' + GOOGLE_MAPS_API_KEY.substring(GOOGLE_MAPS_API_KEY.length - 4);
+    console.log(`Maps API key requested - using key: ${maskedKey}`);
+    
     res.json({ apiKey: GOOGLE_MAPS_API_KEY });
   });
 

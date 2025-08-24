@@ -31,9 +31,9 @@ export default function Profile() {
         return
       }
       setUser(session.user)
-      // Debug: Log user data to see what's available
-      console.log("User object:", session.user)
-      console.log("User metadata:", session.user.user_metadata)
+      // Debug: Log user data to see what's available (remove in production)
+      // console.log("User object:", session.user)
+      // console.log("User metadata:", session.user.user_metadata)
       
       // Handle Google OAuth user metadata structure
       const metadata = session.user.user_metadata || {}
@@ -294,6 +294,7 @@ export default function Profile() {
                         // Try multiple date fields in order of preference
                         const dateFields = [
                           user?.created_at,
+                          user?.iat ? new Date(user.iat * 1000).toISOString() : null, // Convert Unix timestamp
                           user?.user_metadata?.created_at,
                           user?.user_metadata?.email_verified_at,
                           user?.confirmed_at,

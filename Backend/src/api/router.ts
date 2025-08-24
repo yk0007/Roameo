@@ -178,8 +178,11 @@ export function buildApiRouter(
   r.get("/trips/list", async (req: AuthenticatedRequest, res: Response) => {
     try {
       if (!req.userId) {
+        console.log("No userId in trips/list request");
         return res.json({ trips: [] });
       }
+      
+      console.log("Fetching trips for userId:", req.userId);
 
       // Query sessions from database instead of memory
       const { createClient } = await import('@supabase/supabase-js');
@@ -198,6 +201,8 @@ export function buildApiRouter(
         console.error('Error fetching user sessions:', error);
         return res.status(500).json({ error: 'Failed to fetch trips' });
       }
+
+      console.log("Found sessions:", sessions?.length || 0);
 
       const rows = (sessions || []).map((s) => {
         const trip = (s.trip as any) || {};
