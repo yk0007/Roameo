@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase/client"
-import { ChevronDown, User, MapPin, Calendar, Users, IndianRupeeIcon, LogOut, Settings, Loader2 } from "lucide-react"
+import { ChevronDown, User, MapPin, Calendar, Users, DollarSign, LogOut, Settings, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -62,6 +62,13 @@ export function TopNavigation({
   })
   const [showInvitePopover, setShowInvitePopover] = useState(false)
   const router = useRouter()
+
+  const handleSignOut = async () => {
+    // Navigate immediately for instant UX
+    router.push("/auth/login")
+    // Sign out in background
+    await supabase.auth.signOut()
+  }
 
   const handleLogoClick = async () => {
     try {
@@ -299,7 +306,7 @@ export function TopNavigation({
               onClick={() => handleEdit("budget")}
               className="bg-white/80 backdrop-blur-sm text-gray-700 hover:bg-white/90 cursor-pointer border border-white/30 rounded-full"
             >
-              <IndianRupeeIcon className="w-3 h-3 mr-1 border-current rounded p-0.5 border-transparent px-0 py-0 border-0" />
+              <DollarSign className="w-3 h-3 mr-1" />
               {trip.budget || "Budget"}
             </Badge>
             {onReplan && (
@@ -386,7 +393,10 @@ export function TopNavigation({
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="flex items-center gap-2 cursor-pointer text-red-600">
+            <DropdownMenuItem 
+              className="flex items-center gap-2 cursor-pointer text-red-600"
+              onClick={handleSignOut}
+            >
               <LogOut className="w-4 h-4" />
               Logout
             </DropdownMenuItem>

@@ -10,7 +10,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import Image from "next/image"
 import { MapPin, Users, Send, LogOut, Plus, Mic, Clock, ArrowRight, Plane, Camera, Compass, Palmtree, Globe, Map } from "lucide-react"
-import { signOut } from "@/lib/actions"
 import DestinationCardArt from "@/components/DestinationCardArt"
 
 export default function Dashboard() {
@@ -74,8 +73,10 @@ export default function Dashboard() {
   }, [router])
 
   const handleSignOut = async () => {
-    await signOut()
+    // Navigate immediately for instant UX
     router.push("/auth/login")
+    // Sign out in background
+    await supabase.auth.signOut()
   }
 
   const handleSendMessage = () => {
