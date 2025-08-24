@@ -21,7 +21,6 @@ export async function updateSession(request: NextRequest) {
   // Create a Supabase client configured to use cookies
   const supabase = createMiddlewareClient({ req: request, res })
 
-  // Refresh session if expired - required for Server Components
   await supabase.auth.getSession()
 
   return res
