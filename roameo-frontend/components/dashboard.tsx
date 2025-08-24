@@ -31,7 +31,10 @@ export function Dashboard() {
 
         if (response.ok) {
           const data = await response.json()
+          console.log("Trips API response:", data)
           setTrips(data.trips || [])
+        } else {
+          console.error("Trips API error:", response.status, await response.text())
         }
       } catch (error) {
         console.error('Error fetching trips:', error)

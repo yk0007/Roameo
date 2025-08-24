@@ -31,6 +31,10 @@ export default function Profile() {
         return
       }
       setUser(session.user)
+      // Debug: Log user data to see what's available
+      console.log("User object:", session.user)
+      console.log("User metadata:", session.user.user_metadata)
+      
       // Handle Google OAuth user metadata structure
       const metadata = session.user.user_metadata || {}
       const fullName = metadata.full_name || metadata.name || ""
@@ -286,31 +290,34 @@ export default function Profile() {
                   <div>
                     <p className="text-sm font-medium text-gray-900">Member since</p>
                     <p className="text-xs text-gray-600">
-                      {user?.created_at
-                        ? new Date(user.created_at).toLocaleDateString("en-US", {
-                            year: "numeric",
-                            month: "long",
-                            day: "numeric",
-                          })
-                        : user?.user_metadata?.created_at
-                        ? new Date(user.user_metadata.created_at).toLocaleDateString("en-US", {
-                            year: "numeric",
-                            month: "long",
-                            day: "numeric",
-                          })
-                        : user?.user_metadata?.email_verified_at
-                        ? new Date(user.user_metadata.email_verified_at).toLocaleDateString("en-US", {
-                            year: "numeric",
-                            month: "long",
-                            day: "numeric",
-                          })
-                        : user?.confirmed_at
-                        ? new Date(user.confirmed_at).toLocaleDateString("en-US", {
-                            year: "numeric",
-                            month: "long",
-                            day: "numeric",
-                          })
-                        : "Not available"}
+                      {(() => {
+                        // Try multiple date fields in order of preference
+                        const dateFields = [
+                          user?.created_at,
+                          user?.user_metadata?.created_at,
+                          user?.user_metadata?.email_verified_at,
+                          user?.confirmed_at,
+                          user?.email_confirmed_at,
+                          user?.last_sign_in_at,
+                          user?.updated_at
+                        ];
+                        
+                        for (const dateField of dateFields) {
+                          if (dateField) {
+                            try {
+                              return new Date(dateField).toLocaleDateString("en-US", {
+                                year: "numeric",
+                                month: "long",
+                                day: "numeric",
+                              });
+                            } catch (e) {
+                              continue;
+                            }
+                          }
+                        }
+                        
+                        return "Not available";
+                      })()}
                     </p>
                   </div>
                 </div>
