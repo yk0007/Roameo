@@ -153,8 +153,6 @@ export function MapView({
 
   // Load Google Maps script (and notify when ready)
   useEffect(() => {
-    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
-    if (!apiKey) return
     // Only mark ready when the Map constructor exists
     if (window.google?.maps?.Map) {
       setGmapsReady(true)
@@ -167,7 +165,7 @@ export function MapView({
       window.__gmapsLoading = true
       const script = document.createElement("script")
       // Use callback to ensure the core 'maps' library (with google.maps.Map) is fully available
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geometry,marker&v=weekly&callback=initMap`
+      script.src = `https://maps.googleapis.com/maps/api/js?libraries=geometry,marker&v=weekly&callback=initMap`
       script.async = true
       const init = () => {
         const ensureReady = () => {

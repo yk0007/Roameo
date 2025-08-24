@@ -5,6 +5,7 @@ import type { WsHub } from "../ws/emit.js";
 import type { Db } from "../db/types.js";
 import type { SimpleRateLimiter } from "../utils/rateLimiter.js";
 import type { runRouter } from "../graph/graph.js";
+import { buildMapsRouter } from "./maps.js";
 
 export function buildApiRouter(
   hub: WsHub,
@@ -212,6 +213,9 @@ export function buildApiRouter(
       res.status(500).json({ error: "Internal server error" });
     }
   });
+
+  // Mount maps proxy router
+  r.use("/maps", buildMapsRouter());
 
   return r;
 }
