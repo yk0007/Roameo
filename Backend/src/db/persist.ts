@@ -106,29 +106,17 @@ export class WriteThroughDb implements Db {
 
     if (data.messages && data.messages.length) {
       try {
-        // Try without user_id first
         const rows = data.messages.map((m) => ({ 
           id: m.id, 
           session_id: sessionId, 
           role: m.role, 
           content: m.content, 
-          created_at: m.createdAt
+          created_at: m.createdAt,
+          user_id: data.userId || '00000000-0000-0000-0000-000000000000'
         }));
         const { error } = await this.client.from("messages").upsert(rows, { onConflict: "id" });
         
-        if (error && (error.message?.includes('user_id') || error.code === '23502')) {
-          // Retry with default user_id if constraint error
-          console.log(`[persist] Retrying bulk message insert with default user_id`);
-          const rowsWithUserId = data.messages.map((m) => ({ 
-            id: m.id, 
-            session_id: sessionId, 
-            role: m.role, 
-            content: m.content, 
-            created_at: m.createdAt,
-            user_id: '00000000-0000-0000-0000-000000000000'
-          }));
-          await this.client.from("messages").upsert(rowsWithUserId, { onConflict: "id" });
-        } else if (error) {
+        if (error) {
           console.error(`[persist] Failed to bulk insert messages:`, error);
         }
       } catch (e) {
@@ -150,14 +138,15 @@ export class WriteThroughDb implements Db {
     
     try {
       // Save message with session_id that matches the chat_sessions.id
-      const { error } = await this.client.from("messages").upsert({ 
+      const session = this.mem.getSession(sessionId);
+      const { error } = await this.client.from("messages").upsert({
         id: msg.id, 
-        session_id: sessionId, // This should match chat_sessions.id
+        session_id: sessionId, 
         role: msg.role, 
         content: msg.content, 
         created_at: msg.createdAt,
-        user_id: '00000000-0000-0000-0000-000000000000'
-      }, { onConflict: "id" });
+        user_id: session?.userId || '00000000-0000-0000-0000-000000000000'
+      });
       
       if (error) {
         console.error(`[persist] Failed to save message ${msg.id}:`, error);
@@ -219,7 +208,7 @@ export class WriteThroughDb implements Db {
         const session = this.mem.getSession(sessionId);
         const { error: insertError } = await this.client.from("chat_sessions").insert({
           id: sessionId,
-          user_id: '00000000-0000-0000-0000-000000000000',
+          user_id: session?.userId || '00000000-0000-0000-0000-000000000000',
           title: session?.trip?.title || 'Trip',
           metadata: session?.trip || {}
         });

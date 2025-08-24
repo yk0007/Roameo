@@ -14,6 +14,7 @@ export default function Profile() {
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
+  const [tripCount, setTripCount] = useState(0)
   const [formData, setFormData] = useState({
     first_name: "",
     last_name: "",
@@ -35,6 +36,22 @@ export default function Profile() {
         last_name: session.user.user_metadata?.last_name || "",
         username: session.user.user_metadata?.username || "",
       })
+      
+      // Fetch user statistics
+      try {
+        const response = await fetch('/api/user/stats', {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`
+          }
+        })
+        if (response.ok) {
+          const stats = await response.json()
+          setTripCount(stats.tripCount)
+        }
+      } catch (error) {
+        console.error('Failed to fetch user stats:', error)
+      }
+      
       setLoading(false)
     }
 
@@ -279,7 +296,7 @@ export default function Profile() {
                   <MapPin className="h-4 w-4 text-gray-500" />
                   <div>
                     <p className="text-sm font-medium text-gray-900">Trips planned</p>
-                    <p className="text-xs text-gray-600">3 itineraries</p>
+                    <p className="text-xs text-gray-600">{tripCount} itineraries</p>
                   </div>
                 </div>
               </CardContent>

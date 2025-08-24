@@ -6,6 +6,7 @@ import type { Db } from "../db/types.js";
 import type { SimpleRateLimiter } from "../utils/rateLimiter.js";
 import type { runRouter } from "../graph/graph.js";
 import { buildMapsRouter } from "./maps.js";
+import { optionalAuth, type AuthenticatedRequest } from "../middleware/auth.js";
 
 export function buildApiRouter(
   hub: WsHub,
@@ -82,7 +83,10 @@ export function buildApiRouter(
     res.status(200).send("OK");
   });
 
-  r.post("/chat/send", async (req: Request, res: Response) => {
+  // Apply optional auth to all routes
+  r.use(optionalAuth);
+
+  r.post("/chat/send", async (req: AuthenticatedRequest, res: Response) => {
     const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "unknown";
     if (!opts.chatLimiter.allow(`chat:${ip}`)) return res.status(429).json({ error: "Rate limit exceeded" });
 
@@ -95,7 +99,7 @@ export function buildApiRouter(
       sessionId = randomUUID();
       inviteId = randomUUID().slice(0, 8);
       opts.onNewSession?.(sessionId, inviteId, { sessionId });
-      db.upsertSession(sessionId, { inviteId, trip: { sessionId } });
+      db.upsertSession(sessionId, { inviteId, trip: { sessionId }, userId: req.userId });
       hub.emit(sessionId, { type: "session.ready", data: { sessionId: sessionId, inviteId: inviteId! } });
     }
 
@@ -138,7 +142,27 @@ export function buildApiRouter(
     }
   });
 
-  r.get("/trips/list", (_req: Request, res: Response) => {
+  r.get("/user/stats", async (req: AuthenticatedRequest, res: Response) => {
+    if (!req.userId) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    
+    try {
+      // Count user's trips from database
+      const userSessions = db.listSessions().filter(s => s.userId === req.userId);
+      const tripCount = userSessions.length;
+      
+      res.json({ 
+        tripCount,
+        userId: req.userId 
+      });
+    } catch (error) {
+      console.error('Error fetching user stats:', error);
+      res.status(500).json({ error: "Failed to fetch user statistics" });
+    }
+  });
+
+  r.get("/trips/list", (req: AuthenticatedRequest, res: Response) => {
     const rows = db.listSessions().map((s) => {
       const trip = (s.trip as any) || {};
       const days: number | undefined = trip.days;

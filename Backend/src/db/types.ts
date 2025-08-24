@@ -9,8 +9,9 @@ export interface SessionRecord {
   sessionId: string;
   inviteId?: string;
   trip: Record<string, any>;
-    messages: Message[];
+  messages: Message[];
   savedPoiIds: Set<string>;
+  userId?: string;
 }
 
 export interface Db {
