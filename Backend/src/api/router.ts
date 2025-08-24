@@ -191,6 +191,14 @@ export function buildApiRouter(
         process.env.SUPABASE_SERVICE_ROLE_KEY!
       );
 
+      // First check if there are any sessions at all
+      const { data: allSessions, error: allError } = await supabase
+        .from('chat_sessions')
+        .select('session_id, user_id, created_at')
+        .limit(10);
+      
+      console.log("All sessions in database:", allSessions);
+
       const { data: sessions, error } = await supabase
         .from('chat_sessions')
         .select('*')
