@@ -208,7 +208,7 @@ export class WriteThroughDb implements Db {
         const session = this.mem.getSession(sessionId);
         const { error: insertError } = await this.client.from("chat_sessions").insert({
           session_id: sessionId,
-          user_id: session?.userId || '00000000-0000-0000-0000-000000000000',
+          user_id: session?.userId,
           trip: session?.trip || {}
         });
         

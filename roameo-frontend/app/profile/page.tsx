@@ -31,10 +31,15 @@ export default function Profile() {
         return
       }
       setUser(session.user)
+      // Handle Google OAuth user metadata structure
+      const metadata = session.user.user_metadata || {}
+      const fullName = metadata.full_name || metadata.name || ""
+      const [firstName, ...lastNameParts] = fullName.split(" ")
+      
       setFormData({
-        first_name: session.user.user_metadata?.first_name || "",
-        last_name: session.user.user_metadata?.last_name || "",
-        username: session.user.user_metadata?.username || "",
+        first_name: metadata.first_name || firstName || "",
+        last_name: metadata.last_name || lastNameParts.join(" ") || "",
+        username: metadata.username || metadata.preferred_username || "",
       })
       
       // Fetch user statistics
