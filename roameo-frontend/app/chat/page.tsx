@@ -314,29 +314,49 @@ export default function ChatPage() {
   const handleDeleteTrip = async () => {
     if (!sessionId) return
     if (isDeleting) return
-    try {
-      if (typeof window !== "undefined") {
-        const ok = window.confirm("Delete this trip and all its data? This cannot be undone.")
-        if (!ok) return
-      }
-      setIsDeleting(true)
-      await apiDeleteTrip(sessionId)
-    } catch (e: any) {
-      toast({ title: "Failed to delete trip", description: e?.message || "Please try again.", variant: "destructive" })
+    
+    if (typeof window !== "undefined") {
+      const ok = window.confirm("Delete this trip and all its data? This cannot be undone.")
+      if (!ok) return
     }
-    // reset local state and URL
-    setMessages([])
-    setItinerary(undefined)
-    setSearchResults(undefined)
-    setMapData(undefined)
-    setInviteId(undefined)
-    setSessionId(undefined)
-    const qp = new URLSearchParams(window.location.search)
-    qp.delete("sessionId")
-    router.replace(qp.toString() ? `?${qp.toString()}` : "?")
-    toast({ title: "Trip deleted" })
-    setIsDeleting(false)
-    router.push("/dashboard")
+    
+    setIsDeleting(true)
+    
+    try {
+      // Close WebSocket connection before deletion to prevent reconnection issues
+      if (wsRef.current) {
+        manualCloseRef.current = true
+        wsRef.current.close()
+        wsRef.current = null
+      }
+      
+      // Delete trip via API
+      await apiDeleteTrip(sessionId)
+      
+      // Reset local state immediately after successful deletion
+      setMessages([])
+      setItinerary(undefined)
+      setSearchResults(undefined)
+      setMapData(undefined)
+      setInviteId(undefined)
+      setSessionId(undefined)
+      
+      // Show success message
+      toast({ title: "Trip deleted successfully" })
+      
+      // Navigate to dashboard immediately
+      router.push("/dashboard")
+      
+    } catch (e: any) {
+      console.error("Failed to delete trip:", e)
+      toast({ 
+        title: "Failed to delete trip", 
+        description: e?.message || "Please try again.", 
+        variant: "destructive" 
+      })
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   const handleSendMessage = async (message: string) => {

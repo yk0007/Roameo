@@ -1,4 +1,6 @@
-import { BACKEND_URL, type SessionId, type InviteId, type TripContext, type WsEvent } from "./types"
+import type { SessionId } from "./types"
+import { supabase } from "./supabase/client"
+import { BACKEND_URL, type InviteId, type TripContext, type WsEvent } from "./types"
 
 export async function sendChat({ sessionId, inviteId, message }: { sessionId?: SessionId; inviteId?: InviteId; message: string }) {
   const res = await fetch(`${BACKEND_URL}/api/chat/send`, {
@@ -51,9 +53,18 @@ export async function clearChat(sessionId: SessionId) {
 }
 
 export async function deleteTrip(sessionId: SessionId) {
+  const { data: { session } } = await supabase.auth.getSession()
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+  }
+  if (session?.access_token) {
+    headers.Authorization = `Bearer ${session.access_token}`
+  }
+  
   // Send sessionId via query string to align with backend router reading req.query
   const res = await fetch(`${BACKEND_URL}/api/trip?sessionId=${encodeURIComponent(sessionId)}`, {
     method: "DELETE",
+    headers,
   })
   if (!res.ok) throw new Error(`deleteTrip failed: ${res.status}`)
   return (await res.json()) as { ok: true }
