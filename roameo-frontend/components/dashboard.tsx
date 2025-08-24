@@ -18,7 +18,8 @@ export function Dashboard() {
       try {
         const { data: { session } } = await supabase.auth.getSession()
         if (!session) {
-          setLoading(false)
+          // Redirect to auth page immediately if no session
+          window.location.href = '/auth/login'
           return
         }
 

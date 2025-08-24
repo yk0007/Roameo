@@ -67,7 +67,7 @@ export function TopNavigation({
 
   const handleSignOut = async () => {
     // Navigate immediately for instant UX
-    router.push("/auth/login")
+    window.location.href = "/auth/login"
     // Sign out in background
     await supabase.auth.signOut()
   }
