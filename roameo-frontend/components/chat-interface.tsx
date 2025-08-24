@@ -244,10 +244,6 @@ export const ChatInterface = ({
     try {
       // Only log non-trivial assistant payloads
       if (cleanedContent && cleanedContent.length > 0) {
-        console.groupCollapsed("[itinerary] Markdown debug");
-        console.log("Raw content:\n", content);
-        console.log("Cleaned content:\n", cleanedContent);
-        console.groupEnd();
       }
     } catch {}
 
@@ -274,7 +270,6 @@ export const ChatInterface = ({
           const trimmedLine = line.trim()
           // Per-line classification logs
           if (trimmedLine.length) {
-            try { console.debug('[itinerary] classify', { i: index, line: trimmedLine.slice(0, 120) }); } catch {}
           }
           
           // Main title (# *Title*) — italic, slightly lighter weight

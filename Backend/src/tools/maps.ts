@@ -49,7 +49,6 @@ export class GoogleMapsClient {
       try {
         const withPhotos = mapped.filter((m) => !!m.photoUrl).length;
         if (results.length) {
-          console.debug(`[maps] textsearch results=${results.length} withPhotos=${withPhotos} noPhoto=${results.length - withPhotos}`);
         }
       } catch {}
       return mapped;
