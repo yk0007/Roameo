@@ -29,7 +29,7 @@ export async function updateSession(request: NextRequest) {
     // Exchange the code for a session
     await supabase.auth.exchangeCodeForSession(code)
     // Redirect to home page after successful auth
-    return NextResponse.redirect(new URL("/", request.url))
+    return NextResponse.redirect(new URL("/dashboard", request.url))
   }
 
   // Refresh session if expired - required for Server Components
