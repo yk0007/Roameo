@@ -3,8 +3,19 @@ import fetch from "node-fetch";
 
 const GOOGLE_MAPS_API_BASE = "https://maps.googleapis.com/maps/api";
 
+const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
+
 export function buildMapsRouter(): Router {
   const router = Router();
+
+  // Endpoint to get the API key for loading the Maps JavaScript API
+  router.get("/api-key", (req, res) => {
+    if (!GOOGLE_MAPS_API_KEY) {
+      return res.status(500).json({ error: "Google Maps API key not configured" });
+    }
+
+    res.json({ apiKey: GOOGLE_MAPS_API_KEY });
+  });
 
   // Proxy for Place Autocomplete API
   router.get("/autocomplete", async (req, res) => {

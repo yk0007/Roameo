@@ -163,27 +163,55 @@ export function MapView({
     window.__gmapsInitCallbacks.push(() => setGmapsReady(true))
     if (!window.__gmapsLoading) {
       window.__gmapsLoading = true
-      const script = document.createElement("script")
-      // Use callback to ensure the core 'maps' library (with google.maps.Map) is fully available
-      script.src = `https://maps.googleapis.com/maps/api/js?libraries=geometry,marker&v=weekly&callback=initMap`
-      script.async = true
-      const init = () => {
-        const ensureReady = () => {
-          if (window.google?.maps?.Map) {
-            // Mark as ready and flush callbacks
-            setGmapsReady(true)
-            window.__gmapsInitCallbacks?.forEach((cb) => cb())
-            window.__gmapsInitCallbacks = []
-          } else {
-            // Retry shortly until constructor is available
-            setTimeout(ensureReady, 50)
+      
+      // Fetch API key from backend and load script
+      fetch('/api/maps/api-key')
+        .then(response => response.json())
+        .then(data => {
+          const script = document.createElement("script")
+          // Use callback to ensure the core 'maps' library (with google.maps.Map) is fully available
+          script.src = `https://maps.googleapis.com/maps/api/js?key=${data.apiKey}&libraries=geometry,marker&v=weekly&callback=initMap`
+          script.async = true
+          const init = () => {
+            const ensureReady = () => {
+              if (window.google?.maps?.Map) {
+                // Mark as ready and flush callbacks
+                setGmapsReady(true)
+                window.__gmapsInitCallbacks?.forEach((cb) => cb())
+                window.__gmapsInitCallbacks = []
+              } else {
+                // Retry shortly until constructor is available
+                setTimeout(ensureReady, 50)
+              }
+            }
+            ensureReady()
           }
-        }
-        ensureReady()
-      }
-      ;(window as any).initMap = init
-      script.addEventListener("load", init)
-      document.body.appendChild(script)
+          ;(window as any).initMap = init
+          script.addEventListener("load", init)
+          document.body.appendChild(script)
+        })
+        .catch(error => {
+          console.error('Failed to load Google Maps API key:', error)
+          // Fallback to loading without key (will show watermarks)
+          const script = document.createElement("script")
+          script.src = `https://maps.googleapis.com/maps/api/js?libraries=geometry,marker&v=weekly&callback=initMap`
+          script.async = true
+          const init = () => {
+            const ensureReady = () => {
+              if (window.google?.maps?.Map) {
+                setGmapsReady(true)
+                window.__gmapsInitCallbacks?.forEach((cb) => cb())
+                window.__gmapsInitCallbacks = []
+              } else {
+                setTimeout(ensureReady, 50)
+              }
+            }
+            ensureReady()
+          }
+          ;(window as any).initMap = init
+          script.addEventListener("load", init)
+          document.body.appendChild(script)
+        })
     }
   }, [])
 
