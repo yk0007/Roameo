@@ -148,12 +148,25 @@ export function buildApiRouter(
     }
     
     try {
-      // Count user's trips from database
-      const userSessions = db.listSessions().filter(s => s.userId === req.userId);
-      const tripCount = userSessions.length;
-      
+      // Count user's trips from database instead of memory
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(
+        process.env.SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      );
+
+      const { count, error } = await supabase
+        .from('chat_sessions')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', req.userId);
+
+      if (error) {
+        console.error('Error counting user sessions:', error);
+        return res.status(500).json({ error: 'Failed to fetch user statistics' });
+      }
+
       res.json({ 
-        tripCount,
+        tripCount: count || 0,
         userId: req.userId 
       });
     } catch (error) {
