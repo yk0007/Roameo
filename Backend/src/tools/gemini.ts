@@ -72,13 +72,10 @@ export class GeminiClient {
           continue;
         }
         
-        console.log("[gemini] PROMPT", prompt);
-        console.log("[gemini] RESPONSE", text);
         return lastError;
       }
       
       const data: any = await res.json();
-      console.log("[gemini] RESPONSE DATA", JSON.stringify(data, null, 2));
       
       // Try multiple extraction paths for different response formats
       let text: string | undefined = data?.candidates?.[0]?.content?.parts?.[0]?.text;

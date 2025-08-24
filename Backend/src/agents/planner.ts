@@ -142,17 +142,17 @@ Make the itinerary **engaging, structured, and easy to follow** with ample spaci
         days: days || 0,
       };
     }
-    return null;
-  }
-
-    // If we fall through, it means a non-rate-limit error occurred. Use fallback.
-        console.log("[planner] Using fallback itinerary.");
+    
+    // Return fallback itinerary instead of null
+    console.log("[planner] Using fallback itinerary due to error.");
     return {
       chatResponse: "I ran into a little trouble creating your itinerary, but here's a sample to get you started!",
       itinerary: createDummyItinerary({ ..._ctx, destination, days }),
       destination: destination || "",
       days: days || 0,
     };
+  }
+
 }
 
 // --- Helper to create the structured itinerary from a text description and POIs --- //
