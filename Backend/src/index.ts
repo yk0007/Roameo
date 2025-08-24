@@ -1,0 +1,104 @@
+import "dotenv/config";
+import express, { type Request, type Response } from "express";
+import cors from "cors";
+import { createServer, type IncomingMessage } from "http";
+import { WebSocketServer } from "ws";
+import type WebSocket from "ws";
+import { randomUUID } from "crypto";
+import { WsHub } from "./ws/emit.js";
+import type { WsEvent, TripContext } from "./types/schemas.js";
+import { buildApiRouter } from "./api/router.js";
+import { runRouter } from "./graph/graph.js";
+import type { Db } from "./db/types.js";
+import { WriteThroughDb } from "./db/persist.js";
+import { SimpleRateLimiter } from "./utils/rateLimiter.js";
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const httpServer = createServer(app);
+const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
+const hub = new WsHub();
+// Prefer persistent DB if Supabase env is configured; write-through to Supabase while serving from memory for speed
+const db: Db = new WriteThroughDb(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+const chatLimiter = new SimpleRateLimiter(60, 60_000); // 60 req/min per IP
+
+// Mount REST API router
+app.use("/api", buildApiRouter(hub, db, {
+  chatLimiter,
+  runRouter,
+  onNewSession: (sid, inviteId, trip) => {
+    sessions.set(sid, { inviteId, trip });
+  },
+  onDeleteSession: (sid: string) => {
+    sessions.delete(sid);
+  },
+}));
+
+wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
+  // Expect: ws://host/ws?sessionId=...
+  const url = new URL(req.url || "", `http://${req.headers.host}`);
+  const sessionId = url.searchParams.get("sessionId");
+  if (!sessionId) {
+    ws.close(1008, "sessionId required");
+    return;
+  }
+
+  // Do NOT implicitly create sessions on WS connect. If the session does not exist,
+  // close the socket. New sessions must be created via REST /api/chat/send.
+  const existing = db.getSession(sessionId);
+  if (!existing) {
+    ws.close(1008, "unknown sessionId");
+    return;
+  }
+
+  hub.attach(sessionId, ws);
+
+  // Keep inviteId from either DB or parallel in-memory map (if present)
+  const inviteId = existing.inviteId || sessions.get(sessionId)?.inviteId || undefined;
+  if (inviteId && !existing.inviteId) db.setInvite(sessionId, inviteId);
+
+  // Send session ready to all clients in the session
+  hub.emit(sessionId, { type: "session.ready", data: { sessionId, inviteId } as any });
+  // Send current trip navbar data
+  if (existing.trip) hub.emit(sessionId, { type: "navbar.update", data: existing.trip as any });
+  // If we have a persisted itinerary from prior runs, replay it so UI restores
+  const maybeItin = (existing.trip as any)?.itinerary;
+  if (maybeItin) hub.emit(sessionId, { type: "itinerary.update", data: maybeItin });
+  // Replay last search results and map snapshot if present
+  const maybeSearch = (existing.trip as any)?.searchResults;
+  if (maybeSearch) hub.emit(sessionId, { type: "search.results", data: maybeSearch });
+  const maybeMap = (existing.trip as any)?.mapData;
+  if (maybeMap) hub.emit(sessionId, { type: "map.update", data: maybeMap });
+  // Replay prior messages to rebuild chat UI on fresh connects
+  if (existing.messages?.length) {
+    hub.emit(sessionId, { type: "chat.history", data: existing.messages as any });
+  }
+});
+
+// In-memory session store (MVP) — replace with Supabase later (db abstracts storage)
+const sessions = new Map<string, { inviteId: string; trip: Partial<TripContext> }>();
+
+
+const port = process.env.PORT || 4000;
+
+async function init() {
+  // Best-effort: hydrate from Supabase at startup so existing trips/messages are available immediately
+  try {
+    // @ts-ignore - optional method for write-through DB
+    if (typeof (db as any).hydrateFromRemote === "function") {
+      console.log("[roameo-backend] hydrating from Supabase...");
+      await (db as any).hydrateFromRemote();
+      console.log("[roameo-backend] hydration complete");
+    }
+  } catch (e) {
+    console.warn("[roameo-backend] hydrateFromRemote failed (continuing):", e);
+  }
+
+  httpServer.listen(port, () => {
+    console.log(`[roameo-backend] listening on http://localhost:${port}`);
+  });
+}
+
+init();

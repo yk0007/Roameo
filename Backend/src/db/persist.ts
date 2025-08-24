@@ -1,0 +1,237 @@
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { Db, SessionRecord } from "./types.js";
+import { MemoryDb } from "./memory.js";
+
+export class WriteThroughDb implements Db {
+  private mem = new MemoryDb();
+  private client: SupabaseClient | null = null;
+
+  constructor(url?: string, serviceKey?: string) {
+    if (url && serviceKey) {
+      this.client = createClient(url, serviceKey, { auth: { persistSession: false } });
+    }
+  }
+
+  // One-time hydrate from Supabase -> memory
+  async hydrateFromRemote(): Promise<void> {
+    if (!this.client) return;
+    console.log("[persist] Starting hydration from Supabase...");
+    const { data: sessions, error } = await this.client
+      .from("sessions")
+      .select("session_id, invite_id, trip");
+    if (error) {
+      console.error("[persist] Failed to fetch sessions:", error);
+      throw error;
+    }
+    console.log(`[persist] Found ${sessions?.length || 0} sessions`);
+    for (const s of sessions || []) {
+      const { data: messages, error: msgError } = await this.client
+        .from("messages")
+        .select("id, role, content, created_at")
+        .eq("session_id", s.session_id)
+        .order("created_at", { ascending: true });
+      if (msgError) {
+        console.error(`[persist] Failed to fetch messages for session ${s.session_id}:`, msgError);
+        continue;
+      }
+      const { data: saved } = await this.client
+        .from("saved_pois")
+        .select("poi_id")
+        .eq("session_id", s.session_id);
+      console.log(`[persist] Session ${s.session_id}: ${messages?.length || 0} messages, ${saved?.length || 0} saved POIs`);
+      this.mem.upsertSession(s.session_id, {
+        inviteId: s.invite_id ?? undefined,
+        trip: (s.trip as any) || {},
+        messages: (messages || []).map((m: any) => ({ id: m.id, role: m.role, content: m.content, createdAt: new Date(m.created_at).toISOString() })),
+        savedPoiIds: new Set((saved || []).map((r: any) => r.poi_id)),
+      });
+    }
+    console.log("[persist] Hydration complete");
+  }
+
+  upsertSession(sessionId: string, data: Partial<SessionRecord>): SessionRecord {
+    const rec = this.mem.upsertSession(sessionId, data);
+    this.flushUpsert(sessionId, data).catch(() => {});
+    return rec;
+  }
+
+  getSession(sessionId: string): SessionRecord | undefined {
+    return this.mem.getSession(sessionId);
+  }
+
+  appendMessage(sessionId: string, msg: SessionRecord["messages"][number]): void {
+    this.mem.appendMessage(sessionId, msg);
+    console.log(`[persist] appendMessage called for session ${sessionId}, message ${msg.id}`);
+    this.flushAppendMessage(sessionId, msg).catch((e) => {
+      console.error(`[persist] flushAppendMessage failed:`, e);
+    });
+  }
+
+  patchTrip(sessionId: string, patch: Record<string, any>): void {
+    this.mem.patchTrip(sessionId, patch);
+    this.flushPatchTrip(sessionId, patch).catch(() => {});
+  }
+
+  setInvite(sessionId: string, inviteId: string): void {
+    this.mem.setInvite(sessionId, inviteId);
+    this.flushSetInvite(sessionId, inviteId).catch(() => {});
+  }
+
+  setPoiSaved(sessionId: string, poiId: string, saved: boolean): void {
+    this.mem.setPoiSaved(sessionId, poiId, saved);
+    this.flushSetPoiSaved(sessionId, poiId, saved).catch(() => {});
+  }
+
+  clearMessages(sessionId: string): void {
+    this.mem.clearMessages(sessionId);
+    this.flushClearMessages(sessionId).catch(() => {});
+  }
+
+  deleteSession(sessionId: string): void {
+    this.mem.deleteSession(sessionId);
+    this.flushDeleteSession(sessionId).catch(() => {});
+  }
+
+  listSessions(): SessionRecord[] {
+    return this.mem.listSessions();
+  }
+
+  // Flush helpers (best-effort, non-blocking)
+  private async flushUpsert(sessionId: string, data: Partial<SessionRecord>) {
+    if (!this.client) return;
+    const base: any = { session_id: sessionId };
+    if (data.inviteId !== undefined) base.invite_id = data.inviteId;
+    if (data.trip !== undefined) base.trip = data.trip as any;
+    await this.client.from("sessions").upsert(base, { onConflict: "session_id" });
+
+    if (data.messages && data.messages.length) {
+      try {
+        // Try without user_id first
+        const rows = data.messages.map((m) => ({ 
+          id: m.id, 
+          session_id: sessionId, 
+          role: m.role, 
+          content: m.content, 
+          created_at: m.createdAt
+        }));
+        const { error } = await this.client.from("messages").upsert(rows, { onConflict: "id" });
+        
+        if (error && (error.message?.includes('user_id') || error.code === '23502')) {
+          // Retry with default user_id if constraint error
+          console.log(`[persist] Retrying bulk message insert with default user_id`);
+          const rowsWithUserId = data.messages.map((m) => ({ 
+            id: m.id, 
+            session_id: sessionId, 
+            role: m.role, 
+            content: m.content, 
+            created_at: m.createdAt,
+            user_id: '00000000-0000-0000-0000-000000000000'
+          }));
+          await this.client.from("messages").upsert(rowsWithUserId, { onConflict: "id" });
+        } else if (error) {
+          console.error(`[persist] Failed to bulk insert messages:`, error);
+        }
+      } catch (e) {
+        console.error(`[persist] Exception during bulk message insert:`, e);
+      }
+    }
+    if (data.savedPoiIds && data.savedPoiIds.size) {
+      const rows = Array.from(data.savedPoiIds).map((poiId) => ({ session_id: sessionId, poi_id: poiId }));
+      await this.client.from("saved_pois").upsert(rows, { onConflict: "session_id,poi_id" });
+    }
+  }
+
+  private async flushAppendMessage(sessionId: string, msg: SessionRecord["messages"][number]) {
+    if (!this.client) return;
+    console.log(`[persist] Saving message ${msg.id} for session ${sessionId}`);
+    
+    // Ensure session exists in database first
+    await this.ensureSessionExists(sessionId);
+    
+    try {
+      // Save message with session_id that matches the chat_sessions.id
+      const { error } = await this.client.from("messages").upsert({ 
+        id: msg.id, 
+        session_id: sessionId, // This should match chat_sessions.id
+        role: msg.role, 
+        content: msg.content, 
+        created_at: msg.createdAt,
+        user_id: '00000000-0000-0000-0000-000000000000'
+      }, { onConflict: "id" });
+      
+      if (error) {
+        console.error(`[persist] Failed to save message ${msg.id}:`, error);
+      } else {
+        console.log(`[persist] Successfully saved message ${msg.id}`);
+      }
+    } catch (e) {
+      console.error(`[persist] Exception saving message ${msg.id}:`, e);
+    }
+  }
+
+  private async flushPatchTrip(sessionId: string, patch: Record<string, any>) {
+    if (!this.client) return;
+    const cur = this.mem.getSession(sessionId)?.trip || {};
+    await this.client.from("sessions").upsert({ session_id: sessionId, trip: cur });
+  }
+
+  private async flushSetInvite(sessionId: string, inviteId: string) {
+    if (!this.client) return;
+    await this.client.from("sessions").upsert({ session_id: sessionId, invite_id: inviteId });
+  }
+
+  private async flushSetPoiSaved(sessionId: string, poiId: string, saved: boolean) {
+    if (!this.client) return;
+    if (saved) await this.client.from("saved_pois").upsert({ session_id: sessionId, poi_id: poiId });
+    else await this.client.from("saved_pois").delete().eq("session_id", sessionId).eq("poi_id", poiId);
+  }
+
+  private async flushClearMessages(sessionId: string) {
+    if (!this.client) return;
+    await this.client.from("messages").delete().eq("session_id", sessionId);
+  }
+
+  private async flushDeleteSession(sessionId: string) {
+    if (!this.client) return;
+    // Delete related rows first to avoid orphans
+    await this.client.from("messages").delete().eq("session_id", sessionId);
+    await this.client.from("saved_pois").delete().eq("session_id", sessionId);
+    await this.client.from("sessions").delete().eq("session_id", sessionId);
+  }
+
+  private async ensureSessionExists(sessionId: string) {
+    if (!this.client) return;
+    try {
+      // Check if session exists in chat_sessions table using 'id' column
+      const { data: existingSession, error: selectError } = await this.client
+        .from("chat_sessions")
+        .select("id")
+        .eq("id", sessionId)
+        .maybeSingle();
+      
+      if (selectError && selectError.code !== 'PGRST116') {
+        console.error(`[persist] Error checking session existence:`, selectError);
+        return;
+      }
+      
+      if (!existingSession) {
+        console.log(`[persist] Creating session ${sessionId} in chat_sessions table`);
+        const session = this.mem.getSession(sessionId);
+        const { error: insertError } = await this.client.from("chat_sessions").insert({
+          id: sessionId,
+          user_id: '00000000-0000-0000-0000-000000000000',
+          title: session?.trip?.title || 'Trip',
+          metadata: session?.trip || {}
+        });
+        
+        if (insertError) {
+          console.error(`[persist] Failed to create session ${sessionId}:`, insertError);
+        } else {
+          console.log(`[persist] Successfully created session ${sessionId}`);
+        }
+      }
+    } catch (e) {
+      console.error(`[persist] Exception ensuring session exists:`, e);
+    }
+  }
+}

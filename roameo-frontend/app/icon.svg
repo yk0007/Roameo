@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- Roameo logo: black circular badge with a small centered white dot -->
+  <circle cx="128" cy="128" r="112" fill="#000"/>
+  <circle cx="128" cy="128" r="18" fill="#fff"/>
+</svg>
