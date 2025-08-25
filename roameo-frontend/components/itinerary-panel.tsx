@@ -16,7 +16,14 @@ import {
   RotateCw,
   MapPin,
   Bed,
+  Heart,
+  Hotel,
+  Star,
+  RefreshCw,
+  X,
+  Check,
 } from "lucide-react"
+import { OptimizedPoiImage } from "@/components/optimized-poi-image"
 import { Itinerary, ItineraryDay, Activity } from "@/lib/types"
 
 interface ItineraryPanelProps {
@@ -199,10 +206,14 @@ export function ItineraryPanel({ itinerary, onPOISelect }: ItineraryPanelProps) 
                     <CardContent className="p-4">
                       <div className="flex gap-3">
                         {activity.photoUrl ? (
-                          <img
+                          <OptimizedPoiImage
                             src={activity.photoUrl}
                             alt={activity.name}
                             className="w-16 h-16 rounded-xl object-cover flex-shrink-0"
+                            width={64}
+                            height={64}
+                            quality="medium"
+                            poiName={activity.name}
                           />
                         ) : (
                           <div className="w-16 h-16 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0">
@@ -236,10 +247,14 @@ export function ItineraryPanel({ itinerary, onPOISelect }: ItineraryPanelProps) 
                     <CardContent className="p-4">
                       <div className="flex gap-3">
                         {day.accommodation.photoUrl ? (
-                          <img
+                          <OptimizedPoiImage
                             src={day.accommodation.photoUrl}
                             alt={day.accommodation.name}
                             className="w-16 h-16 rounded-xl object-cover flex-shrink-0"
+                            width={64}
+                            height={64}
+                            quality="medium"
+                            poiName={day.accommodation.name}
                           />
                         ) : (
                           <div className="w-16 h-16 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0">

@@ -576,6 +576,7 @@ export const ChatInterface = ({
 
           <p className="text-xs text-gray-500 text-center mt-3">Roameo can make mistakes. Check important info.</p>
         </div>
+        
       </div>
     </div>
   )

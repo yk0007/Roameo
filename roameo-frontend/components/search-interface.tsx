@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
+import { useInfiniteScroll } from "@/hooks/use-infinite-scroll"
 import { Search, Calendar, Users, SlidersHorizontal, Heart, Plus, Hotel, MapPin, Star, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -24,19 +25,54 @@ export function SearchInterface({ activeView, onViewChange, results, savedIds, i
   const [searchQuery, setSearchQuery] = useState("")
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const scrollPosRef = useRef<Record<string, number>>({ Stays: 0, Restaurants: 0, Attractions: 0 })
+  
+  // Pagination state
+  const [displayCounts, setDisplayCounts] = useState({ Stays: 12, Restaurants: 12, Attractions: 12 })
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
 
   const tabs = ["Stays", "Restaurants", "Attractions"]
 
-  const list = useMemo(() => {
+  const { fullList, displayedList, hasMore } = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
     let arr: POI[] = []
-    if (!results) return arr
+    if (!results) return { fullList: arr, displayedList: arr, hasMore: false }
     if (activeTab === "Stays") arr = results.stays || []
     if (activeTab === "Restaurants") arr = results.restaurants || []
     if (activeTab === "Attractions") arr = results.attractions || []
-    if (!q) return arr
-    return arr.filter((p) => p.name.toLowerCase().includes(q) || (p.address || "").toLowerCase().includes(q))
-  }, [results, activeTab, searchQuery])
+    
+    const filtered = !q ? arr : arr.filter((p) => p.name.toLowerCase().includes(q) || (p.address || "").toLowerCase().includes(q))
+    const displayCount = displayCounts[activeTab as keyof typeof displayCounts]
+    const displayed = filtered.slice(0, displayCount)
+    
+    return {
+      fullList: filtered,
+      displayedList: displayed,
+      hasMore: displayed.length < filtered.length
+    }
+  }, [results, activeTab, searchQuery, displayCounts])
+
+  // Load more results
+  const loadMore = () => {
+    if (isLoadingMore || !hasMore) return
+    
+    setIsLoadingMore(true)
+    // Simulate loading delay
+    setTimeout(() => {
+      setDisplayCounts(prev => ({
+        ...prev,
+        [activeTab]: prev[activeTab as keyof typeof prev] + 12
+      }))
+      setIsLoadingMore(false)
+    }, 300)
+  }
+
+  // Infinite scroll hook
+  const infiniteScrollRef = useInfiniteScroll({
+    hasMore,
+    isLoading: isLoadingMore,
+    onLoadMore: loadMore,
+    threshold: 300
+  })
 
   // Restore scroll position on tab switch
   useEffect(() => {
@@ -45,6 +81,11 @@ export function SearchInterface({ activeView, onViewChange, results, savedIds, i
       const y = scrollPosRef.current[activeTab] ?? 0
       el.scrollTop = y
     }
+  }, [activeTab])
+
+  // Reset display count when switching tabs
+  useEffect(() => {
+    setDisplayCounts(prev => ({ ...prev, [activeTab]: 12 }))
   }, [activeTab])
 
   return (
@@ -104,7 +145,12 @@ export function SearchInterface({ activeView, onViewChange, results, savedIds, i
       </div>
 
       <div
-        ref={scrollRef}
+        ref={(el) => {
+          scrollRef.current = el
+          if (infiniteScrollRef) {
+            (infiniteScrollRef as any).current = el
+          }
+        }}
         className="flex-1 overflow-y-auto p-4"
         onScroll={(e) => {
           const el = e.currentTarget
@@ -113,22 +159,49 @@ export function SearchInterface({ activeView, onViewChange, results, savedIds, i
       >
         {!results ? (
           <div className="text-sm text-gray-500">No results yet. Ask Roameo to search for places.</div>
-        ) : list.length === 0 ? (
+        ) : fullList.length === 0 ? (
           <div className="text-sm text-gray-500">No matches for your filters.</div>
         ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-6">
-            {list.map((poi) => (
-              <SearchCard
-                key={poi.id}
-                poi={poi}
-                isSaved={savedIds?.has(poi.id) || false}
-                isItineraryItem={!!itineraryPoiIds?.has(poi.id)}
-                onToggleSave={onToggleSave ? (p: POI, n: boolean) => onToggleSave(p, n) : () => {}}
-                onAddPoi={onAddPoi ? (p: POI) => onAddPoi(p) : () => {}}
-                onReplan={onReplan ? (p: POI) => onReplan(p) : () => {}}
-              />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-6">
+              {displayedList.map((poi) => (
+                <SearchCard
+                  key={poi.id}
+                  poi={poi}
+                  isSaved={savedIds?.has(poi.id) || false}
+                  isItineraryItem={!!itineraryPoiIds?.has(poi.id)}
+                  onToggleSave={onToggleSave ? (p: POI, n: boolean) => onToggleSave(p, n) : () => {}}
+                  onAddPoi={onAddPoi ? (p: POI) => onAddPoi(p) : () => {}}
+                  onReplan={onReplan ? (p: POI) => onReplan(p) : () => {}}
+                />
+              ))}
+            </div>
+            
+            {/* Loading indicator */}
+            {isLoadingMore && (
+              <div className="flex justify-center items-center py-8">
+                <div className="w-8 h-8 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
+                <span className="ml-3 text-gray-500">Loading more results...</span>
+              </div>
+            )}
+            
+            {/* Load more button (fallback) */}
+            {hasMore && !isLoadingMore && (
+              <div className="flex justify-center py-6">
+                <button
+                  onClick={loadMore}
+                  className="px-6 py-2 bg-black text-white rounded-full hover:bg-gray-800 transition-colors"
+                >
+                  Load More ({fullList.length - displayedList.length} remaining)
+                </button>
+              </div>
+            )}
+            
+            {/* Results summary */}
+            <div className="text-center text-sm text-gray-500 py-4">
+              Showing {displayedList.length} of {fullList.length} results
+            </div>
+          </>
         )}
       </div>
     </div>

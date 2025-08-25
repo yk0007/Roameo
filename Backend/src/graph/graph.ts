@@ -132,9 +132,36 @@ const graph = new StateGraph<State>({ channels: graphState })
 const app = graph.compile();
 
 export async function runRouter(input: GraphInput, history: Message[]): Promise<WsEvent[]> {
-  const result = (await app.invoke({ input: input, messages: history })) as unknown as State;
-  if (!result || !result.events) {
-    return [];
+  try {
+    // Set up timeout for AI processing
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('AI processing timeout')), 30000); // 30 second timeout
+    });
+    
+    const processingPromise = app.invoke({ input: input, messages: history });
+    
+    const result = (await Promise.race([processingPromise, timeoutPromise])) as unknown as State;
+    
+    if (!result || !result.events) {
+      return [];
+    }
+    return result.events;
+  } catch (error) {
+    console.error('Graph processing error:', error);
+    
+    // Return error event for timeout or other failures
+    const errorEvent: WsEvent = {
+      type: "chat.append",
+      data: {
+        id: randomUUID(),
+        role: "assistant",
+        content: error instanceof Error && error.message.includes('timeout') 
+          ? "I'm taking longer than usual to process your request. Please try again or rephrase your question."
+          : "Something went wrong while processing your request. Please try again.",
+        createdAt: new Date().toISOString(),
+      },
+    };
+    
+    return [errorEvent];
   }
-  return result.events;
 }

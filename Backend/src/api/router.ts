@@ -251,8 +251,21 @@ export function buildApiRouter(
     try {
       const photoUrl = `https://maps.googleapis.com/maps/api/place/photo?photo_reference=${photo_reference}&maxwidth=${maxwidth}&key=${key}`;
       
-      const response = await fetch(photoUrl);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      
+      const response = await fetch(photoUrl, {
+        headers: {
+          'User-Agent': 'Roameo/1.0',
+          'Accept': 'image/*'
+        },
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
       if (!response.ok) {
+        console.error(`[proxy] Photo fetch failed: ${response.status} ${response.statusText}`);
         return res.status(response.status).json({ error: "Failed to fetch photo" });
       }
 
@@ -265,26 +278,18 @@ export function buildApiRouter(
         'Cache-Control': 'public, max-age=86400' // Cache for 24 hours
       });
 
-      // Stream the image data
-      if (response.body) {
-        const reader = response.body.getReader();
-        const pump = async () => {
-          try {
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-              res.write(value);
-            }
-            res.end();
-          } catch (error) {
-            console.error('[proxy] Error streaming photo:', error);
-            res.status(500).end();
-          }
-        };
-        await pump();
-      } else {
-        res.status(500).json({ error: "No response body" });
-      }
+      // Convert response to buffer and send
+      const buffer = await response.arrayBuffer();
+      const imageBuffer = Buffer.from(buffer);
+      
+      res.writeHead(200, {
+        'Content-Type': response.headers.get('content-type') || 'image/jpeg',
+        'Content-Length': imageBuffer.length,
+        'Cache-Control': 'public, max-age=86400',
+        'Access-Control-Allow-Origin': '*'
+      });
+      
+      res.end(imageBuffer);
     } catch (error) {
       console.error('[proxy] Error fetching photo:', error);
       res.status(500).json({ error: "Internal server error" });

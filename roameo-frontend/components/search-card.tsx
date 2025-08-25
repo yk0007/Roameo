@@ -2,7 +2,7 @@
 
 import { Heart, Check, Star, ChevronLeft, ChevronRight, Info } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { CachedImage } from "@/components/cached-image"
+import { OptimizedPoiImage } from "@/components/optimized-poi-image"
 import type { POI } from "@/lib/types"
 import { useState } from "react"
 
@@ -34,17 +34,22 @@ export function SearchCard({ poi, isSaved, isItineraryItem, onToggleSave, onAddP
     }
   }
 
-  const imgClass = compact ? "w-full h-28 object-cover" : "w-full h-48 object-cover"
+  const imgClass = "w-full h-48 object-cover"
   const padClass = compact ? "p-3" : "p-4"
   const titleClass = compact ? "font-semibold text-base text-gray-900 leading-tight" : "font-semibold text-lg text-gray-900 leading-tight"
 
   return (
     <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
       <div className="relative">
-        <CachedImage 
+        <OptimizedPoiImage 
           src={images[currentImageIndex] || poi.photoUrl} 
           alt={poi.name} 
-          className={imgClass} 
+          className={imgClass}
+          width={320}
+          height={192}
+          quality="medium"
+          poiName={poi.name}
+          rating={poi.rating}
         />
         
         {/* Navigation arrows */}

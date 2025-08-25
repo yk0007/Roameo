@@ -2,7 +2,7 @@
 
 import { Heart, Plus, Hotel, MapPin, Star, RefreshCw, X, Check, Bookmark } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { CachedImage } from "@/components/cached-image"
+import { OptimizedPoiImage } from "@/components/optimized-poi-image"
 import type { POI } from "@/lib/types"
 
 interface PoiCardProps {
@@ -20,10 +20,16 @@ export function CompactPoiCard({ poi, isSaved, isItineraryItem, onToggleSave, on
   return (
     <div className="bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-md transition-shadow">
       <div className="relative">
-        <CachedImage 
+        <OptimizedPoiImage 
           src={poi.photoUrl} 
           alt={poi.name} 
-          className="w-full h-40 object-cover" 
+          className="w-full h-40 object-cover"
+          width={400}
+          height={160}
+          quality="medium"
+          poiName={poi.name}
+          rating={poi.rating}
+          enableThumbnail={true}
         />
         
         {/* Top right buttons (only save) */}
