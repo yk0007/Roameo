@@ -1,7 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
-import { useInfiniteScroll } from "@/hooks/use-infinite-scroll"
+import { useEffect, useMemo, useRef, useState, useCallback } from "react"
 import { Search, Calendar, Users, SlidersHorizontal, Heart, Plus, Hotel, MapPin, Star, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -23,56 +22,60 @@ interface SearchInterfaceProps {
 export function SearchInterface({ activeView, onViewChange, results, savedIds, itineraryPoiIds, onAddPoi, onToggleSave, onReplan }: SearchInterfaceProps) {
   const [activeTab, setActiveTab] = useState("Stays")
   const [searchQuery, setSearchQuery] = useState("")
+  const [displayCount, setDisplayCount] = useState(20)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const scrollPosRef = useRef<Record<string, number>>({ Stays: 0, Restaurants: 0, Attractions: 0 })
-  
-  // Pagination state
-  const [displayCounts, setDisplayCounts] = useState({ Stays: 12, Restaurants: 12, Attractions: 12 })
-  const [isLoadingMore, setIsLoadingMore] = useState(false)
 
   const tabs = ["Stays", "Restaurants", "Attractions"]
 
-  const { fullList, displayedList, hasMore } = useMemo(() => {
+  const allResults = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
     let arr: POI[] = []
-    if (!results) return { fullList: arr, displayedList: arr, hasMore: false }
+    
+    if (!results) return arr
     if (activeTab === "Stays") arr = results.stays || []
     if (activeTab === "Restaurants") arr = results.restaurants || []
     if (activeTab === "Attractions") arr = results.attractions || []
     
-    const filtered = !q ? arr : arr.filter((p) => p.name.toLowerCase().includes(q) || (p.address || "").toLowerCase().includes(q))
-    const displayCount = displayCounts[activeTab as keyof typeof displayCounts]
-    const displayed = filtered.slice(0, displayCount)
-    
-    return {
-      fullList: filtered,
-      displayedList: displayed,
-      hasMore: displayed.length < filtered.length
+    if (!q) return arr
+    return arr.filter((p) => p.name.toLowerCase().includes(q) || (p.address || "").toLowerCase().includes(q))
+  }, [results, activeTab, searchQuery])
+
+  const list = useMemo(() => {
+    return allResults.slice(0, displayCount)
+  }, [allResults, displayCount])
+
+  const loadMore = useCallback(() => {
+    if (displayCount < allResults.length) {
+      setDisplayCount(prev => Math.min(prev + 20, allResults.length))
     }
-  }, [results, activeTab, searchQuery, displayCounts])
+  }, [displayCount, allResults.length])
 
-  // Load more results
-  const loadMore = () => {
-    if (isLoadingMore || !hasMore) return
-    
-    setIsLoadingMore(true)
-    // Simulate loading delay
-    setTimeout(() => {
-      setDisplayCounts(prev => ({
-        ...prev,
-        [activeTab]: prev[activeTab as keyof typeof prev] + 12
-      }))
-      setIsLoadingMore(false)
-    }, 300)
-  }
+  // Infinite scroll using intersection observer
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollContainer = scrollRef.current
+      if (!scrollContainer) return
 
-  // Infinite scroll hook
-  const infiniteScrollRef = useInfiniteScroll({
-    hasMore,
-    isLoading: isLoadingMore,
-    onLoadMore: loadMore,
-    threshold: 300
-  })
+      const { scrollTop, scrollHeight, clientHeight } = scrollContainer
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 200
+
+      if (isNearBottom && displayCount < allResults.length) {
+        loadMore()
+      }
+    }
+
+    const scrollContainer = scrollRef.current
+    if (scrollContainer) {
+      scrollContainer.addEventListener('scroll', handleScroll, { passive: true })
+      return () => scrollContainer.removeEventListener('scroll', handleScroll)
+    }
+  }, [loadMore, displayCount, allResults.length])
+
+  // Reset display count when tab changes
+  useEffect(() => {
+    setDisplayCount(20)
+  }, [activeTab])
 
   // Restore scroll position on tab switch
   useEffect(() => {
@@ -81,11 +84,6 @@ export function SearchInterface({ activeView, onViewChange, results, savedIds, i
       const y = scrollPosRef.current[activeTab] ?? 0
       el.scrollTop = y
     }
-  }, [activeTab])
-
-  // Reset display count when switching tabs
-  useEffect(() => {
-    setDisplayCounts(prev => ({ ...prev, [activeTab]: 12 }))
   }, [activeTab])
 
   return (
@@ -145,12 +143,7 @@ export function SearchInterface({ activeView, onViewChange, results, savedIds, i
       </div>
 
       <div
-        ref={(el) => {
-          scrollRef.current = el
-          if (infiniteScrollRef) {
-            (infiniteScrollRef as any).current = el
-          }
-        }}
+        ref={scrollRef}
         className="flex-1 overflow-y-auto p-4"
         onScroll={(e) => {
           const el = e.currentTarget
@@ -159,12 +152,18 @@ export function SearchInterface({ activeView, onViewChange, results, savedIds, i
       >
         {!results ? (
           <div className="text-sm text-gray-500">No results yet. Ask Roameo to search for places.</div>
-        ) : fullList.length === 0 ? (
-          <div className="text-sm text-gray-500">No matches for your filters.</div>
+        ) : (!results.stays || results.stays.length === 0) && 
+             (!results.restaurants || results.restaurants.length === 0) && 
+             (!results.attractions || results.attractions.length === 0) ? (
+          <div className="text-sm text-gray-500">No results yet. Ask Roameo to search for places.</div>
+        ) : list.length === 0 ? (
+          <div className="text-sm text-gray-500">
+            No matches for your filters. Try switching to a different tab or clearing your search.
+          </div>
         ) : (
           <>
             <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-6">
-              {displayedList.map((poi) => (
+              {list.map((poi) => (
                 <SearchCard
                   key={poi.id}
                   poi={poi}
@@ -176,31 +175,17 @@ export function SearchInterface({ activeView, onViewChange, results, savedIds, i
                 />
               ))}
             </div>
-            
-            {/* Loading indicator */}
-            {isLoadingMore && (
-              <div className="flex justify-center items-center py-8">
-                <div className="w-8 h-8 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
-                <span className="ml-3 text-gray-500">Loading more results...</span>
-              </div>
-            )}
-            
-            {/* Load more button (fallback) */}
-            {hasMore && !isLoadingMore && (
-              <div className="flex justify-center py-6">
-                <button
+            {displayCount < allResults.length && (
+              <div className="flex justify-center mt-6">
+                <Button 
                   onClick={loadMore}
-                  className="px-6 py-2 bg-black text-white rounded-full hover:bg-gray-800 transition-colors"
+                  variant="outline"
+                  className="rounded-2xl bg-white/50 backdrop-blur-sm border-white/30"
                 >
-                  Load More ({fullList.length - displayedList.length} remaining)
-                </button>
+                  Load More ({allResults.length - displayCount} remaining)
+                </Button>
               </div>
             )}
-            
-            {/* Results summary */}
-            <div className="text-center text-sm text-gray-500 py-4">
-              Showing {displayedList.length} of {fullList.length} results
-            </div>
           </>
         )}
       </div>

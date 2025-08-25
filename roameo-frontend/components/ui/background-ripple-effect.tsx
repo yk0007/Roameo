@@ -53,18 +53,26 @@ export function BackgroundRippleEffect() {
       onMouseLeave={() => setIsHovered(false)}
     >
       {/* Grid of boxes */}
-      <div className="absolute inset-0 grid grid-cols-20 gap-1 p-4 opacity-30">
+      <div 
+        className="absolute inset-0 p-4 opacity-20"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(20, 1fr)',
+          gridTemplateRows: 'repeat(20, 1fr)',
+          gap: '4px'
+        }}
+      >
         {boxes.map((box) => (
           <motion.div
             key={box.id}
-            className="w-full h-full bg-gray-300 rounded-sm"
+            className="w-full h-full bg-gray-400 rounded-sm"
             whileHover={{
-              scale: 1.2,
-              backgroundColor: "#3b82f6",
+              scale: 1.3,
+              backgroundColor: "#6b7280",
               transition: { duration: 0.2 }
             }}
             animate={{
-              scale: isHovered ? 1.05 : 1,
+              scale: isHovered ? 1.02 : 1,
               transition: { duration: 0.3 }
             }}
           />
@@ -75,7 +83,7 @@ export function BackgroundRippleEffect() {
       {ripples.map((ripple) => (
         <motion.div
           key={ripple.id}
-          className="absolute rounded-full border-2 border-blue-400 pointer-events-none"
+          className="absolute rounded-full border-2 border-gray-500 pointer-events-none"
           style={{
             left: ripple.x,
             top: ripple.y,

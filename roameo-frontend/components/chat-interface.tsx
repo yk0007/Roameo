@@ -5,6 +5,12 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
 import { Send, Plus, Mic, ArrowDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { sendChat } from "@/lib/api"
+import { sendStreamingChat } from "@/lib/streaming"
+import { StreamingMessage } from "./streaming-message"
+import { InlinePlanningStatus } from "./inline-planning-status"
+import { AssistantLoading } from "./assistant-loading"
+import { TypingIndicator } from "./typing-indicator"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
@@ -29,31 +35,8 @@ interface ChatInterfaceProps {
   onReplan?: (poi: POI) => void
 }
 
-function TypingEffect({ text, speed = 50, onComplete }: { text: string; speed?: number; onComplete?: () => void }) {
-  const [displayText, setDisplayText] = useState('')
-  const [currentIndex, setCurrentIndex] = useState(0)
-  
-  useEffect(() => {
-    if (currentIndex < text.length) {
-      const timer = setTimeout(() => {
-        setDisplayText(prev => prev + text[currentIndex])
-        setCurrentIndex(prev => prev + 1)
-      }, speed)
-      return () => clearTimeout(timer)
-    } else {
-      onComplete?.()
-    }
-  }, [currentIndex, text, speed, onComplete])
-  
-  useEffect(() => {
-    setDisplayText('')
-    setCurrentIndex(0)
-  }, [text])
-  
-  return <span>{displayText}</span>
-}
 
-export const ChatInterface = ({
+export function ChatInterface({
   messages,
   onSendMessage,
   activeView,
@@ -68,17 +51,22 @@ export const ChatInterface = ({
   onToggleSave,
   onAddPoi,
   onReplan,
-}: ChatInterfaceProps) => {
+}: ChatInterfaceProps) {
   const [inputValue, setInputValue] = useState("")
   const [showSuggestion, setShowSuggestion] = useState(false)
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
   const [userJustSent, setUserJustSent] = useState(false)
+  const [responseType, setResponseType] = useState<'general' | 'planning' | null>(null)
   const lastAssistantIdRef = useRef<string | null>(null)
   const typedMessageIdsRef = useRef<Set<string>>(new Set())
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const safeMessages = messages || []
+  const lastMessage = useMemo(() => {
+    return safeMessages.length > 0 ? safeMessages[safeMessages.length - 1] : undefined
+  }, [safeMessages])
+
   const lastAssistant = useMemo(() => {
     for (let i = safeMessages.length - 1; i >= 0; i--) {
       if (safeMessages[i].role === "assistant") return safeMessages[i]
@@ -109,6 +97,13 @@ export const ChatInterface = ({
     // Auto-scroll on new messages
     scrollToBottom("auto")
   }, [safeMessages, isTyping])
+
+  // Reset response type when typing stops
+  useEffect(() => {
+    if (!isTyping) {
+      setResponseType(null)
+    }
+  }, [isTyping])
 
   const handleScroll = () => {
     const container = scrollContainerRef.current
@@ -159,8 +154,8 @@ export const ChatInterface = ({
     const processNode = (node: React.ReactNode): React.ReactNode => {
       if (typeof node === 'string') {
         // Split by POI markers (📍, 📌, pushpin U+1F4CD) with optional VS16 and process each part
-        const parts = node.split(/(((?:📍|📌|\u{1F4CD})(?:\uFE0F)?)[\s\u00A0]*[^📍📌\u{1F4CD}]+?)(?=\s|$|[.,!?:])/gu)
-        
+        const parts = node.split(/((?:📍|📌|\u{1F4CD})(?:\uFE0F)?\s*[\w\s.'-]+\b)/gu)      
+          
         return parts.map((part: string, index: number) => {
           if (/^(?:📍|📌|\u{1F4CD})(?:\uFE0F)?/u.test(part)) {
             const pinMatch = part.match(/^(?:📍|📌|\u{1F4CD})(?:\uFE0F)?/u)
@@ -441,78 +436,73 @@ export const ChatInterface = ({
     )
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (inputValue.trim()) {
-      setUserJustSent(true) // Hide suggestions when user sends a message
-      setShowSuggestion(false)
-      onSendMessage(inputValue.trim())
-      setInputValue("")
-    }
+
+const handleSubmit = (e: React.FormEvent) => {
+  e.preventDefault()
+  if (inputValue.trim()) {
+    setUserJustSent(true) // Hide suggestions when user sends a message
+    setShowSuggestion(false)
+    
+    // Determine response type based on message content
+    const message = inputValue.trim().toLowerCase()
+    const isPlanningMessage = message.includes('plan') || message.includes('itinerary') || 
+                             message.includes('trip') || message.includes('travel') ||
+                             message.includes('visit') || message.includes('go to') ||
+                             message.includes('destination') || message.includes('days')
+    
+    setResponseType(isPlanningMessage ? 'planning' : 'general')
+    onSendMessage(inputValue.trim())
+    setInputValue("")
   }
+}
 
-  return (
+return (
     <div className="flex flex-col h-full bg-white relative">
-
       <div ref={scrollContainerRef} onScroll={handleScroll} className={`flex-1 overflow-y-auto ${isRightPanelVisible ? "p-6" : "px-6 py-4 w-full"} pt-20`}>
         <div className="w-full">
-          {safeMessages.map((message, idx) => (
+          {safeMessages.map((message) => (
             <div key={message.id} className={`flex gap-3 mb-4 ${message.role === "user" ? "justify-end" : "justify-start"}`}>
               <Avatar className={`w-8 h-8 flex-shrink-0 ${message.role === "user" ? "order-2" : "order-1"}`}>
-                <AvatarFallback
-                  className={message.role === "user" ? "bg-orange-500 text-white" : "bg-black text-white flex items-center justify-center"}
-                >
-                  {message.role === "user" ? "N" : (
-                    <div className="w-3 h-3 bg-white rounded-full"></div>
-                  )}
+                <AvatarFallback className={message.role === "user" ? "bg-orange-500 text-white" : "bg-black text-white flex items-center justify-center"}>
+                  {message.role === "user" ? "N" : <div className="w-3 h-3 bg-white rounded-full"></div>}
                 </AvatarFallback>
               </Avatar>
-
               <div className={`max-w-[78%] ${message.role === "user" ? "order-1" : "order-2"}`}>
                 <div className={`prose prose-sm max-w-none px-4 py-3 rounded-2xl shadow-sm ${message.role === "user" ? "bg-orange-50 border border-orange-100" : "bg-white/85 border border-zinc-200"}`}>
                   <div className="leading-relaxed">
                     {message.role === "user" ? (
-                      <ReactMarkdown>
-                        {String(message.content).replace(/\[object Object\]/g, "").trim()}
-                      </ReactMarkdown>
+                      <ReactMarkdown>{String(message.content).replace(/\\[object Object\\]/g, "").trim()}</ReactMarkdown>
+                    ) : message.isStreaming ? (
+                      <div className="flex items-end gap-2">
+                        <StreamingMessage 
+                          content={String(message.content).replace(/\\[object Object\\]/g, "")} 
+                          isComplete={false}
+                        />
+                        <AssistantLoading />
+                      </div>
                     ) : (
-                      renderFormattedContent(String(message.content).replace(/\[object Object\]/g, ""))
+                      renderFormattedContent(String(message.content).replace(/\\[object Object\\]/g, ""))
                     )}
                   </div>
                 </div>
               </div>
             </div>
           ))}
-          {lastAssistant && showSuggestion && (
-            <div className="flex justify-start mt-6 pl-11">
-              <div className="text-sm text-gray-600">
-                <p className="mb-3 font-medium">Want me to customize your plan? Try:</p>
-                <div className="flex flex-wrap gap-2">
-                  <button className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors" onClick={() => onSendMessage("What's the best way to travel within the city?")}>🚗 Transportation options</button>
-                  <button className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors" onClick={() => onSendMessage("Can you suggest local food specialties I should try?")}>🍽️ Local cuisine</button>
-                  <button className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors" onClick={() => onSendMessage("What are the must-visit cultural attractions?")}>🏛️ Cultural sites</button>
-                  <button className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors" onClick={() => onSendMessage("Are there any local festivals or events during my visit?")}>🎉 Events & festivals</button>
-                  <button className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors" onClick={() => onSendMessage("What's the best time to visit popular attractions to avoid crowds?")}>⏰ Best visiting times</button>
-                  <button className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors" onClick={() => onSendMessage("Can you recommend some hidden gems or off-the-beaten-path places?")}>💎 Hidden gems</button>
-                  <button className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors" onClick={() => onSendMessage("Add adventure activities?")}>🎿 Adventure activities</button>
-                  <button className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors" onClick={() => onSendMessage("Family-friendly tips?")}>👨‍👩‍👧‍👦 Family-friendly tips</button>
-                  <button className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors" onClick={() => onSendMessage("Must-try local dishes?")}>🥘 Must-try local dishes</button>
-                  <button className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors" onClick={() => onSendMessage("Best time to visit?")}>🌤️ Best time to visit</button>
-                </div>
-              </div>
-            </div>
-          )}
           {isTyping && (
-            <div className="flex gap-4">
+            <div className="flex gap-3 mb-4">
               <Avatar className="w-8 h-8 flex-shrink-0">
                 <AvatarFallback className="bg-black text-white flex items-center justify-center">
                   <div className="w-3 h-3 bg-white rounded-full"></div>
                 </AvatarFallback>
               </Avatar>
-              <div className="flex items-center gap-1 px-3 py-2 rounded-2xl border bg-white/70 backdrop-blur-sm">
-                <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce [animation-delay:0ms]"></span>
-                <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce [animation-delay:150ms]"></span>
-                <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce [animation-delay:300ms]"></span>
+              <div className="max-w-[78%]">
+                <div className="prose prose-sm max-w-none px-4 py-3 rounded-2xl shadow-sm bg-white/85 border border-zinc-200">
+                  {responseType === 'planning' ? (
+                    <InlinePlanningStatus isVisible={true} />
+                  ) : (
+                    <TypingIndicator isVisible={true} />
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -521,62 +511,35 @@ export const ChatInterface = ({
       </div>
 
       {showScrollToBottom && (
-        <Button
-          onClick={() => scrollToBottom()}
-          variant="outline"
-          size="icon"
-          className="absolute bottom-32 right-10 z-10 rounded-full shadow-lg bg-white/80 backdrop-blur-sm animate-in fade-in"
-        >
+        <Button onClick={() => scrollToBottom()} variant="outline" size="icon" className="absolute bottom-32 right-10 z-10 rounded-full shadow-lg bg-white/80 backdrop-blur-sm animate-in fade-in">
           <ArrowDown className="h-5 w-5" />
         </Button>
       )}
-      <div className={`${isRightPanelVisible ? "p-6" : "px-8 py-6 w-full"}`}>
-        <div className="w-full">
-          <form onSubmit={handleSubmit} className="relative">
-            <div className="bg-white/80 backdrop-blur-md border rounded-3xl shadow-lg p-4 border-zinc-300">
-              <div className="flex items-center gap-3 flex-row">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="flex-shrink-0 w-10 h-10 rounded-full hover:bg-white/80"
-                >
-                  <Plus className="w-5 h-5" />
+
+      <div className={`w-full ${isRightPanelVisible ? "p-6" : "px-8 py-6"}`}>
+        <form onSubmit={handleSubmit} className="relative">
+          <div className="bg-white/80 backdrop-blur-md border rounded-3xl shadow-lg p-4 border-zinc-300">
+            <div className="flex items-center gap-3 flex-row">
+              <Button type="button" variant="ghost" size="sm" className="flex-shrink-0 w-10 h-10 rounded-full hover:bg-white/80">
+                <Plus className="w-5 h-5" />
+              </Button>
+              <Input
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                placeholder="Ask anything..."
+                className="flex-1 border-0 bg-transparent text-lg placeholder:text-gray-500 focus-visible:ring-0 focus-visible:ring-offset-0 px-0 shadow-none"
+              />
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <Button type="button" variant="ghost" size="sm" className="w-10 h-10 rounded-full hover:bg-white/80">
+                  <Mic className="w-5 h-5" />
                 </Button>
-
-                <Input
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  placeholder="Ask anything..."
-                  className="flex-1 border-0 bg-transparent text-lg placeholder:text-gray-500 focus-visible:ring-0 focus-visible:ring-offset-0 px-0 shadow-none"
-                />
-
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="w-10 h-10 rounded-full hover:bg-white/80"
-                  >
-                    <Mic className="w-5 h-5" />
-                  </Button>
-                  <Button
-                    type="submit"
-                    variant="ghost"
-                    size="sm"
-                    className="w-10 h-10 rounded-full hover:bg-white/80"
-                    disabled={!inputValue.trim()}
-                  >
-                    <Send className="w-5 h-5" />
-                  </Button>
-                </div>
+                <Button type="submit" size="sm" className="w-10 h-10 rounded-full bg-black text-white">
+                  <Send className="w-5 h-5" />
+                </Button>
               </div>
             </div>
-          </form>
-
-          <p className="text-xs text-gray-500 text-center mt-3">Roameo can make mistakes. Check important info.</p>
-        </div>
-        
+          </div>
+        </form>
       </div>
     </div>
   )

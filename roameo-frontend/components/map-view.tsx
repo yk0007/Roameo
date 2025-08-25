@@ -9,6 +9,17 @@ import type { Itinerary, POI } from "@/lib/types"
 
 type MapData = { pois: POI[]; routes: Array<{ from: [number, number]; to: [number, number]; polyline?: string }> }
 
+export interface MapViewProps {
+  mapData?: MapData;
+  savedIds?: Set<string>;
+  itinerary?: Itinerary;
+  itineraryPoiIds?: Set<string>;
+  onToggleSave?: (poi: POI, nextSaved: boolean) => void;
+  onAddPoi?: (poi: POI) => void;
+  onReplan?: (poi: POI) => void;
+  isVisible?: boolean;
+}
+
 // Custom Google Maps style provided by the user
 const CUSTOM_MAP_STYLE: any[] = [
   { featureType: "administrative", elementType: "all", stylers: [{ visibility: "on" }] },
@@ -57,19 +68,12 @@ export function MapView({
   mapData,
   savedIds,
   itinerary,
+  itineraryPoiIds,
   onToggleSave,
   onAddPoi,
   onReplan,
   isVisible = true,
-}: {
-  mapData?: MapData
-  savedIds?: Set<string>
-  itinerary?: Itinerary
-  onToggleSave?: (poi: POI, nextSaved: boolean) => void
-  onAddPoi?: (poi: POI) => void
-  onReplan?: (poi: POI) => void
-  isVisible?: boolean
-}) {
+}: MapViewProps) {
   const mapRef = useRef<HTMLDivElement | null>(null)
   const mapInstance = useRef<any | null>(null)
   const markersRef = useRef<any[]>([])
@@ -89,15 +93,6 @@ export function MapView({
     { stay: true, restaurant: true, attraction: true }
   )
   const [savedOnly, setSavedOnly] = useState(false)
-  const itineraryPoiIds = useMemo(() => {
-    if (!itinerary) return new Set<string>()
-    const ids = new Set<string>()
-    itinerary.daysPlan.forEach(day => {
-      day.activities.forEach(act => act.poiId && ids.add(act.poiId))
-      if (day.accommodation?.poiId) ids.add(day.accommodation.poiId)
-    })
-    return ids
-  }, [itinerary])
 
   const [addedOnly, setAddedOnly] = useState(!!(itineraryPoiIds && itineraryPoiIds.size > 0))
 
@@ -108,6 +103,7 @@ export function MapView({
   const [showFilterMenu, setShowFilterMenu] = useState(false)
   const filterMenuRef = useRef<HTMLDivElement | null>(null)
   const [gmapsReady, setGmapsReady] = useState<boolean>(!!(typeof window !== "undefined" && (window as any).google?.maps))
+  const [apiKeyError, setApiKeyError] = useState<boolean>(false)
   const resizeObsRef = useRef<ResizeObserver | null>(null)
 
   const pois = mapData?.pois || []
@@ -164,35 +160,38 @@ export function MapView({
     if (!window.__gmapsLoading) {
       window.__gmapsLoading = true
       
-      // Fetch API key from backend and load script
-      fetch('/api/maps/api-key')
-        .then(response => response.json())
-        .then(data => {
-          const script = document.createElement("script")
-          // Use callback to ensure the core 'maps' library (with google.maps.Map) is fully available
-          script.src = `https://maps.googleapis.com/maps/api/js?key=${data.apiKey}&libraries=geometry,marker&v=weekly&callback=initMap`
-          script.async = true
-          const init = () => {
-            const ensureReady = () => {
-              if (window.google?.maps?.Map) {
-                // Mark as ready and flush callbacks
-                setGmapsReady(true)
-                window.__gmapsInitCallbacks?.forEach((cb) => cb())
-                window.__gmapsInitCallbacks = []
-              } else {
-                // Retry shortly until constructor is available
-                setTimeout(ensureReady, 50)
-              }
-            }
-            ensureReady()
+      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+      if (!apiKey) {
+        console.error('Google Maps API key not configured. Please set NEXT_PUBLIC_GOOGLE_MAPS_API_KEY.');
+        setApiKeyError(true);
+        return;
+      }
+
+      const script = document.createElement("script");
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geometry,marker&v=weekly&callback=initMap&loading=async`;
+      script.async = true;
+      script.defer = true;
+
+      const init = () => {
+        const ensureReady = () => {
+          if (window.google?.maps?.Map) {
+            setGmapsReady(true);
+            window.__gmapsInitCallbacks?.forEach((cb) => cb());
+            window.__gmapsInitCallbacks = [];
+          } else {
+            setTimeout(ensureReady, 50);
           }
-          ;(window as any).initMap = init
-          script.addEventListener("load", init)
-          document.body.appendChild(script)
-        })
-        .catch(error => {
-          console.error('Failed to load Google Maps API key:', error)
-        })
+        };
+        ensureReady();
+      };
+
+      script.addEventListener("error", (e) => {
+        console.error('Failed to load Google Maps script:', e);
+        setApiKeyError(true);
+      });
+
+      (window as any).initMap = init;
+      document.body.appendChild(script);
     }
   }, [])
 
@@ -227,10 +226,11 @@ export function MapView({
     mapInstance.current = new window.google.maps.Map(mapRef.current, {
       center: { lat: 20, lng: 0 },
       zoom: 2,
-      styles: CUSTOM_MAP_STYLE,
+      styles: customStyle ? CUSTOM_MAP_STYLE : [],
       mapTypeControl: false,
       streetViewControl: false,
       fullscreenControl: false,
+      backgroundColor: '#f5f5f5',
       ...(mapId ? { mapId } : {}),
     })
 
@@ -530,6 +530,10 @@ export function MapView({
 
     if (hasContent) {
       mapInstance.current.fitBounds(bounds, 50) // 50px padding
+    } else {
+      // Show world map when no content
+      mapInstance.current.setCenter({ lat: 20, lng: 0 })
+      mapInstance.current.setZoom(2)
     }
   }, [filteredPois, mapData?.routes])
 
@@ -586,6 +590,26 @@ export function MapView({
     )
   }, [itinerary, mapData?.pois, gmapsReady])
 
+
+  // Show error state if API key is not configured
+  if (apiKeyError) {
+    return (
+      <div className="relative h-full overflow-hidden bg-gray-50 flex items-center justify-center">
+        <div className="text-center p-8">
+          <div className="w-16 h-16 mx-auto mb-4 bg-gray-200 rounded-full flex items-center justify-center">
+            <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 4m0 13V4m-6 3l6-3" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Map Unavailable</h3>
+          <p className="text-sm text-gray-600 mb-4">Google Maps API key not configured</p>
+          <div className="text-xs text-gray-500">
+            Please set GOOGLE_MAPS_API_KEY environment variable
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="relative h-full overflow-hidden">

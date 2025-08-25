@@ -38,7 +38,7 @@ export function Cover({ children, className }: CoverProps) {
       onMouseLeave={() => setHovered(false)}
     >
       <motion.span
-        className="relative z-20 bg-clip-text text-transparent bg-gradient-to-b from-blue-500 via-purple-500 to-pink-500"
+        className="relative z-20 bg-clip-text text-transparent bg-gradient-to-b from-neutral-900 via-neutral-700 to-neutral-600"
         animate={{
           backgroundPosition: hovered ? "200% center" : "0% center",
         }}
@@ -55,19 +55,19 @@ export function Cover({ children, className }: CoverProps) {
       
       {hovered && (
         <motion.span
-          className="absolute inset-0 z-10 bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-pink-500/20 rounded-lg blur-sm"
+          className="absolute inset-0 z-10 bg-gradient-to-r from-neutral-800/20 via-neutral-600/20 to-neutral-500/20 rounded-lg blur-sm"
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.8 }}
           transition={{ duration: 0.3 }}
           style={{
-            background: `radial-gradient(circle at ${mousePosition.x}px ${mousePosition.y}px, rgba(59, 130, 246, 0.3), rgba(147, 51, 234, 0.2), rgba(236, 72, 153, 0.1))`,
+            background: `radial-gradient(circle at ${mousePosition.x}px ${mousePosition.y}px, rgba(64, 64, 64, 0.3), rgba(115, 115, 115, 0.2), rgba(163, 163, 163, 0.1))`,
           }}
         />
       )}
       
       <motion.span
-        className="absolute inset-0 z-0 bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-pink-500/10 rounded-lg"
+        className="absolute inset-0 z-0 bg-gradient-to-r from-neutral-800/10 via-neutral-600/10 to-neutral-500/10 rounded-lg"
         animate={{
           scale: hovered ? 1.05 : 1,
           opacity: hovered ? 0.8 : 0.3,

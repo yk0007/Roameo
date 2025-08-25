@@ -10,7 +10,7 @@ import type { WsEvent, TripContext } from "./types/schemas.js";
 import { buildApiRouter } from "./api/router.js";
 import { runRouter } from "./graph/graph.js";
 import type { Db } from "./db/types.js";
-import { WriteThroughDb } from "./db/persist.js";
+import { SupabaseDb } from "./db/supabase.js";
 import { SimpleRateLimiter } from "./utils/rateLimiter.js";
 
 const app = express();
@@ -21,7 +21,7 @@ const httpServer = createServer(app);
 const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
 const hub = new WsHub();
 // Prefer persistent DB if Supabase env is configured; write-through to Supabase while serving from memory for speed
-const db: Db = new WriteThroughDb(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+const db: Db = new SupabaseDb(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 const chatLimiter = new SimpleRateLimiter(60, 60_000); // 60 req/min per IP
 
 // Mount REST API router
@@ -36,43 +36,42 @@ app.use("/api", buildApiRouter(hub, db, {
   },
 }));
 
-wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
-  // Expect: ws://host/ws?sessionId=...
+wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
   const url = new URL(req.url || "", `http://${req.headers.host}`);
   const sessionId = url.searchParams.get("sessionId");
   if (!sessionId) {
-    ws.close(1008, "sessionId required");
+    ws.close(1008, "Missing sessionId");
     return;
   }
 
-  // Do NOT implicitly create sessions on WS connect. If the session does not exist,
-  // close the socket. New sessions must be created via REST /api/chat/send.
-  const existing = db.getSession(sessionId);
+  console.log(`[ws] Client connected to session ${sessionId}`);
+
+  const existing = await db.getSession(sessionId);
   if (!existing) {
-    ws.close(1008, "unknown sessionId");
-    return;
+    console.log(`[ws] Session ${sessionId} not found, creating new one`);
+    await db.upsertSession(sessionId, {});
   }
 
   hub.attach(sessionId, ws);
 
   // Keep inviteId from either DB or parallel in-memory map (if present)
-  const inviteId = existing.inviteId || sessions.get(sessionId)?.inviteId || undefined;
-  if (inviteId && !existing.inviteId) db.setInvite(sessionId, inviteId);
+  const inviteId = existing?.inviteId || sessions.get(sessionId)?.inviteId || undefined;
+  if (inviteId && !existing?.inviteId) await db.setInvite(sessionId, inviteId);
 
   // Send session ready to all clients in the session
   hub.emit(sessionId, { type: "session.ready", data: { sessionId, inviteId } as any });
   // Send current trip navbar data
-  if (existing.trip) hub.emit(sessionId, { type: "navbar.update", data: existing.trip as any });
+  if (existing?.trip) hub.emit(sessionId, { type: "navbar.update", data: existing.trip as any });
   // If we have a persisted itinerary from prior runs, replay it so UI restores
-  const maybeItin = (existing.trip as any)?.itinerary;
+  const maybeItin = (existing?.trip as any)?.itinerary;
   if (maybeItin) hub.emit(sessionId, { type: "itinerary.update", data: maybeItin });
   // Replay last search results and map snapshot if present
-  const maybeSearch = (existing.trip as any)?.searchResults;
+  const maybeSearch = (existing?.trip as any)?.searchResults;
   if (maybeSearch) hub.emit(sessionId, { type: "search.results", data: maybeSearch });
-  const maybeMap = (existing.trip as any)?.mapData;
+  const maybeMap = (existing?.trip as any)?.mapData;
   if (maybeMap) hub.emit(sessionId, { type: "map.update", data: maybeMap });
   // Replay prior messages to rebuild chat UI on fresh connects
-  if (existing.messages?.length) {
+  if (existing?.messages?.length) {
     hub.emit(sessionId, { type: "chat.history", data: existing.messages as any });
   }
 });
@@ -84,16 +83,12 @@ const sessions = new Map<string, { inviteId: string; trip: Partial<TripContext> 
 const port = process.env.PORT || 4000;
 
 async function init() {
-  // Best-effort: hydrate from Supabase at startup so existing trips/messages are available immediately
+  // Initialize database connection
   try {
-    // @ts-ignore - optional method for write-through DB
-    if (typeof (db as any).hydrateFromRemote === "function") {
-      console.log("[roameo-backend] hydrating from Supabase...");
-      await (db as any).hydrateFromRemote();
-      console.log("[roameo-backend] hydration complete");
-    }
+    console.log("[roameo-backend] initializing database connection...");
+    console.log("[roameo-backend] database initialized");
   } catch (e) {
-    console.warn("[roameo-backend] hydrateFromRemote failed (continuing):", e);
+    console.warn("[roameo-backend] database initialization failed (continuing):", e);
   }
 
   httpServer.listen(port, () => {

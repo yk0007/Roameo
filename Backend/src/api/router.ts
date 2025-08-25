@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import { buildChatStreamHandler } from "./stream.js";
 import { randomUUID } from "crypto";
 import type { WsEvent, TripContext } from "../types/schemas.js";
 import type { WsHub } from "../ws/emit.js";
@@ -6,7 +7,7 @@ import type { Db } from "../db/types.js";
 import type { SimpleRateLimiter } from "../utils/rateLimiter.js";
 import type { runRouter } from "../graph/graph.js";
 import { buildMapsRouter } from "./maps.js";
-import { optionalAuth, type AuthenticatedRequest } from "../middleware/auth.js";
+import { optionalAuth, authenticateUser, type AuthenticatedRequest } from "../middleware/auth.js";
 
 export function buildApiRouter(
   hub: WsHub,
@@ -21,46 +22,50 @@ export function buildApiRouter(
   const r = Router();
 
   // Update trip details (emits navbar.update)
-  r.post("/trip/update", (req: Request, res: Response) => {
+  r.post("/trip/update", async (req: Request, res: Response) => {
     const { sessionId, patch } = req.body as { sessionId?: string; patch?: Partial<TripContext> };
     if (!sessionId || !patch) return res.status(400).json({ error: "sessionId and patch required" });
     const event: WsEvent = { type: "navbar.update", data: patch };
-    db.patchTrip(sessionId, patch as Record<string, any>);
+    await db.patchTrip(sessionId, patch as Record<string, any>);
     hub.emit(sessionId, event);
     res.json({ ok: true });
   });
 
+  // Streaming chat endpoint
+  const streamHandler = buildChatStreamHandler(db, opts.runRouter);
+  r.post("/chat/stream", optionalAuth, streamHandler);
+
   // Create a new invite id for session
-  r.post("/invite/create", (req: Request, res: Response) => {
+  r.post("/invite/create", async (req: Request, res: Response) => {
     const { sessionId } = req.body as { sessionId?: string };
     if (!sessionId) return res.status(400).json({ error: "sessionId required" });
     const inviteId = randomUUID().slice(0, 8);
-    db.setInvite(sessionId, inviteId);
+    await db.setInvite(sessionId, inviteId);
     res.json({ inviteId });
   });
 
   // Save/unsave POI (stub)
-  r.post("/poi/save", (req: Request, res: Response) => {
+  r.post("/poi/save", async (req: Request, res: Response) => {
     const { sessionId, poiId, saved } = req.body as { sessionId?: string; poiId?: string; saved?: boolean };
     if (!sessionId || !poiId) return res.status(400).json({ error: "sessionId and poiId required" });
-    db.setPoiSaved(sessionId, poiId, Boolean(saved));
+    await db.setPoiSaved(sessionId, poiId, Boolean(saved));
     res.json({ ok: true, saved: Boolean(saved) });
   });
 
   // Clear chat messages for a session
-  r.post("/chat/clear", (req: Request, res: Response) => {
+  r.post("/chat/clear", async (req: Request, res: Response) => {
     const { sessionId } = req.body as { sessionId?: string };
     if (!sessionId) return res.status(400).json({ error: "sessionId required" });
-    db.clearMessages(sessionId);
+    await db.clearMessages(sessionId);
     hub.emit(sessionId, { type: "chat.append", data: { id: "sys", role: "assistant", content: "Chat cleared.", createdAt: new Date().toISOString() } as any });
     res.json({ ok: true });
   });
 
   // Delete a trip/session entirely
-  r.delete("/trip", (req: Request, res: Response) => {
-    const sessionId = (req.query?.sessionId as string) || (req.body?.sessionId as string);
+  r.delete("/sessions/:sessionId", authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
+    const { sessionId } = req.params;
     if (!sessionId) return res.status(400).json({ error: "sessionId required" });
-    db.deleteSession(sessionId);
+    await db.deleteSession(sessionId);
     // Also clear any parallel in-memory cache, if provided
     try {
       opts?.onDeleteSession?.(sessionId);
@@ -69,11 +74,19 @@ export function buildApiRouter(
   });
 
   // Expose saved POI IDs for a session so the client can restore Saved tab state
-  r.get("/session/saved", (req: Request, res: Response) => {
-    const sessionId = (req.query?.sessionId as string) || (req.body?.sessionId as string);
+  r.get("/sessions/:sessionId/saved-pois", authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
+    const { sessionId } = req.params;
+    const s = await db.getSession(sessionId);
+    if (!s) return res.status(404).json({ error: "Session not found" });
+    res.json({ ids: Array.from(s.savedPoiIds || []) });
+  });
+
+  // Alternative endpoint for frontend compatibility
+  r.get("/session/saved", async (req: Request, res: Response) => {
+    const { sessionId } = req.query as { sessionId?: string };
     if (!sessionId) return res.status(400).json({ error: "sessionId required" });
-    const s = db.getSession(sessionId);
-    if (!s) return res.status(404).json({ error: "not found" });
+    const s = await db.getSession(sessionId);
+    if (!s) return res.status(404).json({ error: "Session not found" });
     res.json({ ids: Array.from(s.savedPoiIds || []) });
   });
 
@@ -108,31 +121,21 @@ export function buildApiRouter(
     }
 
     const sid = sessionId as string;
-    db.appendMessage(sid, { id: randomUUID(), role: "user", content: message, createdAt: new Date().toISOString() });
+    await db.appendMessage(sid, { id: randomUUID(), role: "user", content: message, createdAt: new Date().toISOString() });
 
     try {
-      const session = db.getSession(sid);
-            const history = session?.messages || [];
-      const events = await opts.runRouter({ sessionId: sid, message, trip: (session?.trip as Partial<TripContext>) || {} }, history);
-      for (const e of events) {
-        if (e.type === "navbar.update") {
-          const prev = db.getSession(sid)?.trip || {};
-          db.upsertSession(sid, { trip: { ...(prev as Partial<TripContext>), ...e.data } });
-        } else if (e.type === "chat.append") {
-          db.appendMessage(sid, e.data as any);
-        } else if (e.type === "itinerary.update") {
-          const prev = db.getSession(sid)?.trip || {};
-          db.upsertSession(sid, { trip: { ...prev, itinerary: e.data } as any });
-        } else if (e.type === "search.results") {
-          const prev = db.getSession(sid)?.trip || {};
-          db.upsertSession(sid, { trip: { ...prev, searchResults: e.data } as any });
-        } else if (e.type === "map.update") {
-          const prev = db.getSession(sid)?.trip || {};
-          db.upsertSession(sid, { trip: { ...prev, mapData: e.data } as any });
+      const session = await db.getSession(sid);
+      let wsEvents: any[] = [];
+      if (session) {
+        // Fetch chat history for context
+        const history = session?.messages || [];
+        wsEvents = await opts.runRouter({ sessionId: sid, message, trip: (session?.trip as Partial<TripContext>) || {} }, history);
+        
+        for (const e of wsEvents) {
+          hub.emit(sid, e);
         }
-        hub.emit(sid, e);
       }
-      return res.json({ sessionId, inviteId, created: isNew, events });
+      return res.json({ sessionId, inviteId, created: isNew, events: wsEvents });
     } catch (err) {
       hub.emit(sid, {
         type: "chat.append",
@@ -150,10 +153,15 @@ export function buildApiRouter(
     try {
       // Count user's trips from database instead of memory
       const { createClient } = await import('@supabase/supabase-js');
-      const supabase = createClient(
-        process.env.SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
-      );
+      const supabaseUrl = process.env.SUPABASE_URL;
+      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+      if (!supabaseUrl || !supabaseKey) {
+        console.error('Supabase environment variables not set');
+        return res.status(503).json({ error: 'Database not configured' });
+      }
+
+      const supabase = createClient(supabaseUrl, supabaseKey);
 
       const { count, error } = await supabase
         .from('chat_sessions')
@@ -175,7 +183,7 @@ export function buildApiRouter(
     }
   });
 
-  r.get("/trips/list", async (req: AuthenticatedRequest, res: Response) => {
+  r.get("/trips/list", authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
     try {
       if (!req.userId) {
         console.log("No userId in trips/list request");
@@ -186,10 +194,15 @@ export function buildApiRouter(
 
       // Query sessions from database instead of memory
       const { createClient } = await import('@supabase/supabase-js');
-      const supabase = createClient(
-        process.env.SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
-      );
+      const supabaseUrl = process.env.SUPABASE_URL;
+      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+      if (!supabaseUrl || !supabaseKey) {
+        console.error('Supabase environment variables not set');
+        return res.status(503).json({ error: 'Database not configured' });
+      }
+
+      const supabase = createClient(supabaseUrl, supabaseKey);
 
       // First check if there are any sessions at all
       const { data: allSessions, error: allError } = await supabase
@@ -198,6 +211,7 @@ export function buildApiRouter(
         .limit(10);
       
       console.log("All sessions in database:", allSessions);
+      console.log("Looking for user_id:", req.userId);
 
       const { data: sessions, error } = await supabase
         .from('chat_sessions')
@@ -217,6 +231,12 @@ export function buildApiRouter(
         const days: number | undefined = trip.days;
         const duration: string | null = typeof days === "number" ? `${days} days` : (trip.duration || null);
         const title: string = trip.title || trip.destination || "Untitled trip";
+        
+        console.log('Processing session:', s.session_id);
+        console.log('Trip data:', JSON.stringify(trip, null, 2));
+        console.log('Extracted title:', title);
+        console.log('Extracted destination:', trip.destination);
+        
         return {
           id: s.session_id,
           sessionId: s.session_id,
@@ -228,11 +248,95 @@ export function buildApiRouter(
           updatedAt: s.updated_at,
         };
       });
+      
+      console.log('Final trips array:', JSON.stringify(rows, null, 2));
 
       res.json({ trips: rows });
     } catch (error) {
       console.error('Error in trips/list:', error);
       res.status(500).json({ error: 'Failed to fetch trips' });
+    }
+  });
+
+  // Delete trip endpoint
+  r.delete("/trip", authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { sessionId } = req.query as { sessionId?: string };
+      if (!sessionId) {
+        return res.status(400).json({ error: 'sessionId required' });
+      }
+
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabaseUrl = process.env.SUPABASE_URL;
+      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+      if (!supabaseUrl || !supabaseKey) {
+        return res.status(503).json({ error: 'Database not configured' });
+      }
+
+      const supabase = createClient(supabaseUrl, supabaseKey);
+
+      // Delete the session
+      const { error } = await supabase
+        .from('chat_sessions')
+        .delete()
+        .eq('session_id', sessionId)
+        .eq('user_id', req.userId);
+
+      if (error) {
+        console.error('Error deleting trip:', error);
+        return res.status(500).json({ error: 'Failed to delete trip' });
+      }
+
+      console.log('Deleted trip session:', sessionId);
+      res.json({ ok: true });
+    } catch (error) {
+      console.error('Error in DELETE /trip:', error);
+      res.status(500).json({ error: 'Failed to delete trip' });
+    }
+  });
+
+  // Test endpoint to add trip data to existing session
+  r.post("/test/add-trip-data", authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { sessionId } = req.body;
+      if (!sessionId) {
+        return res.status(400).json({ error: 'sessionId required' });
+      }
+
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabaseUrl = process.env.SUPABASE_URL;
+      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+      if (!supabaseUrl || !supabaseKey) {
+        return res.status(503).json({ error: 'Database not configured' });
+      }
+
+      const supabase = createClient(supabaseUrl, supabaseKey);
+
+      const testTripData = {
+        title: "3-day Ooty Adventure",
+        destination: "Ooty",
+        days: 3,
+        duration: "3 days"
+      };
+
+      const { error } = await supabase
+        .from('chat_sessions')
+        .update({ trip: testTripData })
+        .eq('session_id', sessionId)
+        .eq('user_id', req.userId);
+
+      if (error) {
+        console.error('Error updating trip data:', error);
+        return res.status(500).json({ error: 'Failed to update trip data' });
+      }
+
+      console.log('Added test trip data to session:', sessionId);
+      res.json({ success: true, tripData: testTripData });
+    } catch (error) {
+      console.error('Error in test/add-trip-data:', error);
+      res.status(500).json({ error: 'Failed to add trip data' });
     }
   });
 
@@ -251,21 +355,20 @@ export function buildApiRouter(
     try {
       const photoUrl = `https://maps.googleapis.com/maps/api/place/photo?photo_reference=${photo_reference}&maxwidth=${maxwidth}&key=${key}`;
       
+      // Add timeout and abort controller for fetch
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
       
       const response = await fetch(photoUrl, {
+        signal: controller.signal,
         headers: {
-          'User-Agent': 'Roameo/1.0',
-          'Accept': 'image/*'
-        },
-        signal: controller.signal
+          'User-Agent': 'Mozilla/5.0 (compatible; RoameoBot/1.0)'
+        }
       });
       
       clearTimeout(timeoutId);
       
       if (!response.ok) {
-        console.error(`[proxy] Photo fetch failed: ${response.status} ${response.statusText}`);
         return res.status(response.status).json({ error: "Failed to fetch photo" });
       }
 
@@ -278,23 +381,59 @@ export function buildApiRouter(
         'Cache-Control': 'public, max-age=86400' // Cache for 24 hours
       });
 
-      // Convert response to buffer and send
-      const buffer = await response.arrayBuffer();
-      const imageBuffer = Buffer.from(buffer);
-      
-      res.writeHead(200, {
-        'Content-Type': response.headers.get('content-type') || 'image/jpeg',
-        'Content-Length': imageBuffer.length,
-        'Cache-Control': 'public, max-age=86400',
-        'Access-Control-Allow-Origin': '*'
-      });
-      
-      res.end(imageBuffer);
-    } catch (error) {
+      // Stream the image data
+      if (response.body) {
+        const reader = response.body.getReader();
+        const pump = async () => {
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              res.write(value);
+            }
+            res.end();
+          } catch (error) {
+            console.error('[proxy] Error streaming photo:', error);
+            res.status(500).end();
+          }
+        };
+        await pump();
+      } else {
+        res.status(500).json({ error: "No response body" });
+      }
+    } catch (error: any) {
       console.error('[proxy] Error fetching photo:', error);
+      
+      // Handle timeout errors specifically
+      if (error?.name === 'AbortError') {
+        return res.status(408).json({ error: "Photo fetch timeout" });
+      }
+      
+      // Handle network errors
+      if (error?.code === 'ETIMEDOUT' || error?.code === 'ECONNREFUSED') {
+        return res.status(503).json({ error: "Photo service unavailable" });
+      }
+      
       res.status(500).json({ error: "Internal server error" });
     }
   });
+
+  // Google Maps API key endpoint
+  r.get("/maps/api-key", async (req: Request, res: Response) => {
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY
+    
+    if (!apiKey) {
+      return res.status(500).json({ error: 'Google Maps API key not configured' })
+    }
+    
+    // Validate API key format (Google Maps API keys are 39 characters)
+    if (apiKey.length !== 39 || !apiKey.startsWith('AIza')) {
+      console.error('Invalid Google Maps API key format:', apiKey.substring(0, 10) + '...')
+      return res.status(500).json({ error: 'Invalid Google Maps API key format' })
+    }
+    
+    return res.json({ apiKey })
+  })
 
   // Mount maps proxy router
   r.use("/maps", buildMapsRouter());

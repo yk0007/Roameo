@@ -1,280 +1,137 @@
 "use client"
 
 import { useState } from "react"
-import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import {
-  Clock,
-  ChevronDown,
-  ChevronUp,
-  Plus,
-  MoreHorizontal,
-  Trash2,
-  Calendar,
-  Bookmark,
-  RotateCcw,
-  RotateCw,
-  MapPin,
-  Bed,
-  Heart,
-  Hotel,
-  Star,
-  RefreshCw,
-  X,
-  Check,
-} from "lucide-react"
-import { OptimizedPoiImage } from "@/components/optimized-poi-image"
-import { PoiDetailModal } from "@/components/poi-detail-modal"
-import { ExpandablePoiCard } from "@/components/expandable-poi-card"
-import { Itinerary, ItineraryDay, Activity, POI } from "@/lib/types"
+import { ShareButton } from "./share-button"
+import { Itinerary, POI, Activity } from "@/lib/types"
+import { SearchCard } from "./search-card"
+import { ExpandableCard } from "./ui/expandable-card"
+import Image from "next/image"
 
 interface ItineraryPanelProps {
   itinerary?: Itinerary
+  trip: any
   onPOISelect?: (pois: any[]) => void
 }
 
-export function ItineraryPanel({ itinerary, onPOISelect }: ItineraryPanelProps) {
-  const [activeTab, setActiveTab] = useState("Itinerary")
-  const [expandedDays, setExpandedDays] = useState<number[]>([1])
-  const [distancesEnabled, setDistancesEnabled] = useState(true)
-  const [selectedPoi, setSelectedPoi] = useState<POI | null>(null)
-  const [isModalOpen, setIsModalOpen] = useState(false)
 
-  const tabs = ["Itinerary", "Calendar", "Bookings"]
+export function ItineraryPanel({ itinerary, trip, onPOISelect }: ItineraryPanelProps) {
+  const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null)
 
-  const currentItinerary = itinerary
-
-  const toggleDay = (day: number) => {
-    setExpandedDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]))
+  const activityToPoi = (activity: Activity): POI => {
+    return {
+      id: activity.id || `${activity.name}-${activity.location}`,
+      name: activity.name,
+      photoUrl: activity.photoUrl,
+      type: 'attraction',
+      rating: activity.rating,
+      address: activity.location,
+      lat: activity.lat ?? 0,
+      lng: activity.lng ?? 0,
+    }
   }
-
-  if (activeTab === "Calendar") {
-    return (
-      <div className="p-6 space-y-6">
-        <div className="flex items-center justify-center gap-2 mb-6">
-          {tabs.map((tab) => (
-            <Button
-              key={tab}
-              variant={activeTab === tab ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setActiveTab(tab)}
-              className={`backdrop-blur-md border rounded-full px-4 ${
-                activeTab === tab
-                  ? "bg-black/80 text-white border-black/20"
-                  : "bg-white/80 text-gray-700 border-white/30 hover:bg-white/90"
-              }`}
-            >
-              {tab === "Calendar" && <Calendar className="w-4 h-4 mr-2 border border-current rounded p-0.5" />}
-              {tab === "Bookings" && <Bookmark className="w-4 h-4 mr-2 border border-current rounded p-0.5" />}
-              {tab}
-            </Button>
-          ))}
-        </div>
-
-        <div className="text-center text-gray-500">
-          <Calendar className="w-12 h-12 mx-auto mb-4 opacity-50" />
-          <p>Calendar view coming soon</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (activeTab === "Bookings") {
-    return (
-      <div className="p-6 space-y-6">
-        <div className="flex items-center justify-center gap-2 mb-6">
-          {tabs.map((tab) => (
-            <Button
-              key={tab}
-              variant={activeTab === tab ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setActiveTab(tab)}
-              className={`backdrop-blur-md border rounded-full px-4 ${
-                activeTab === tab
-                  ? "bg-black/80 text-white border-black/20"
-                  : "bg-white/80 text-gray-700 border-white/30 hover:bg-white/90"
-              }`}
-            >
-              {tab === "Calendar" && <Calendar className="w-4 h-4 mr-2 border border-current rounded p-0.5" />}
-              {tab === "Bookings" && <Bookmark className="w-4 h-4 mr-2 border border-current rounded p-0.5" />}
-              {tab}
-            </Button>
-          ))}
-        </div>
-
-        <div className="text-center text-gray-500">
-          <Bookmark className="w-12 h-12 mx-auto mb-4 opacity-50" />
-          <p>No bookings yet</p>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-center gap-2 mb-6">
-        {tabs.map((tab) => (
-          <Button
-            key={tab}
-            variant={activeTab === tab ? "default" : "ghost"}
-            size="sm"
-            onClick={() => setActiveTab(tab)}
-            className={`backdrop-blur-md border-0 rounded-full px-4 transition-all duration-200 ${
-              activeTab === tab
-                ? "bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-sm"
-                : "bg-white/80 text-gray-700 hover:bg-white/90 shadow-sm"
-            }`}
-          >
-            {tab === "Calendar" && <Calendar className="w-4 h-4 mr-2 border border-current rounded p-0.5" />}
-            {tab === "Bookings" && <Bookmark className="w-4 h-4 mr-2 border border-current rounded p-0.5" />}
-            {tab}
-          </Button>
-        ))}
-      </div>
-
-      {/* Header with controls */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold">Itinerary</h2>
-          {currentItinerary && <p className="text-sm text-gray-600">{currentItinerary.days} days</p>}
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-600">Distances</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setDistancesEnabled(!distancesEnabled)}
-              className={`w-12 h-6 rounded-full p-0 transition-all duration-200 ${
-                distancesEnabled 
-                  ? "bg-gradient-to-r from-blue-500 to-purple-600" 
-                  : "bg-gray-200 hover:bg-gray-300"
-              }`}
-            >
-              <div
-                className={`w-4 h-4 bg-white rounded-full transition-all duration-200 ${
-                  distancesEnabled ? "translate-x-3" : "translate-x-1"
-                }`}
-              />
-            </Button>
-          </div>
-          <div className="flex gap-1">
-            <Button variant="ghost" size="sm" className="w-8 h-8 p-0">
-              <RotateCcw className="w-4 h-4" />
-            </Button>
-            <Button variant="ghost" size="sm" className="w-8 h-8 p-0">
-              <RotateCw className="w-4 h-4" />
-            </Button>
-            <Button variant="ghost" size="sm" className="w-8 h-8 p-0">
-              <Trash2 className="w-4 h-4" />
-            </Button>
-          </div>
+    <div className="h-full flex flex-col">
+      {/* Fixed header */}
+      <div className="flex items-center justify-between p-4 pt-16 pb-4 bg-white border-b border-gray-100">
+        <h3 className="font-semibold">Itinerary</h3>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-500">{itinerary?.days ?? 0} days</span>
+          <ShareButton tripId={trip.id} tripTitle={trip.title} itinerary={itinerary} />
         </div>
       </div>
 
-      {/* Daily Plans */}
-      <div className="space-y-4">
-        {currentItinerary?.daysPlan?.map((day: ItineraryDay) => (
-          <div key={day.day} className="space-y-3">
-            {/* Day Header */}
-            <div className="flex items-center justify-between">
-              <Button
-                variant="ghost"
-                onClick={() => toggleDay(day.day)}
-                className="flex items-center gap-2 p-0 h-auto hover:bg-transparent"
-              >
-                {expandedDays.includes(day.day) ? (
-                  <ChevronDown className="w-4 h-4" />
-                ) : (
-                  <ChevronUp className="w-4 h-4" />
-                )}
-                <span className="font-semibold">Day {day.day}</span>
-                <span className="text-green-600">🌲</span>
-                <span className="font-medium">{day.title}</span>
-                <span className="text-sm text-gray-500">{day.date}</span>
-              </Button>
-              <div className="flex gap-1">
-                <Button variant="ghost" size="sm" className="w-8 h-8 p-0">
-                  <MoreHorizontal className="w-4 h-4" />
-                </Button>
-                <Button variant="ghost" size="sm" className="w-8 h-8 p-0">
-                  <Trash2 className="w-4 h-4" />
-                </Button>
+      {/* Scrollable content */}
+      <div className="flex-1 overflow-y-auto">
+        {!itinerary && (
+          <div className="text-sm text-gray-500 p-4">No itinerary yet. Tell Roameo your origin, destination and days.</div>
+        )}
+
+        {itinerary?.daysPlan && itinerary.daysPlan.length > 0 && itinerary.daysPlan.map((day, dayIndex) => {
+          if (!day || typeof day.day !== 'number') return null;
+          
+          return (
+            <div key={day.day} className="relative">
+              <div className="flex items-center gap-3 p-3 bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-sm sticky top-0 z-10">
+                <span className="text-sm font-bold bg-zinc-800 text-white rounded-full w-8 h-8 flex items-center justify-center flex-shrink-0">{day.day}</span>
+                <h4 className="font-semibold text-md italic">{day.title || `Day ${day.day}`}</h4>
               </div>
+
+              <div className="space-y-3 pl-4 border-l-2 border-zinc-200 ml-4 p-4">
+              {day.activities?.length > 0 && day.activities.map((activity, index) => {
+                if (!activity || !activity.name) return null;
+                
+                return (
+                  <div
+                    key={index}
+                    className="flex gap-4 p-3 rounded-lg hover:bg-zinc-50 relative bg-white shadow-lg border border-gray-100"
+                  >
+                    <div className="absolute left-[-26px] top-5 w-3 h-3 bg-zinc-300 rounded-full border-4 border-white"></div>
+                    <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-200 flex items-center justify-center">
+                      {activity.photoUrl ? (
+                        <Image
+                          src={activity.photoUrl}
+                          alt={activity.name}
+                          width={64}
+                          height={64}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-xs text-gray-600">⛳</span>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h5 className="font-medium text-sm">{activity.name}</h5>
+                          {activity.start && activity.end && (
+                            <p className="text-xs text-gray-500">{activity.start} - {activity.end}</p>
+                          )}
+                          {activity.location && <p className="text-xs text-gray-500">{activity.location}</p>}
+                        </div>
+                        <ExpandableCard 
+                          cards={[{
+                            title: activity.name,
+                            description: activity.location || 'Activity location',
+                            src: activity.photoUrl || '/placeholder-activity.jpg',
+                            ctaText: 'View Details',
+                            content: () => (
+                              <div className="space-y-4">
+                                {activity.description && (
+                                  <p className="text-sm text-gray-600">{activity.description}</p>
+                                )}
+                                {activity.start && activity.end && (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium">Time:</span>
+                                    <span className="text-sm text-gray-600">{activity.start} - {activity.end}</span>
+                                  </div>
+                                )}
+                                {activity.rating && (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium">Rating:</span>
+                                    <span className="text-sm text-gray-600">{activity.rating}/5</span>
+                                  </div>
+                                )}
+                                {activity.location && (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium">Location:</span>
+                                    <span className="text-sm text-gray-600">{activity.location}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          }]}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-
-            {/* Day Activities */}
-            {expandedDays.includes(day.day) && (
-              <div className="space-y-3 ml-6">
-                {day.activities.map((activity: Activity, index: number) => {
-                  // Create a POI object from activity data
-                  const activityPoi: POI = {
-                    id: activity.poiId || `activity-${index}`,
-                    name: activity.name,
-                    address: activity.location || '',
-                    photoUrl: activity.photoUrl,
-                    type: 'Activity',
-                    rating: 4.5,
-                    description: `${activity.name} scheduled from ${activity.start} to ${activity.end}. Duration: ${activity.start} - ${activity.end}`
-                  }
-                  
-                  return (
-                    <ExpandablePoiCard
-                      key={index}
-                      poi={activityPoi}
-                      isInItinerary={true}
-                      className="bg-white/90 backdrop-blur-sm border-0 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-200"
-                    />
-                  )
-                })}
-
-                {/* Accommodation */}
-                {day.accommodation && (() => {
-                  // Create a POI object from accommodation data
-                  const accommodationPoi: POI = {
-                    id: day.accommodation.poiId || `accommodation-${day.day}`,
-                    name: day.accommodation.name || '',
-                    address: '',
-                    photoUrl: day.accommodation.photoUrl,
-                    type: 'Hotel',
-                    rating: 4.5,
-                    description: `Accommodation for ${day.accommodation.nights} night(s). Check-in: ${day.accommodation.checkIn || 'TBD'}`
-                  }
-                  
-                  return (
-                    <ExpandablePoiCard
-                      poi={accommodationPoi}
-                      isInItinerary={true}
-                      className="bg-white/90 backdrop-blur-sm border-0 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-200"
-                    />
-                  )
-                })()}
-
-                {/* Add Button */}
-                <button className="shadow-[inset_0_0_0_2px_#10b981] text-emerald-500 px-8 py-3 rounded-full tracking-wider uppercase font-bold bg-transparent hover:bg-emerald-500 hover:text-white dark:text-emerald-400 transition duration-200 w-full flex items-center justify-center gap-2">
-                  <Plus className="w-4 h-4" />
-                  Add Activity
-                </button>
-              </div>
-            )}
           </div>
-        ))}
+        );
+      })}
       </div>
-      
-      {/* POI Detail Modal */}
-      <PoiDetailModal
-        poi={selectedPoi}
-        isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false)
-          setSelectedPoi(null)
-        }}
-        isSaved={false}
-        isItineraryItem={true}
-        onToggleSave={() => {}}
-        onAddPoi={() => {}}
-        onReplan={() => {}}
-      />
     </div>
   )
 }

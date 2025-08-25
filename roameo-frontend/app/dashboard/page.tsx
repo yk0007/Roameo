@@ -249,12 +249,12 @@ export default function Dashboard() {
                 return (
                   <Card 
                     key={trip.id} 
-                    className="group hover:shadow-lg transition-all duration-300 border border-gray-200/50 overflow-hidden bg-white rounded-3xl hover:-translate-y-1 cursor-pointer"
+                    className="group hover:shadow-xl transition-all duration-300 overflow-hidden bg-white/20 backdrop-blur-md border border-white/30 rounded-3xl hover:-translate-y-1 cursor-pointer"
                     onClick={() => router.push(`/chat?sessionId=${encodeURIComponent(trip.id)}`)}
                   >
                     <div className="p-6">
                       {/* Destination card art */}
-                      <div className="relative h-48 bg-gray-100 rounded-2xl mb-4 overflow-hidden">
+                      <div className="relative h-48 bg-gray-100/50 backdrop-blur-sm rounded-2xl mb-4 overflow-hidden">
                         <DestinationCardArt
                           destination={trip.destination || trip.title}
                           variant="stamp"
@@ -271,7 +271,7 @@ export default function Dashboard() {
                         </div>
                         
                         {/* Destination with subtle styling */}
-                        <div className="flex items-center gap-2 text-gray-500 text-sm">
+                        <div className="flex items-center gap-2 text-gray-600 text-sm">
                           <MapPin className="w-4 h-4" />
                           <span>{trip.destination}</span>
                         </div>
@@ -282,9 +282,9 @@ export default function Dashboard() {
               })}
             </div>
           ) : (
-            <div className="text-center py-16 border rounded-2xl bg-white/70 backdrop-blur-sm">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 flex items-center justify-center">
-                <MapPin className="w-8 h-8 text-gray-500" />
+            <div className="text-center py-16 rounded-2xl bg-white/20 backdrop-blur-md border border-white/30">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-white/30 backdrop-blur-sm flex items-center justify-center">
+                <MapPin className="w-8 h-8 text-gray-600" />
               </div>
               <h3 className="text-lg font-semibold text-slate-900 mb-2">No trips yet</h3>
               <p className="text-slate-600 mb-6">Start planning your first adventure with Roameo</p>
