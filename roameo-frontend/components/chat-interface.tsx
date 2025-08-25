@@ -6,10 +6,7 @@ import ReactMarkdown from "react-markdown"
 import { Send, Plus, Mic, ArrowDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { sendChat } from "@/lib/api"
-import { sendStreamingChat } from "@/lib/streaming"
-import { StreamingMessage } from "./streaming-message"
 import { InlinePlanningStatus } from "./inline-planning-status"
-import { AssistantLoading } from "./assistant-loading"
 import { TypingIndicator } from "./typing-indicator"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -472,14 +469,6 @@ return (
                   <div className="leading-relaxed">
                     {message.role === "user" ? (
                       <ReactMarkdown>{String(message.content).replace(/\\[object Object\\]/g, "").trim()}</ReactMarkdown>
-                    ) : message.isStreaming ? (
-                      <div className="flex items-end gap-2">
-                        <StreamingMessage 
-                          content={String(message.content).replace(/\\[object Object\\]/g, "")} 
-                          isComplete={false}
-                        />
-                        <AssistantLoading />
-                      </div>
                     ) : (
                       renderFormattedContent(String(message.content).replace(/\\[object Object\\]/g, ""))
                     )}
