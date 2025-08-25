@@ -24,7 +24,8 @@ import {
   Check,
 } from "lucide-react"
 import { OptimizedPoiImage } from "@/components/optimized-poi-image"
-import { Itinerary, ItineraryDay, Activity } from "@/lib/types"
+import { PoiDetailModal } from "@/components/poi-detail-modal"
+import { Itinerary, ItineraryDay, Activity, POI } from "@/lib/types"
 
 interface ItineraryPanelProps {
   itinerary?: Itinerary
@@ -35,6 +36,8 @@ export function ItineraryPanel({ itinerary, onPOISelect }: ItineraryPanelProps) 
   const [activeTab, setActiveTab] = useState("Itinerary")
   const [expandedDays, setExpandedDays] = useState<number[]>([1])
   const [distancesEnabled, setDistancesEnabled] = useState(true)
+  const [selectedPoi, setSelectedPoi] = useState<POI | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
 
   const tabs = ["Itinerary", "Calendar", "Bookings"]
 
@@ -115,10 +118,10 @@ export function ItineraryPanel({ itinerary, onPOISelect }: ItineraryPanelProps) 
             variant={activeTab === tab ? "default" : "ghost"}
             size="sm"
             onClick={() => setActiveTab(tab)}
-            className={`backdrop-blur-md border rounded-full px-4 ${
+            className={`backdrop-blur-md border-0 rounded-full px-4 transition-all duration-200 ${
               activeTab === tab
-                ? "bg-black/80 text-white border-black/20"
-                : "bg-white/80 text-gray-700 border-white/30 hover:bg-white/90"
+                ? "bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-sm"
+                : "bg-white/80 text-gray-700 hover:bg-white/90 shadow-sm"
             }`}
           >
             {tab === "Calendar" && <Calendar className="w-4 h-4 mr-2 border border-current rounded p-0.5" />}
@@ -141,10 +144,14 @@ export function ItineraryPanel({ itinerary, onPOISelect }: ItineraryPanelProps) 
               variant="ghost"
               size="sm"
               onClick={() => setDistancesEnabled(!distancesEnabled)}
-              className={`w-12 h-6 rounded-full p-0 ${distancesEnabled ? "bg-black" : "bg-gray-300"}`}
+              className={`w-12 h-6 rounded-full p-0 transition-all duration-200 ${
+                distancesEnabled 
+                  ? "bg-gradient-to-r from-blue-500 to-purple-600" 
+                  : "bg-gray-200 hover:bg-gray-300"
+              }`}
             >
               <div
-                className={`w-4 h-4 bg-white rounded-full transition-transform ${
+                className={`w-4 h-4 bg-white rounded-full transition-all duration-200 ${
                   distancesEnabled ? "translate-x-3" : "translate-x-1"
                 }`}
               />
@@ -201,7 +208,7 @@ export function ItineraryPanel({ itinerary, onPOISelect }: ItineraryPanelProps) 
                 {day.activities.map((activity: Activity, index: number) => (
                   <Card
                     key={index}
-                    className="bg-white/80 backdrop-blur-sm border-white/30 rounded-2xl overflow-hidden"
+                    className="bg-white/90 backdrop-blur-sm border-0 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-200 hover:scale-[1.01]"
                   >
                     <CardContent className="p-4">
                       <div className="flex gap-3">
@@ -231,7 +238,25 @@ export function ItineraryPanel({ itinerary, onPOISelect }: ItineraryPanelProps) 
                                 </span>
                               </div>
                             </div>
-                            <Button variant="outline" size="sm" className="rounded-full text-xs bg-transparent flex-shrink-0">
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="rounded-full text-xs bg-transparent flex-shrink-0"
+                              onClick={() => {
+                                // Create a POI object from activity data
+                                const poi: POI = {
+                                  id: activity.poiId || `activity-${index}`,
+                                  name: activity.name,
+                                  address: activity.location || '',
+                                  photoUrl: activity.photoUrl,
+                                  type: 'Activity',
+                                  rating: 4.5,
+                                  description: `${activity.name} scheduled from ${activity.start} to ${activity.end}`
+                                }
+                                setSelectedPoi(poi)
+                                setIsModalOpen(true)
+                              }}
+                            >
                               Details
                             </Button>
                           </div>
@@ -243,7 +268,7 @@ export function ItineraryPanel({ itinerary, onPOISelect }: ItineraryPanelProps) 
 
                 {/* Accommodation */}
                 {day.accommodation && (
-                  <Card className="bg-white/80 backdrop-blur-sm border-white/30 rounded-2xl overflow-hidden">
+                  <Card className="bg-white/90 backdrop-blur-sm border-0 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-200 hover:scale-[1.01]">
                     <CardContent className="p-4">
                       <div className="flex gap-3">
                         {day.accommodation.photoUrl ? (
@@ -270,8 +295,26 @@ export function ItineraryPanel({ itinerary, onPOISelect }: ItineraryPanelProps) 
                                 {day.accommodation.nights && ` (${day.accommodation.nights} night)`}
                               </p>
                             </div>
-                            <Button variant="outline" size="sm" className="rounded-full text-xs bg-transparent flex-shrink-0">
-                              Book
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="rounded-full text-xs bg-transparent flex-shrink-0"
+                              onClick={() => {
+                                // Create a POI object from accommodation data
+                                const poi: POI = {
+                                  id: day.accommodation?.poiId || `accommodation-${day.day}`,
+                                  name: day.accommodation?.name || '',
+                                  address: '',
+                                  photoUrl: day.accommodation?.photoUrl,
+                                  type: 'Hotel',
+                                  rating: 4.5,
+                                  description: `Accommodation for ${day.accommodation?.nights} night(s)`
+                                }
+                                setSelectedPoi(poi)
+                                setIsModalOpen(true)
+                              }}
+                            >
+                              Details
                             </Button>
                           </div>
                         </div>
@@ -283,7 +326,7 @@ export function ItineraryPanel({ itinerary, onPOISelect }: ItineraryPanelProps) 
                 {/* Add Button */}
                 <Button
                   variant="outline"
-                  className="w-full rounded-2xl bg-white/50 backdrop-blur-sm border-white/30 hover:bg-white/80"
+                  className="w-full rounded-2xl bg-white/60 backdrop-blur-sm border-0 hover:bg-white/90 shadow-sm transition-all duration-200 hover:scale-[1.02]"
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   Add
@@ -293,6 +336,21 @@ export function ItineraryPanel({ itinerary, onPOISelect }: ItineraryPanelProps) 
           </div>
         ))}
       </div>
+      
+      {/* POI Detail Modal */}
+      <PoiDetailModal
+        poi={selectedPoi}
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false)
+          setSelectedPoi(null)
+        }}
+        isSaved={false}
+        isItineraryItem={true}
+        onToggleSave={() => {}}
+        onAddPoi={() => {}}
+        onReplan={() => {}}
+      />
     </div>
   )
 }

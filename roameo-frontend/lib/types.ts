@@ -23,14 +23,19 @@ export interface ChatMessage {
 export interface POI {
   id: string
   name: string
-  type: "stay" | "restaurant" | "attraction"
-  lat: number
-  lng: number
+  type: "stay" | "restaurant" | "attraction" | "Activity" | "Hotel"
+  lat?: number
+  lng?: number
   rating?: number
   price?: string
   address?: string
   photoUrl?: string
   source?: "google" | "foursquare" | "custom"
+  description?: string
+  openingHours?: string[]
+  phone?: string
+  website?: string
+  priceLevel?: number
 }
 
 export interface Activity {

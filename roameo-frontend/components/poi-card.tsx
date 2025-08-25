@@ -18,7 +18,7 @@ interface PoiCardProps {
 // Compact version for map hover cards
 export function CompactPoiCard({ poi, isSaved, isItineraryItem, onToggleSave, onAddPoi, onReplan }: PoiCardProps) {
   return (
-    <div className="bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-md transition-shadow">
+    <div className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 hover:scale-[1.02] border border-gray-100">
       <div className="relative">
         <OptimizedPoiImage 
           src={poi.photoUrl} 
@@ -36,11 +36,11 @@ export function CompactPoiCard({ poi, isSaved, isItineraryItem, onToggleSave, on
         <div className="absolute top-3 right-3 flex gap-2">
           <Button
             size="icon"
-            variant="secondary"
-            className="w-7 h-7 rounded-full bg-white/80 hover:bg-white shadow-md"
+            variant="ghost"
+            className="w-7 h-7 rounded-full bg-white/90 hover:bg-white shadow-sm border-0 transition-all duration-200 hover:scale-110"
             onClick={() => onToggleSave(poi, !isSaved)}
           >
-            <Heart className={`w-4 h-4 ${isSaved ? 'fill-red-500 text-red-500' : 'text-gray-600'}`} />
+            <Heart className={`w-4 h-4 transition-colors duration-200 ${isSaved ? 'fill-red-500 text-red-500' : 'text-gray-600'}`} />
           </Button>
         </div>
         
@@ -51,14 +51,14 @@ export function CompactPoiCard({ poi, isSaved, isItineraryItem, onToggleSave, on
               size="sm"
               variant="secondary"
               disabled
-              className="rounded-full px-3 py-0.5 text-xs bg-white text-gray-700 shadow-sm cursor-default"
+              className="rounded-full px-3 py-0.5 text-xs bg-emerald-50 text-emerald-700 shadow-sm cursor-default border-0"
             >
               <Check className="w-4 h-4 mr-1" /> Added
             </Button>
           ) : (
             <Button
               size="sm"
-              className="bg-black/80 hover:bg-black text-white rounded-full px-3 py-0.5 text-xs"
+              className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white rounded-full px-3 py-0.5 text-xs transition-all duration-200 hover:scale-105 border-0"
               onClick={() => onAddPoi(poi)}
             >
               Add to trip
