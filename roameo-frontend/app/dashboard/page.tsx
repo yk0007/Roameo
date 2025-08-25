@@ -11,6 +11,8 @@ import { Badge } from "@/components/ui/badge"
 import Image from "next/image"
 import { MapPin, Users, Send, LogOut, Plus, Mic, Clock, ArrowRight, Plane, Camera, Compass, Palmtree, Globe, Map } from "lucide-react"
 import DestinationCardArt from "@/components/DestinationCardArt"
+import { BackgroundRippleEffect } from "@/components/ui/background-ripple-effect"
+import { Cover } from "@/components/ui/cover"
 
 export default function Dashboard() {
   const router = useRouter()
@@ -108,71 +110,9 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-[#f8fafc] relative scroll-smooth">
-      {/* Bottom Fade Grid Background */}
-      <div
-        className="absolute inset-0 z-0"
-        style={{
-          backgroundImage: `
-            linear-gradient(to right, #e2e8f0 1px, transparent 1px),
-            linear-gradient(to bottom, #e2e8f0 1px, transparent 1px)
-          `,
-          backgroundSize: "20px 30px",
-          WebkitMaskImage: "radial-gradient(ellipse 70% 60% at 50% 100%, #000 60%, transparent 100%)",
-          maskImage: "radial-gradient(ellipse 70% 60% at 50% 100%, #000 60%, transparent 100%)",
-        }}
-      />
-
-      <div className="fixed inset-0 pointer-events-none z-0">
-        <div
-          className="absolute top-20 left-10 text-orange-600/60 animate-bounce"
-          style={{ animationDelay: "0s", animationDuration: "3s" }}
-        >
-          <Plane className="w-10 h-10 rotate-45 drop-shadow-md" />
-        </div>
-        <div
-          className="absolute top-32 right-16 text-amber-600/60 animate-bounce"
-          style={{ animationDelay: "1s", animationDuration: "4s" }}
-        >
-          <Camera className="w-8 h-8 drop-shadow-md" />
-        </div>
-        <div
-          className="absolute top-1/4 left-20 text-emerald-600/60 animate-bounce"
-          style={{ animationDelay: "2s", animationDuration: "3.5s" }}
-        >
-          <Compass className="w-9 h-9 drop-shadow-md" />
-        </div>
-        <div
-          className="absolute top-1/3 right-10 text-green-600/60 animate-bounce"
-          style={{ animationDelay: "0.5s", animationDuration: "4.5s" }}
-        >
-          <Palmtree className="w-10 h-10 drop-shadow-md" />
-        </div>
-        <div
-          className="absolute bottom-1/3 left-16 text-teal-600/60 animate-bounce"
-          style={{ animationDelay: "1.5s", animationDuration: "3.8s" }}
-        >
-          <Globe className="w-8 h-8 drop-shadow-md" />
-        </div>
-        <div
-          className="absolute bottom-1/4 right-20 text-red-600/60 animate-bounce"
-          style={{ animationDelay: "2.5s", animationDuration: "4.2s" }}
-        >
-          <Map className="w-9 h-9 drop-shadow-md" />
-        </div>
-        <div
-          className="absolute top-1/2 left-8 text-yellow-600/60 animate-bounce"
-          style={{ animationDelay: "3s", animationDuration: "3.3s" }}
-        >
-          <Plane className="w-7 h-7 rotate-12 drop-shadow-md" />
-        </div>
-        <div
-          className="absolute bottom-20 right-8 text-orange-500/60 animate-bounce"
-          style={{ animationDelay: "1.8s", animationDuration: "4.8s" }}
-        >
-          <Camera className="w-8 h-8 rotate-45 drop-shadow-md" />
-        </div>
-      </div>
+    <div className="min-h-screen w-full bg-[#f8fafc] relative scroll-smooth overflow-hidden">
+      {/* Background Ripple Effect */}
+      <BackgroundRippleEffect />
 
       <header className="flex items-center justify-between px-6 py-3 border-0 bg-white/80 backdrop-blur-md shadow-lg">
         <div className="flex items-center gap-3">
@@ -215,11 +155,11 @@ export default function Dashboard() {
             <p className="text-sm text-slate-600 font-medium tracking-wide uppercase opacity-0 animate-fade-in-up">
               I'm
             </p>
-            <h1 className="text-7xl md:text-8xl font-bold text-slate-900 tracking-tight opacity-0 animate-fade-in-scale animation-delay-200">
-              roameo
+            <h1 className="text-7xl md:text-8xl font-bold tracking-tight opacity-0 animate-fade-in-scale animation-delay-200 bg-clip-text text-transparent bg-gradient-to-b from-neutral-800 via-neutral-700 to-neutral-700">
+              <Cover>roameo</Cover>
             </h1>
             <p className="text-xl md:text-2xl text-slate-600 max-w-2xl mx-auto leading-relaxed opacity-0 animate-fade-in-up animation-delay-400">
-              Here to create a master plan for your dream trip loaded with memories.
+              Here to create a <Cover>master plan</Cover> for your dream trip loaded with memories.
             </p>
           </div>
 

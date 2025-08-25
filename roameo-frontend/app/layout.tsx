@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
 import { Toaster } from "@/components/ui/toaster"
+import { FloatingNavbarProvider } from "@/components/floating-navbar-provider"
 
 const inter = Inter({
   subsets: ["latin"],
@@ -27,7 +28,9 @@ export default function RootLayout({
         className="antialiased font-sans"
         style={{ fontFamily: "var(--font-inter), ui-sans-serif, system-ui, sans-serif" }}
       >
-        {children}
+        <FloatingNavbarProvider>
+          {children}
+        </FloatingNavbarProvider>
         <Toaster />
       </body>
     </html>

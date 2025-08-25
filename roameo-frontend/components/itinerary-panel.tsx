@@ -25,6 +25,7 @@ import {
 } from "lucide-react"
 import { OptimizedPoiImage } from "@/components/optimized-poi-image"
 import { PoiDetailModal } from "@/components/poi-detail-modal"
+import { ExpandablePoiCard } from "@/components/expandable-poi-card"
 import { Itinerary, ItineraryDay, Activity, POI } from "@/lib/types"
 
 interface ItineraryPanelProps {
@@ -205,132 +206,55 @@ export function ItineraryPanel({ itinerary, onPOISelect }: ItineraryPanelProps) 
             {/* Day Activities */}
             {expandedDays.includes(day.day) && (
               <div className="space-y-3 ml-6">
-                {day.activities.map((activity: Activity, index: number) => (
-                  <Card
-                    key={index}
-                    className="bg-white/90 backdrop-blur-sm border-0 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-200 hover:scale-[1.01]"
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex gap-3">
-                        {activity.photoUrl ? (
-                          <OptimizedPoiImage
-                            src={activity.photoUrl}
-                            alt={activity.name}
-                            className="w-16 h-16 rounded-xl object-cover flex-shrink-0"
-                            width={64}
-                            height={64}
-                            quality="medium"
-                            poiName={activity.name}
-                          />
-                        ) : (
-                          <div className="w-16 h-16 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0">
-                            <MapPin className="w-6 h-6 text-gray-400" />
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0 overflow-hidden">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex-1 min-w-0">
-                              <h4 className="font-semibold text-sm truncate">{activity.name}</h4>
-                              <div className="flex items-center gap-1 text-xs text-gray-500">
-                                <Clock className="w-3 h-3 flex-shrink-0" />
-                                <span className="truncate">
-                                  {activity.start} - {activity.end}
-                                </span>
-                              </div>
-                            </div>
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              className="rounded-full text-xs bg-transparent flex-shrink-0"
-                              onClick={() => {
-                                // Create a POI object from activity data
-                                const poi: POI = {
-                                  id: activity.poiId || `activity-${index}`,
-                                  name: activity.name,
-                                  address: activity.location || '',
-                                  photoUrl: activity.photoUrl,
-                                  type: 'Activity',
-                                  rating: 4.5,
-                                  description: `${activity.name} scheduled from ${activity.start} to ${activity.end}`
-                                }
-                                setSelectedPoi(poi)
-                                setIsModalOpen(true)
-                              }}
-                            >
-                              Details
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                {day.activities.map((activity: Activity, index: number) => {
+                  // Create a POI object from activity data
+                  const activityPoi: POI = {
+                    id: activity.poiId || `activity-${index}`,
+                    name: activity.name,
+                    address: activity.location || '',
+                    photoUrl: activity.photoUrl,
+                    type: 'Activity',
+                    rating: 4.5,
+                    description: `${activity.name} scheduled from ${activity.start} to ${activity.end}. Duration: ${activity.start} - ${activity.end}`
+                  }
+                  
+                  return (
+                    <ExpandablePoiCard
+                      key={index}
+                      poi={activityPoi}
+                      isInItinerary={true}
+                      className="bg-white/90 backdrop-blur-sm border-0 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-200"
+                    />
+                  )
+                })}
 
                 {/* Accommodation */}
-                {day.accommodation && (
-                  <Card className="bg-white/90 backdrop-blur-sm border-0 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-200 hover:scale-[1.01]">
-                    <CardContent className="p-4">
-                      <div className="flex gap-3">
-                        {day.accommodation.photoUrl ? (
-                          <OptimizedPoiImage
-                            src={day.accommodation.photoUrl}
-                            alt={day.accommodation.name}
-                            className="w-16 h-16 rounded-xl object-cover flex-shrink-0"
-                            width={64}
-                            height={64}
-                            quality="medium"
-                            poiName={day.accommodation.name}
-                          />
-                        ) : (
-                          <div className="w-16 h-16 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0">
-                            <Bed className="w-6 h-6 text-gray-400" />
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0 overflow-hidden">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex-1 min-w-0">
-                              <h4 className="font-semibold text-sm truncate">{day.accommodation.name}</h4>
-                              <p className="text-xs text-gray-500 truncate">
-                                {day.accommodation.checkIn && `Check-in from ${day.accommodation.checkIn}`}
-                                {day.accommodation.nights && ` (${day.accommodation.nights} night)`}
-                              </p>
-                            </div>
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              className="rounded-full text-xs bg-transparent flex-shrink-0"
-                              onClick={() => {
-                                // Create a POI object from accommodation data
-                                const poi: POI = {
-                                  id: day.accommodation?.poiId || `accommodation-${day.day}`,
-                                  name: day.accommodation?.name || '',
-                                  address: '',
-                                  photoUrl: day.accommodation?.photoUrl,
-                                  type: 'Hotel',
-                                  rating: 4.5,
-                                  description: `Accommodation for ${day.accommodation?.nights} night(s)`
-                                }
-                                setSelectedPoi(poi)
-                                setIsModalOpen(true)
-                              }}
-                            >
-                              Details
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
+                {day.accommodation && (() => {
+                  // Create a POI object from accommodation data
+                  const accommodationPoi: POI = {
+                    id: day.accommodation.poiId || `accommodation-${day.day}`,
+                    name: day.accommodation.name || '',
+                    address: '',
+                    photoUrl: day.accommodation.photoUrl,
+                    type: 'Hotel',
+                    rating: 4.5,
+                    description: `Accommodation for ${day.accommodation.nights} night(s). Check-in: ${day.accommodation.checkIn || 'TBD'}`
+                  }
+                  
+                  return (
+                    <ExpandablePoiCard
+                      poi={accommodationPoi}
+                      isInItinerary={true}
+                      className="bg-white/90 backdrop-blur-sm border-0 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-200"
+                    />
+                  )
+                })()}
 
                 {/* Add Button */}
-                <Button
-                  variant="outline"
-                  className="w-full rounded-2xl bg-white/60 backdrop-blur-sm border-0 hover:bg-white/90 shadow-sm transition-all duration-200 hover:scale-[1.02]"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add
-                </Button>
+                <button className="shadow-[inset_0_0_0_2px_#10b981] text-emerald-500 px-8 py-3 rounded-full tracking-wider uppercase font-bold bg-transparent hover:bg-emerald-500 hover:text-white dark:text-emerald-400 transition duration-200 w-full flex items-center justify-center gap-2">
+                  <Plus className="w-4 h-4" />
+                  Add Activity
+                </button>
               </div>
             )}
           </div>

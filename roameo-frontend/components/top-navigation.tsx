@@ -115,7 +115,7 @@ export function TopNavigation({
   }
 
   return (
-    <div className="flex items-center justify-between px-6 py-3 border-b bg-white/80 backdrop-blur-md border-gray-200 relative z-[10000]">
+    <div className="flex items-center justify-between px-6 py-3 relative">
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">
           <button onClick={handleLogoClick} className="hover:opacity-80 transition-opacity flex items-center gap-3">

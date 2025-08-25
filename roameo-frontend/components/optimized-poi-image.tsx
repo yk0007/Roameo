@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { takumiOptimizer } from "@/lib/takumi-image-optimizer"
+import { useState } from "react"
+import Image from "next/image"
 
 interface OptimizedPoiImageProps {
   src?: string
@@ -13,6 +13,9 @@ interface OptimizedPoiImageProps {
   poiName?: string
   rating?: number
   enableThumbnail?: boolean
+  priority?: boolean
+  fill?: boolean
+  sizes?: string
   onError?: (e: React.SyntheticEvent<HTMLImageElement, Event>) => void
 }
 
@@ -26,97 +29,109 @@ export function OptimizedPoiImage({
   poiName,
   rating,
   enableThumbnail = false,
+  priority = false,
+  fill = false,
+  sizes,
   onError 
 }: OptimizedPoiImageProps) {
-  const [imageSrc, setImageSrc] = useState<string>("/placeholder.svg")
-  const [isLoading, setIsLoading] = useState(false)
-  const [isOptimized, setIsOptimized] = useState(false)
-
-  useEffect(() => {
-    if (!src) {
-      setImageSrc("/placeholder.svg")
-      setIsOptimized(false)
-      return
-    }
-
-    const optimizeImage = async () => {
-      setIsLoading(true)
-      
-      try {
-        let optimizedSrc: string
-        
-        if (enableThumbnail && poiName) {
-          // Create POI thumbnail with overlay
-          optimizedSrc = await takumiOptimizer.createPoiThumbnail(
-            src, 
-            poiName, 
-            rating, 
-            width, 
-            height
-          )
-        } else {
-          // Standard image optimization
-          optimizedSrc = await takumiOptimizer.optimizeImage(
-            src, 
-            width, 
-            height, 
-            quality
-          )
-        }
-        
-        setImageSrc(optimizedSrc)
-        setIsOptimized(optimizedSrc !== src)
-      } catch (error) {
-        console.warn('[optimized-poi-image] Optimization failed, using original:', error)
-        setImageSrc(src)
-        setIsOptimized(false)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    optimizeImage()
-  }, [src, width, height, quality, poiName, rating, enableThumbnail])
+  const [imageSrc, setImageSrc] = useState<string>(src || "/placeholder.svg")
+  const [isError, setIsError] = useState(false)
 
   const handleError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
-    const target = e.currentTarget as HTMLImageElement
-    if (target.src.endsWith("/placeholder.svg")) return
+    if (imageSrc === "/placeholder.svg") return
     
-    console.log(`[optimized-poi-image] Image failed to load: ${target.src}`)
+    console.log(`[optimized-poi-image] Image failed to load: ${imageSrc}`)
     setImageSrc("/placeholder.svg")
-    setIsOptimized(false)
+    setIsError(true)
     
     if (onError) {
       onError(e)
     }
   }
 
-  return (
-    <div className="relative">
-      <img
+  // Convert quality to numeric value for Vercel
+  const qualityValue = quality === 'high' ? 95 : quality === 'medium' ? 80 : 65
+
+  // If no src provided or error occurred, show placeholder
+  if (!src || isError) {
+    return (
+      <div className={`bg-gray-100 flex items-center justify-center ${className}`}>
+        <div className="text-gray-400 text-sm">No image</div>
+      </div>
+    )
+  }
+
+  // Handle POI thumbnail with overlay (if needed)
+  if (enableThumbnail && poiName) {
+    return (
+      <div className="relative">
+        {fill ? (
+          <Image
+            src={imageSrc}
+            alt={alt}
+            fill
+            className={className}
+            quality={qualityValue}
+            priority={priority}
+            sizes={sizes || "(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"}
+            onError={handleError}
+            style={{ objectFit: 'cover' }}
+          />
+        ) : (
+          <Image
+            src={imageSrc}
+            alt={alt}
+            width={width}
+            height={height}
+            className={className}
+            quality={qualityValue}
+            priority={priority}
+            sizes={sizes}
+            onError={handleError}
+            style={{ objectFit: 'cover' }}
+          />
+        )}
+        
+        {/* POI overlay */}
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3">
+          <div className="text-white font-semibold text-sm truncate">{poiName}</div>
+          {rating && rating > 0 && (
+            <div className="text-white/90 text-xs">⭐ {rating.toFixed(1)}</div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // Standard optimized image
+  if (fill) {
+    return (
+      <Image
         src={imageSrc}
         alt={alt}
+        fill
         className={className}
+        quality={qualityValue}
+        priority={priority}
+        sizes={sizes || "(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"}
         onError={handleError}
-        style={{ 
-          opacity: isLoading ? 0.7 : 1,
-          transition: 'opacity 0.3s ease-in-out'
-        }}
+        style={{ objectFit: 'cover' }}
       />
-      
-      {/* Loading indicator */}
-      {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 bg-opacity-75">
-          <div className="w-6 h-6 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
-        </div>
-      )}
-      
-      {/* Optimization indicator (for development) */}
-      {process.env.NODE_ENV === 'development' && isOptimized && (
-        <div className="absolute top-1 left-1 bg-green-500 text-white text-xs px-1 py-0.5 rounded">
-          ⚡
-        </div>
-      )}
-    </div>
+    )
+  }
+
+  return (
+    <Image
+      src={imageSrc}
+      alt={alt}
+      width={width}
+      height={height}
+      className={className}
+      quality={qualityValue}
+      priority={priority}
+      sizes={sizes}
+      onError={handleError}
+      style={{ objectFit: 'cover' }}
+    />
   )
 }

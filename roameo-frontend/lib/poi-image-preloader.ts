@@ -1,6 +1,6 @@
 "use client"
 
-import { takumiOptimizer } from "@/lib/takumi-image-optimizer"
+import { browserImageOptimizer } from "@/lib/browser-image-optimizer"
 import type { POI } from "@/lib/types"
 
 class PoiImagePreloader {
@@ -33,7 +33,7 @@ class PoiImagePreloader {
         
         await Promise.allSettled(
           batch.map(url => 
-            takumiOptimizer.optimizeImage(url, dimensions.width, dimensions.height, priority === 'high' ? 'high' : 'medium')
+            browserImageOptimizer.optimizeImage(url, dimensions.width, dimensions.height, priority === 'high' ? 'high' : 'medium')
           )
         )
 
@@ -91,7 +91,7 @@ class PoiImagePreloader {
     return {
       queueSize: this.preloadQueue.size,
       isPreloading: this.isPreloading,
-      optimizerStats: takumiOptimizer.getCacheStats()
+      optimizerStats: browserImageOptimizer.getCacheStats()
     }
   }
 }
