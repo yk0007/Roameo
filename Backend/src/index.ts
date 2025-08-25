@@ -49,7 +49,7 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
   const existing = await db.getSession(sessionId);
   if (!existing) {
     console.log(`[ws] Session ${sessionId} not found, creating new one`);
-    await db.upsertSession(sessionId, {});
+    await db.upsertSession(sessionId, { inviteId: sessions.get(sessionId)?.inviteId, trip: { sessionId }, userId: req.userId });
   }
 
   hub.attach(sessionId, ws);

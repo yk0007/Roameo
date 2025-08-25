@@ -1,5 +1,4 @@
 import { Router, type Request, type Response } from "express";
-import { buildChatStreamHandler } from "./stream.js";
 import { randomUUID } from "crypto";
 import type { WsEvent, TripContext } from "../types/schemas.js";
 import type { WsHub } from "../ws/emit.js";
@@ -31,9 +30,6 @@ export function buildApiRouter(
     res.json({ ok: true });
   });
 
-  // Streaming chat endpoint
-  const streamHandler = buildChatStreamHandler(db, opts.runRouter);
-  r.post("/chat/stream", optionalAuth, streamHandler);
 
   // Create a new invite id for session
   r.post("/invite/create", async (req: Request, res: Response) => {
