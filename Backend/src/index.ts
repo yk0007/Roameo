@@ -14,7 +14,16 @@ import { SupabaseDb } from "./db/supabase.js";
 import { SimpleRateLimiter } from "./utils/rateLimiter.js";
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: [
+    'https://roameo-app.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:3001'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key']
+}));
 app.use(express.json());
 
 const httpServer = createServer(app);
