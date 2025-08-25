@@ -302,26 +302,33 @@ export function MapView({
       const itineraryPois = itinerary?.daysPlan.flatMap(d => d.activities).map(a => a.poiId) || []
       const poiIndex = isAdded ? itineraryPois.indexOf(poi.id) : -1
 
-      const marker = new window.google.maps.Marker({
+      // Create marker element for AdvancedMarkerElement
+      const markerElement = document.createElement('div')
+      markerElement.style.width = '24px'
+      markerElement.style.height = '24px'
+      markerElement.style.borderRadius = '50%'
+      markerElement.style.display = 'flex'
+      markerElement.style.alignItems = 'center'
+      markerElement.style.justifyContent = 'center'
+      markerElement.style.fontSize = '12px'
+      markerElement.style.fontWeight = 'bold'
+      markerElement.style.color = 'white'
+      markerElement.style.fontFamily = 'Arial, sans-serif'
+      
+      if (isAdded) {
+        markerElement.style.backgroundColor = 'black'
+        markerElement.style.border = '2px solid white'
+        markerElement.textContent = (poiIndex + 1).toString()
+      } else {
+        markerElement.style.backgroundColor = isSaved ? '#f472b6' : '#2563eb'
+        markerElement.style.border = `2px solid ${isSaved ? '#f9a8d4' : '#60a5fa'}`
+      }
+
+      const marker = new window.google.maps.marker.AdvancedMarkerElement({
         position: { lat: poi.lat, lng: poi.lng },
         map: mapInstance.current!,
         title: poi.name,
-        icon: isAdded
-          ? {
-              url: `data:image/svg+xml;utf-8,${encodeURIComponent(
-                `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="black" stroke="white" stroke-width="2"/><text x="12" y="16" font-size="12" fill="white" text-anchor="middle" font-family="Arial, sans-serif" font-weight="bold">${poiIndex + 1}</text></svg>`
-              )}`,
-              scaledSize: new window.google.maps.Size(24, 24),
-              anchor: new window.google.maps.Point(12, 12),
-            }
-          : {
-              path: window.google.maps.SymbolPath.CIRCLE,
-              scale: 6,
-              fillColor: isSaved ? '#f9a8d4' : '#60a5fa',
-              fillOpacity: 1,
-              strokeColor: isSaved ? '#f472b6' : '#2563eb',
-              strokeWeight: 2,
-            },
+        content: markerElement,
       })
 
       const infoWindow = new window.google.maps.InfoWindow({
