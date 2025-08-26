@@ -309,7 +309,7 @@ export function TopNavigation({
               className="bg-white/80 backdrop-blur-sm text-gray-700 hover:bg-white/90 cursor-pointer border border-white/30 rounded-full"
             >
               <DollarSign className="w-3 h-3 mr-1" />
-              {trip.budget || "Budget"}
+              {trip.budget ? `₹${trip.budget}` : "Budget"}
             </Badge>
             {onReplan && (
               <Button

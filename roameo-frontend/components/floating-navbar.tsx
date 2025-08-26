@@ -58,7 +58,7 @@ export function FloatingNavbar(props: FloatingNavbarProps) {
 
   return (
     <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-[10000] w-full max-w-7xl mx-auto px-4 animate-in slide-in-from-top-2 duration-300">
-      <div className="bg-white/95 backdrop-blur-xl border border-white/30 rounded-2xl shadow-2xl shadow-black/5 hover:shadow-black/10 transition-all duration-200">
+      <div className="bg-white backdrop-blur-xl border border-white/30 rounded-2xl shadow-2xl shadow-black/5 hover:shadow-black/10 transition-all duration-200">
         <TopNavigation {...safeProps} />
       </div>
     </div>
