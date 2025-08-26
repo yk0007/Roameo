@@ -16,7 +16,7 @@ export class SupabaseDb {
     if (data.userId !== undefined) base.user_id = data.userId;
 
     const { error } = await this.client
-      .from("sessions")
+      .from("chat_sessions")
       .upsert(base, { onConflict: "session_id" });
     if (error) throw error;
 
@@ -45,7 +45,7 @@ export class SupabaseDb {
 
   async getSession(sessionId: string): Promise<SessionRecord | undefined> {
     const { data: srow, error } = await this.client
-      .from("sessions")
+      .from("chat_sessions")
       .select("session_id, invite_id, trip, user_id")
       .eq("session_id", sessionId)
       .maybeSingle();
@@ -89,12 +89,12 @@ export class SupabaseDb {
   async patchTrip(sessionId: string, patch: Record<string, any>): Promise<void> {
     const current = (await this.getSession(sessionId))?.trip || {};
     const merged = { ...current, ...patch };
-    const { error } = await this.client.from("sessions").upsert({ session_id: sessionId, trip: merged });
+    const { error } = await this.client.from("chat_sessions").upsert({ session_id: sessionId, trip: merged });
     if (error) throw error;
   }
 
   async setInvite(sessionId: string, inviteId: string): Promise<void> {
-    const { error } = await this.client.from("sessions").upsert({ session_id: sessionId, invite_id: inviteId });
+    const { error } = await this.client.from("chat_sessions").upsert({ session_id: sessionId, invite_id: inviteId });
     if (error) throw error;
   }
 
@@ -114,13 +114,13 @@ export class SupabaseDb {
   }
 
   async deleteSession(sessionId: string): Promise<void> {
-    const { error } = await this.client.from("sessions").delete().eq("session_id", sessionId);
+    const { error } = await this.client.from("chat_sessions").delete().eq("session_id", sessionId);
     if (error) throw error;
   }
 
   async listSessions(): Promise<SessionRecord[]> {
     const { data: sessions, error } = await this.client
-      .from("sessions")
+      .from("chat_sessions")
       .select("session_id, invite_id, trip, user_id, updated_at")
       .order("updated_at", { ascending: false });
     if (error) throw error;

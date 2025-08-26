@@ -161,6 +161,7 @@ export function MapView({
       window.__gmapsLoading = true
       
       const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+      console.log('Google Maps API Key check:', apiKey ? 'Present' : 'Missing');
       if (!apiKey) {
         console.error('Google Maps API key not configured. Please set NEXT_PUBLIC_GOOGLE_MAPS_API_KEY.');
         setApiKeyError(true);
@@ -190,8 +191,13 @@ export function MapView({
         setApiKeyError(true);
       });
 
+      script.addEventListener("load", () => {
+        console.log('Google Maps script loaded successfully');
+      });
+
       (window as any).initMap = init;
       document.body.appendChild(script);
+      console.log('Google Maps script added to DOM:', script.src);
     }
   }, [])
 
@@ -219,20 +225,32 @@ export function MapView({
 
   // Initialize the map once Google Maps is ready
   useEffect(() => {
+    console.log('Map initialization effect:', { gmapsReady, hasMapRef: !!mapRef.current, hasMapInstance: !!mapInstance.current });
     if (!gmapsReady || !mapRef.current || mapInstance.current) return
-    if (!window.google?.maps?.Map) return
+    if (!window.google?.maps?.Map) {
+      console.error('Google Maps API not available');
+      return;
+    }
 
+    console.log('Initializing Google Maps...');
     const mapId = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID
-    mapInstance.current = new window.google.maps.Map(mapRef.current, {
-      center: { lat: 20, lng: 0 },
-      zoom: 2,
-      styles: customStyle ? CUSTOM_MAP_STYLE : [],
-      mapTypeControl: false,
-      streetViewControl: false,
-      fullscreenControl: false,
-      backgroundColor: '#f5f5f5',
-      ...(mapId ? { mapId } : {}),
-    })
+    try {
+      mapInstance.current = new window.google.maps.Map(mapRef.current, {
+        center: { lat: 20, lng: 0 },
+        zoom: 2,
+        styles: customStyle ? CUSTOM_MAP_STYLE : [],
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: false,
+        backgroundColor: '#f5f5f5',
+        ...(mapId ? { mapId } : {}),
+      });
+      console.log('Google Maps initialized successfully');
+    } catch (error) {
+      console.error('Failed to initialize Google Maps:', error);
+      setApiKeyError(true);
+      return;
+    }
 
     // Observe container resizes and nudge map
     // Create a single OverlayView instance to get projection.
