@@ -13,6 +13,10 @@ import type { Db } from "./db/types.js";
 import { SupabaseDb } from "./db/supabase.js";
 import { SimpleRateLimiter } from "./utils/rateLimiter.js";
 
+interface AuthenticatedMessage extends IncomingMessage {
+  userId?: string;
+}
+
 const app = express();
 app.use(cors({
   origin: [
@@ -45,7 +49,7 @@ app.use("/api", buildApiRouter(hub, db, {
   },
 }));
 
-wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
+wss.on("connection", async (ws: WebSocket, req: AuthenticatedMessage) => {
   const url = new URL(req.url || "", `http://${req.headers.host}`);
   const sessionId = url.searchParams.get("sessionId");
   if (!sessionId) {
