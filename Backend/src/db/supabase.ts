@@ -13,6 +13,7 @@ export class SupabaseDb {
     const base: any = { session_id: sessionId };
     if (data.inviteId !== undefined) base.invite_id = data.inviteId;
     if (data.trip !== undefined) base.trip = data.trip as any;
+    if (data.userId !== undefined) base.user_id = data.userId;
 
     const { error } = await this.client
       .from("sessions")
@@ -45,7 +46,7 @@ export class SupabaseDb {
   async getSession(sessionId: string): Promise<SessionRecord | undefined> {
     const { data: srow, error } = await this.client
       .from("sessions")
-      .select("session_id, invite_id, trip")
+      .select("session_id, invite_id, trip, user_id")
       .eq("session_id", sessionId)
       .maybeSingle();
     if (error) throw error;
@@ -68,6 +69,7 @@ export class SupabaseDb {
       sessionId: srow.session_id,
       inviteId: srow.invite_id ?? undefined,
       trip: (srow.trip as any) || {},
+      userId: srow.user_id ?? undefined,
       messages: (mrows || []).map((m) => ({ id: m.id, role: m.role as any, content: m.content, createdAt: new Date(m.created_at!).toISOString() })),
       savedPoiIds: new Set((prow || []).map((p) => p.poi_id)),
     };
@@ -119,7 +121,7 @@ export class SupabaseDb {
   async listSessions(): Promise<SessionRecord[]> {
     const { data: sessions, error } = await this.client
       .from("sessions")
-      .select("session_id, invite_id, trip, updated_at")
+      .select("session_id, invite_id, trip, user_id, updated_at")
       .order("updated_at", { ascending: false });
     if (error) throw error;
 

@@ -4,27 +4,13 @@ export class MemoryDb implements Db {
   private sessions = new Map<string, SessionRecord>();
 
   async upsertSession(sessionId: string, data: Partial<SessionRecord>): Promise<SessionRecord> {
-    const existing = this.sessions.get(sessionId);
-    if (existing) {
-      const merged: SessionRecord = {
-        ...existing,
-        ...data,
-        savedPoiIds: data.savedPoiIds ? new Set([...(existing.savedPoiIds || []), ...data.savedPoiIds]) : existing.savedPoiIds,
-        messages: data.messages ? [...existing.messages, ...data.messages] : existing.messages,
-        trip: { ...existing.trip, ...(data.trip || {}) },
-      };
-      this.sessions.set(sessionId, merged);
-      return merged;
+    const existing = this.sessions.get(sessionId) || { sessionId, trip: {}, messages: [], savedPoiIds: new Set() };
+    const updated = { ...existing, ...data };
+    if (data.savedPoiIds) {
+      updated.savedPoiIds = new Set([...existing.savedPoiIds, ...data.savedPoiIds]);
     }
-    const created: SessionRecord = {
-      sessionId,
-      inviteId: data.inviteId,
-      trip: data.trip || { sessionId },
-      messages: data.messages || [],
-      savedPoiIds: data.savedPoiIds || new Set<string>(),
-    };
-    this.sessions.set(sessionId, created);
-    return created;
+    this.sessions.set(sessionId, updated);
+    return updated;
   }
 
   async getSession(sessionId: string): Promise<SessionRecord | undefined> {
