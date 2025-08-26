@@ -139,7 +139,7 @@ export class WriteThroughDb implements Db {
     
     try {
       // Save message with session_id that matches the chat_sessions.id
-      const session = this.mem.getSession(sessionId);
+      const session = await this.mem.getSession(sessionId);
       const { error } = await this.client.from("messages").upsert({
         id: msg.id, 
         session_id: sessionId, 
@@ -161,7 +161,8 @@ export class WriteThroughDb implements Db {
 
   private async flushPatchTrip(sessionId: string, patch: Record<string, any>) {
     if (!this.client) return;
-    const cur = this.mem.getSession(sessionId)?.trip || {};
+    const session = await this.mem.getSession(sessionId);
+    const cur = session?.trip || {};
     await this.client.from("chat_sessions").upsert({ session_id: sessionId, trip: cur }, { onConflict: "session_id" });
   }
 
@@ -206,7 +207,7 @@ export class WriteThroughDb implements Db {
       
       if (!existingSession) {
         console.log(`[persist] Creating session ${sessionId} in chat_sessions table`);
-        const session = this.mem.getSession(sessionId);
+        const session = await this.mem.getSession(sessionId);
         const { error: insertError } = await this.client.from("chat_sessions").insert({
           session_id: sessionId,
           user_id: session?.userId,
