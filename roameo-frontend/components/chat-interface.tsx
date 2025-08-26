@@ -477,6 +477,28 @@ return (
               </div>
             </div>
           ))}
+          
+          {/* Suggested Questions Component */}
+          {lastAssistant && showSuggestion && (
+            <div className="flex justify-start mt-6 pl-11">
+              <div className="text-sm text-gray-600">
+                <p className="mb-3 font-medium">Want me to customize your plan? Try:</p>
+                <div className="flex flex-wrap gap-2">
+                  <button className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors" onClick={() => onSendMessage("What's the best way to travel within the city?")}>🚗 Transportation options</button>
+                  <button className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors" onClick={() => onSendMessage("Can you suggest local food specialties I should try?")}>🍽️ Local cuisine</button>
+                  <button className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors" onClick={() => onSendMessage("What are the must-visit cultural attractions?")}>🏛️ Cultural sites</button>
+                  <button className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors" onClick={() => onSendMessage("Are there any local festivals or events during my visit?")}>🎉 Events & festivals</button>
+                  <button className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors" onClick={() => onSendMessage("What's the best time to visit popular attractions to avoid crowds?")}>⏰ Best visiting times</button>
+                  <button className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors" onClick={() => onSendMessage("Can you recommend some hidden gems or off-the-beaten-path places?")}>💎 Hidden gems</button>
+                  <button className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors" onClick={() => onSendMessage("Add adventure activities?")}>🎿 Adventure activities</button>
+                  <button className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors" onClick={() => onSendMessage("Family-friendly tips?")}>👨‍👩‍👧‍👦 Family-friendly tips</button>
+                  <button className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors" onClick={() => onSendMessage("Must-try local dishes?")}>🥘 Must-try local dishes</button>
+                  <button className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors" onClick={() => onSendMessage("Best time to visit?")}>🌤️ Best time to visit</button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {isTyping && (
             <div className="flex gap-3 mb-4">
               <Avatar className="w-8 h-8 flex-shrink-0">

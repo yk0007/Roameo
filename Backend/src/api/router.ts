@@ -129,14 +129,31 @@ export function buildApiRouter(
         
         for (const e of wsEvents) {
           hub.emit(sid, e);
+          // Persist assistant messages to database
+          if (e.type === "chat.append" && e.data.role === "assistant") {
+            await db.appendMessage(sid, e.data);
+          }
+          // Update trip data when navbar update event occurs
+          if (e.type === "navbar.update") {
+            const tripUpdate = {
+              destination: e.data.destination,
+              destinations: e.data.destinations,
+              days: e.data.days,
+              title: e.data.title
+            };
+            await db.patchTrip(sid, tripUpdate);
+          }
         }
       }
       return res.json({ sessionId, inviteId, created: isNew, events: wsEvents });
     } catch (err) {
+      const errorMessage = { id: randomUUID(), role: "assistant" as const, content: "Sorry, something went wrong.", createdAt: new Date().toISOString() };
       hub.emit(sid, {
         type: "chat.append",
-        data: { id: randomUUID(), role: "assistant", content: "Sorry, something went wrong.", createdAt: new Date().toISOString() },
+        data: errorMessage,
       });
+      // Persist error message to database
+      await db.appendMessage(sid, errorMessage as any);
       return res.json({ sessionId, inviteId, created: isNew, events: [] });
     }
   });

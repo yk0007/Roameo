@@ -220,12 +220,12 @@ JSON Structure:
 
 Respond with ONLY the JSON object.`;
 
-  const jsonResponse = await gemini.chat(jsonPrompt);
-  const cleanedJson = jsonResponse.replace(/^```json\s*/i, "").replace(/\s*```\s*$/i, "").trim();
-  const jsonMatch = cleanedJson.match(/\{[\s\S]*\}/);
+  try {
+    const jsonResponse = await gemini.chat(jsonPrompt);
+    const cleanedJson = jsonResponse.replace(/^```json\s*/i, "").replace(/\s*```\s*$/i, "").trim();
+    const jsonMatch = cleanedJson.match(/\{[\s\S]*\}/);
 
-  if (jsonMatch) {
-    try {
+    if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]) as Itinerary;
       // Enrich activities with full POI data
       parsed.daysPlan.forEach((day) => {
@@ -235,7 +235,7 @@ Respond with ONLY the JSON object.`;
           if (poi) {
             act.name = poi.name;
             act.location = poi.address;
-            act.photoUrl = poi.photoUrl; // This is the key part
+            act.photoUrl = poi.photoUrl;
             act.rating = poi.rating;
             act.lat = poi.lat;
             act.lng = poi.lng;
@@ -243,9 +243,9 @@ Respond with ONLY the JSON object.`;
         });
       });
       return parsed;
-    } catch (e) {
-      console.warn("[planner] Failed to parse JSON from Gemini, falling back.", e);
     }
+  } catch (e) {
+    console.warn("[planner] Failed to create structured itinerary, using fallback.", e);
   }
   return createDummyItinerary(ctx);
 }

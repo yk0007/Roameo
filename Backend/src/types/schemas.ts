@@ -32,7 +32,7 @@ export const POISchema = z.object({
   price: z.string().optional(),
   address: z.string().optional(),
   photoUrl: z.string().optional(),
-  source: z.union([z.literal("google"), z.literal("foursquare"), z.literal("custom")]).optional(),
+  source: z.union([z.literal("google"), z.literal("foursquare"), z.literal("custom"), z.literal("mock")]).optional(),
 });
 export type POI = z.infer<typeof POISchema>;
 
