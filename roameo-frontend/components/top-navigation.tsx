@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase/client"
-import { ChevronDown, User, MapPin, Calendar, Users, DollarSign, LogOut, Settings, Loader2 } from "lucide-react"
+import { ChevronDown, User, MapPin, Calendar, Users, LogOut, Settings, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -308,7 +308,6 @@ export function TopNavigation({
               onClick={() => handleEdit("budget")}
               className="bg-white/80 backdrop-blur-sm text-gray-700 hover:bg-white/90 cursor-pointer border border-white/30 rounded-full"
             >
-              <DollarSign className="w-3 h-3 mr-1" />
               {trip.budget ? `₹${trip.budget}` : "Budget"}
             </Badge>
             {onReplan && (
