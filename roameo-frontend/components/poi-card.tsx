@@ -2,7 +2,7 @@
 
 import { Heart, Plus, Hotel, MapPin, Star, RefreshCw, X, Check, Bookmark } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { OptimizedPoiImage } from "@/components/optimized-poi-image"
+import Image from "next/image"
 import { motion } from "framer-motion"
 import type { POI } from "@/lib/types"
 
@@ -30,16 +30,13 @@ export function CompactPoiCard({ poi, isSaved, isItineraryItem, onToggleSave, on
       transition={{ duration: 0.2 }}
     >
       <div className="relative">
-        <OptimizedPoiImage 
-          src={poi.photoUrl} 
+        <Image 
+          src={poi.photoUrl || '/placeholder.svg'} 
           alt={poi.name} 
-          className="w-full h-40 object-cover"
           width={400}
           height={160}
-          quality="medium"
-          poiName={poi.name}
-          rating={poi.rating}
-          enableThumbnail={true}
+          className="w-full h-40 object-cover"
+          quality={80}
         />
         
         {/* Top right buttons (only save) */}

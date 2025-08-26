@@ -3,7 +3,7 @@
 import React, { useEffect, useId, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useOutsideClick } from "@/hooks/use-outside-click";
-import { OptimizedPoiImage } from "@/components/optimized-poi-image";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Heart, Plus, MapPin, Star, Clock, Phone, Globe, Navigation, Check } from "lucide-react";
@@ -97,13 +97,14 @@ export function ExpandablePoiCard({
               className="w-full max-w-[500px] h-full md:h-fit md:max-h-[90%] flex flex-col bg-white dark:bg-neutral-900 sm:rounded-3xl overflow-hidden"
             >
               <motion.div layoutId={`image-${poi.name}-${id}`}>
-                <OptimizedPoiImage
-                  src={poi.photoUrl}
+                <Image
+                  src={poi.photoUrl || '/placeholder.svg'}
                   alt={poi.name}
                   className="w-full h-80 lg:h-80 sm:rounded-tr-lg sm:rounded-tl-lg object-cover"
                   width={500}
                   height={320}
-                  priority
+                  quality={90}
+                  priority={true}
                 />
               </motion.div>
 
@@ -233,12 +234,13 @@ export function ExpandablePoiCard({
       >
         <div className="flex gap-4 flex-col md:flex-row">
           <motion.div layoutId={`image-${poi.name}-${id}`}>
-            <OptimizedPoiImage
-              src={poi.photoUrl}
+            <Image
+              src={poi.photoUrl || '/placeholder.svg'}
               alt={poi.name}
               className="h-40 w-40 md:h-14 md:w-14 rounded-lg object-cover"
-              width={100}
-              height={100}
+              width={160}
+              height={160}
+              quality={80}
             />
           </motion.div>
           <div className="">

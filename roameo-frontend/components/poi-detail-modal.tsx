@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { OptimizedPoiImage } from "@/components/optimized-poi-image"
+import Image from "next/image"
 import { Heart, Plus, MapPin, Star, Clock, Phone, Globe, Navigation, Check } from "lucide-react"
 import type { POI } from "@/lib/types"
 
@@ -41,16 +41,14 @@ export function PoiDetailModal({
         <div className="space-y-6 animate-in fade-in-50 duration-300">
           {/* Hero Image */}
           <div className="relative">
-            <OptimizedPoiImage
-              src={poi.photoUrl}
+            <Image
+              src={poi.photoUrl || '/placeholder.svg'}
               alt={poi.name}
               className="w-full h-64 object-cover rounded-lg"
               width={600}
               height={256}
-              quality="high"
-              poiName={poi.name}
-              rating={poi.rating}
-              enableThumbnail={false}
+              quality={90}
+              priority={true}
             />
             
             {/* Action buttons overlay */}

@@ -2,7 +2,7 @@
 
 import { Heart, Check, Star, ChevronLeft, ChevronRight, Info } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { OptimizedPoiImage } from "@/components/optimized-poi-image"
+import Image from "next/image"
 import type { POI } from "@/lib/types"
 import { useState } from "react"
 
@@ -41,15 +41,14 @@ export function SearchCard({ poi, isSaved, isItineraryItem, onToggleSave, onAddP
   return (
     <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
       <div className="relative">
-        <OptimizedPoiImage 
-          src={images[currentImageIndex] || poi.photoUrl} 
+        <Image 
+          src={images[currentImageIndex] || poi.photoUrl || '/placeholder.svg'} 
           alt={poi.name} 
           className={imgClass}
-          width={320}
-          height={192}
-          quality="medium"
-          poiName={poi.name}
-          rating={poi.rating}
+          width={400}
+          height={300}
+          quality={80}
+          priority={false}
         />
         
         {/* Navigation arrows */}
