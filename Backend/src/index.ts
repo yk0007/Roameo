@@ -26,7 +26,8 @@ app.use(cors({
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key']
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
+  optionsSuccessStatus: 200
 }));
 app.use(express.json());
 
@@ -57,12 +58,33 @@ wss.on("connection", async (ws: WebSocket, req: AuthenticatedMessage) => {
     return;
   }
 
-  console.log(`[ws] Client connected to session ${sessionId}`);
+  // Extract userId from Authorization header for WebSocket connections
+  const authHeader = req.headers.authorization;
+  let userId: string | undefined;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const token = authHeader.substring(7);
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+      const { data: { user } } = await supabase.auth.getUser(token);
+      if (user) {
+        userId = user.id;
+        req.userId = userId;
+      }
+    } catch (error) {
+      console.error('WebSocket auth error:', error);
+    }
+  }
+
+  console.log(`[ws] Client connected to session ${sessionId}, userId: ${userId || 'anonymous'}`);
 
   const existing = await db.getSession(sessionId);
   if (!existing) {
     console.log(`[ws] Session ${sessionId} not found, creating new one`);
-    await db.upsertSession(sessionId, { inviteId: sessions.get(sessionId)?.inviteId, trip: { sessionId }, userId: req.userId });
+    await db.upsertSession(sessionId, { inviteId: sessions.get(sessionId)?.inviteId, trip: { sessionId }, userId });
+  } else if (!existing.userId && userId) {
+    // Update existing session with userId if it wasn't set before
+    await db.upsertSession(sessionId, { userId });
   }
 
   hub.attach(sessionId, ws);

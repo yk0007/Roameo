@@ -135,7 +135,7 @@ export async function runRouter(input: GraphInput, history: Message[]): Promise<
   try {
     // Set up timeout for AI processing
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('AI processing timeout')), 30000); // 30 second timeout
+      setTimeout(() => reject(new Error('AI processing timeout')), 60000); // 60 second timeout
     });
     
     const processingPromise = app.invoke({ input: input, messages: history });
