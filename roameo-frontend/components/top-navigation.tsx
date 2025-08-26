@@ -21,6 +21,7 @@ interface Trip {
   title: string
   origin: string
   destination: string
+  destinations?: string[]
   duration: string
   travelers: string
   budget: string

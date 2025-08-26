@@ -18,9 +18,24 @@ interface AuthenticatedMessage extends IncomingMessage {
 }
 
 const app = express();
+// Add preflight OPTIONS handler for all routes
+app.options('*', cors({
+  origin: [
+    'https://roameo-app.vercel.app',
+    'https://roameo.onrender.com',
+    'http://localhost:3000',
+    'http://localhost:3001'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
+  optionsSuccessStatus: 200
+}));
+
 app.use(cors({
   origin: [
     'https://roameo-app.vercel.app',
+    'https://roameo.onrender.com', 
     'http://localhost:3000',
     'http://localhost:3001'
   ],
@@ -172,5 +187,15 @@ async function init() {
     console.log(`[roameo-backend] listening on http://localhost:${port}`);
   });
 }
+
+// Add unhandled promise rejection handler
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Promise Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  process.exit(1);
+});
 
 init();
