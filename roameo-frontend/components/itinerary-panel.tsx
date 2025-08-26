@@ -10,8 +10,6 @@ import {
   Plus,
   MoreHorizontal,
   Trash2,
-  Calendar,
-  Bookmark,
   RotateCcw,
   RotateCw,
   MapPin,
@@ -27,11 +25,8 @@ interface ItineraryPanelProps {
 }
 
 export function ItineraryPanel({ itinerary, trip, onPOISelect }: ItineraryPanelProps) {
-  const [activeTab, setActiveTab] = useState("Itinerary")
   const [expandedDays, setExpandedDays] = useState<number[]>([1])
   const [distancesEnabled, setDistancesEnabled] = useState(true)
-
-  const tabs = ["Itinerary", "Calendar", "Bookings"]
 
   const currentItinerary = itinerary
 
@@ -39,90 +34,8 @@ export function ItineraryPanel({ itinerary, trip, onPOISelect }: ItineraryPanelP
     setExpandedDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]))
   }
 
-  if (activeTab === "Calendar") {
-    return (
-      <div className="p-6 space-y-6">
-        <div className="flex items-center justify-center gap-2 mb-6">
-          {tabs.map((tab) => (
-            <Button
-              key={tab}
-              variant={activeTab === tab ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setActiveTab(tab)}
-              className={`backdrop-blur-md border rounded-full px-4 ${
-                activeTab === tab
-                  ? "bg-black/80 text-white border-black/20"
-                  : "bg-white/80 text-gray-700 border-white/30 hover:bg-white/90"
-              }`}
-            >
-              {tab === "Calendar" && <Calendar className="w-4 h-4 mr-2 border border-current rounded p-0.5" />}
-              {tab === "Bookings" && <Bookmark className="w-4 h-4 mr-2 border border-current rounded p-0.5" />}
-              {tab}
-            </Button>
-          ))}
-        </div>
-
-        <div className="text-center text-gray-500">
-          <Calendar className="w-12 h-12 mx-auto mb-4 opacity-50" />
-          <p>Calendar view coming soon</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (activeTab === "Bookings") {
-    return (
-      <div className="p-6 space-y-6">
-        <div className="flex items-center justify-center gap-2 mb-6">
-          {tabs.map((tab) => (
-            <Button
-              key={tab}
-              variant={activeTab === tab ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setActiveTab(tab)}
-              className={`backdrop-blur-md border rounded-full px-4 ${
-                activeTab === tab
-                  ? "bg-black/80 text-white border-black/20"
-                  : "bg-white/80 text-gray-700 border-white/30 hover:bg-white/90"
-              }`}
-            >
-              {tab === "Calendar" && <Calendar className="w-4 h-4 mr-2 border border-current rounded p-0.5" />}
-              {tab === "Bookings" && <Bookmark className="w-4 h-4 mr-2 border border-current rounded p-0.5" />}
-              {tab}
-            </Button>
-          ))}
-        </div>
-
-        <div className="text-center text-gray-500">
-          <Bookmark className="w-12 h-12 mx-auto mb-4 opacity-50" />
-          <p>No bookings yet</p>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-center gap-2 mb-6">
-        {tabs.map((tab) => (
-          <Button
-            key={tab}
-            variant={activeTab === tab ? "default" : "ghost"}
-            size="sm"
-            onClick={() => setActiveTab(tab)}
-            className={`backdrop-blur-md border rounded-full px-4 ${
-              activeTab === tab
-                ? "bg-black/80 text-white border-black/20"
-                : "bg-white/80 text-gray-700 border-white/30 hover:bg-white/90"
-            }`}
-          >
-            {tab === "Calendar" && <Calendar className="w-4 h-4 mr-2 border border-current rounded p-0.5" />}
-            {tab === "Bookings" && <Bookmark className="w-4 h-4 mr-2 border border-current rounded p-0.5" />}
-            {tab}
-          </Button>
-        ))}
-      </div>
-
       {/* Header with controls */}
       <div className="flex items-center justify-between">
         <div>

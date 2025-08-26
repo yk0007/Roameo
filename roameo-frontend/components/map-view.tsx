@@ -237,8 +237,8 @@ export function MapView({
     const mapId = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID
     try {
       mapInstance.current = new window.google.maps.Map(mapRef.current, {
-        center: { lat: 20, lng: 0 },
-        zoom: 2,
+        center: { lat: 20, lng: 0 }, // World center
+        zoom: 2, // World view
         styles: customStyle ? CUSTOM_MAP_STYLE : [],
         mapTypeControl: false,
         streetViewControl: false,

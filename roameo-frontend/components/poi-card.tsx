@@ -39,53 +39,43 @@ export function CompactPoiCard({ poi, isSaved, isItineraryItem, onToggleSave, on
           quality={80}
         />
         
-        {/* Top right buttons (only save) */}
+        {/* Top right love button */}
         <div className="absolute top-3 right-3 flex gap-2">
           <Button
             size="icon"
-            variant="ghost"
-            className="w-7 h-7 rounded-full bg-white/90 hover:bg-white shadow-sm border-0 transition-all duration-200 hover:scale-110"
+            variant="secondary"
+            className="w-7 h-7 rounded-full bg-white/80 hover:bg-white shadow-md"
             onClick={() => onToggleSave(poi, !isSaved)}
           >
-            <Heart className={`w-4 h-4 transition-colors duration-200 ${isSaved ? 'fill-red-500 text-red-500' : 'text-gray-600'}`} />
+            <Heart className={`w-4 h-4 ${isSaved ? 'fill-red-500 text-red-500' : 'text-gray-600'}`} />
           </Button>
+        </div>
+        
+        {/* Add to trip / Added state */}
+        <div className="absolute top-3 left-3">
+          {isItineraryItem ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled
+              className="rounded-full bg-white text-gray-700 shadow-sm cursor-default px-3 py-0.5 text-xs"
+            >
+              <Check className="w-4 h-4 mr-1" /> Added
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              className="bg-black/80 hover:bg-black text-white rounded-full px-3 py-0.5 text-xs"
+              onClick={() => onAddPoi(poi)}
+            >
+              Add to trip
+            </Button>
+          )}
         </div>
         
       </div>
       
       <div className="p-3">
-        {/* Add to trip / Added state */}
-        <div className="flex gap-2 mb-3">
-          {!isSaved && (
-            <button
-              onClick={() => onToggleSave(poi, true)}
-              className="shadow-[inset_0_0_0_2px_#ef4444] text-red-500 px-4 py-2 rounded-full tracking-wider uppercase font-bold bg-transparent hover:bg-red-500 hover:text-white dark:text-red-400 transition duration-200 text-xs flex-1 flex items-center justify-center gap-1"
-            >
-              <Heart className="w-3 h-3" />
-              Save
-            </button>
-          )}
-          
-          {!isItineraryItem && (
-            <button
-              onClick={() => onAddPoi(poi)}
-              className="shadow-[inset_0_0_0_2px_#3b82f6] text-blue-500 px-4 py-2 rounded-full tracking-wider uppercase font-bold bg-transparent hover:bg-blue-500 hover:text-white dark:text-blue-400 transition duration-200 text-xs flex-1 flex items-center justify-center gap-1"
-            >
-              <Plus className="w-3 h-3" />
-              Add
-            </button>
-          )}
-          
-          {isItineraryItem && (
-            <button
-              onClick={() => onReplan(poi)}
-              className="shadow-[inset_0_0_0_2px_#f59e0b] text-amber-500 px-4 py-2 rounded-full tracking-wider uppercase font-bold bg-transparent hover:bg-amber-500 hover:text-white dark:text-amber-400 transition duration-200 text-xs flex-1 flex items-center justify-center gap-1"
-            >
-              <RefreshCw className="w-3 h-3" />
-              Replan
-            </button>
-          )}
-        </div>
         <div className="flex justify-between items-start mb-2">
           <h3 className="font-semibold text-base text-gray-900 leading-tight">{poi.name}</h3>
           {poi.rating && (

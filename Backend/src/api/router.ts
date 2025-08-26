@@ -143,6 +143,18 @@ export function buildApiRouter(
             };
             db.patchTrip(sid, tripUpdate);
           }
+          // Persist itinerary updates
+          if (e.type === "itinerary.update") {
+            db.patchTrip(sid, { itinerary: e.data });
+          }
+          // Persist search results
+          if (e.type === "search.results") {
+            db.patchTrip(sid, { searchResults: e.data });
+          }
+          // Persist map data
+          if (e.type === "map.update") {
+            db.patchTrip(sid, { mapData: e.data });
+          }
         }
       }
       return res.json({ sessionId, inviteId, created: isNew, events: wsEvents });
