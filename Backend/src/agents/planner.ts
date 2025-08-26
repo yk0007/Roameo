@@ -22,6 +22,8 @@ export async function plannerAgent(
     } else {
     chatPrompt = `You are an expert travel planning assistant. Your goal is to create a beautifully formatted travel itinerary in **Markdown** for a ${days}-day trip to ${destination} from ${origin}.
 
+**CRITICAL**: You MUST create the itinerary for "${destination}" ONLY. Do NOT substitute with any other destination like Goa, Mumbai, or Delhi. The user specifically requested "${destination}".
+
 **IMPORTANT**: Start the response *directly* with the itinerary. Do NOT include any conversational introduction, greeting, or lead-in paragraph.
 
 ## ✍️ Formatting Rules:
@@ -245,23 +247,32 @@ function createDummyItinerary(ctx: { origin?: string; destination?: string; days
 
 async function extractTripDetails(message: string): Promise<{ destination?: string; days?: number }> {
   const gemini = new GeminiClient({ model: "flash" });
-  const prompt = `Extract the destination and number of days from the user's message.
+  const prompt = `Extract the destination and number of days from the user's message. Be very precise with destination names.
 
 User message: "${message}"
+
+CRITICAL: Extract the EXACT destination mentioned by the user. Do NOT change or substitute destination names.
+- If user says "ooty", extract "Ooty"
+- If user says "coonoor", extract "Coonoor" 
+- If user says "kodaikanal", extract "Kodaikanal"
+- Do NOT substitute with other destinations like Goa, Mumbai, etc.
 
 Respond with ONLY a JSON object with "destination" and "days" keys. If a value is not present, omit the key.
 For example:
 {
-  "destination": "Rameswaram",
+  "destination": "Ooty",
   "days": 3
 }`;
   const jsonResponse = await gemini.chat(prompt);
+  console.log(`[planner] Trip details extraction response: ${jsonResponse}`);
   const cleanedJson = jsonResponse.replace(/^```json\s*/i, "").replace(/\s*```\s*$/i, "").trim();
   const jsonMatch = cleanedJson.match(/\{[\s\S]*\}/);
 
   if (jsonMatch) {
     try {
-      return JSON.parse(jsonMatch[0]);
+      const result = JSON.parse(jsonMatch[0]);
+      console.log(`[planner] Extracted trip details:`, result);
+      return result;
     } catch (e) {
       console.warn("[planner] Failed to parse trip details JSON from Gemini.", e);
     }
