@@ -49,17 +49,17 @@ export class WriteThroughDb implements Db {
     console.log("[persist] Hydration complete");
   }
 
-  upsertSession(sessionId: string, data: Partial<SessionRecord>): SessionRecord {
+  async upsertSession(sessionId: string, data: Partial<SessionRecord>): Promise<SessionRecord> {
     const rec = this.mem.upsertSession(sessionId, data);
     this.flushUpsert(sessionId, data).catch(() => {});
     return rec;
   }
 
-  getSession(sessionId: string): SessionRecord | undefined {
+  async getSession(sessionId: string): Promise<SessionRecord | undefined> {
     return this.mem.getSession(sessionId);
   }
 
-  appendMessage(sessionId: string, msg: SessionRecord["messages"][number]): void {
+  async appendMessage(sessionId: string, msg: SessionRecord["messages"][number]): Promise<void> {
     this.mem.appendMessage(sessionId, msg);
     console.log(`[persist] appendMessage called for session ${sessionId}, message ${msg.id}`);
     this.flushAppendMessage(sessionId, msg).catch((e) => {
@@ -67,32 +67,32 @@ export class WriteThroughDb implements Db {
     });
   }
 
-  patchTrip(sessionId: string, patch: Record<string, any>): void {
+  async patchTrip(sessionId: string, patch: Record<string, any>): Promise<void> {
     this.mem.patchTrip(sessionId, patch);
     this.flushPatchTrip(sessionId, patch).catch(() => {});
   }
 
-  setInvite(sessionId: string, inviteId: string): void {
+  async setInvite(sessionId: string, inviteId: string): Promise<void> {
     this.mem.setInvite(sessionId, inviteId);
     this.flushSetInvite(sessionId, inviteId).catch(() => {});
   }
 
-  setPoiSaved(sessionId: string, poiId: string, saved: boolean): void {
+  async setPoiSaved(sessionId: string, poiId: string, saved: boolean): Promise<void> {
     this.mem.setPoiSaved(sessionId, poiId, saved);
     this.flushSetPoiSaved(sessionId, poiId, saved).catch(() => {});
   }
 
-  clearMessages(sessionId: string): void {
+  async clearMessages(sessionId: string): Promise<void> {
     this.mem.clearMessages(sessionId);
     this.flushClearMessages(sessionId).catch(() => {});
   }
 
-  deleteSession(sessionId: string): void {
+  async deleteSession(sessionId: string): Promise<void> {
     this.mem.deleteSession(sessionId);
     this.flushDeleteSession(sessionId).catch(() => {});
   }
 
-  listSessions(): SessionRecord[] {
+  async listSessions(): Promise<SessionRecord[]> {
     return this.mem.listSessions();
   }
 
