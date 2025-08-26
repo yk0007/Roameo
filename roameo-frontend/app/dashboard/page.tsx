@@ -11,7 +11,6 @@ import { Badge } from "@/components/ui/badge"
 import Image from "next/image"
 import { MapPin, Users, Send, LogOut, Plus, Mic, Clock, ArrowRight, Plane, Camera, Compass, Palmtree, Globe, Map } from "lucide-react"
 import DestinationCardArt from "@/components/DestinationCardArt"
-import { Cover } from "@/components/ui/cover"
 
 export default function Dashboard() {
   const router = useRouter()
@@ -109,7 +108,71 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-[#f8fafc] relative scroll-smooth overflow-hidden">
+    <div className="min-h-screen w-full bg-[#f8fafc] relative scroll-smooth">
+      {/* Bottom Fade Grid Background */}
+      <div
+        className="absolute inset-0 z-0"
+        style={{
+          backgroundImage: `
+            linear-gradient(to right, #e2e8f0 1px, transparent 1px),
+            linear-gradient(to bottom, #e2e8f0 1px, transparent 1px)
+          `,
+          backgroundSize: "20px 30px",
+          WebkitMaskImage: "radial-gradient(ellipse 70% 60% at 50% 100%, #000 60%, transparent 100%)",
+          maskImage: "radial-gradient(ellipse 70% 60% at 50% 100%, #000 60%, transparent 100%)",
+        }}
+      />
+
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <div
+          className="absolute top-20 left-10 text-orange-600/60 animate-bounce"
+          style={{ animationDelay: "0s", animationDuration: "3s" }}
+        >
+          <Plane className="w-10 h-10 rotate-45 drop-shadow-md" />
+        </div>
+        <div
+          className="absolute top-32 right-16 text-amber-600/60 animate-bounce"
+          style={{ animationDelay: "1s", animationDuration: "4s" }}
+        >
+          <Camera className="w-8 h-8 drop-shadow-md" />
+        </div>
+        <div
+          className="absolute top-1/4 left-20 text-emerald-600/60 animate-bounce"
+          style={{ animationDelay: "2s", animationDuration: "3.5s" }}
+        >
+          <Compass className="w-9 h-9 drop-shadow-md" />
+        </div>
+        <div
+          className="absolute top-1/3 right-10 text-green-600/60 animate-bounce"
+          style={{ animationDelay: "0.5s", animationDuration: "4.5s" }}
+        >
+          <Palmtree className="w-10 h-10 drop-shadow-md" />
+        </div>
+        <div
+          className="absolute bottom-1/3 left-16 text-teal-600/60 animate-bounce"
+          style={{ animationDelay: "1.5s", animationDuration: "3.8s" }}
+        >
+          <Globe className="w-8 h-8 drop-shadow-md" />
+        </div>
+        <div
+          className="absolute bottom-1/4 right-20 text-red-600/60 animate-bounce"
+          style={{ animationDelay: "2.5s", animationDuration: "4.2s" }}
+        >
+          <Map className="w-9 h-9 drop-shadow-md" />
+        </div>
+        <div
+          className="absolute top-1/2 left-8 text-yellow-600/60 animate-bounce"
+          style={{ animationDelay: "3s", animationDuration: "3.3s" }}
+        >
+          <Plane className="w-7 h-7 rotate-12 drop-shadow-md" />
+        </div>
+        <div
+          className="absolute bottom-20 right-8 text-orange-500/60 animate-bounce"
+          style={{ animationDelay: "1.8s", animationDuration: "4.8s" }}
+        >
+          <Camera className="w-8 h-8 rotate-45 drop-shadow-md" />
+        </div>
+      </div>
 
       <header className="flex items-center justify-between px-6 py-3 border-0 bg-white/80 backdrop-blur-md shadow-lg">
         <div className="flex items-center gap-3">
@@ -146,14 +209,21 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main className="flex-1 p-6">
-        <div className="max-w-6xl mx-auto">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome back!</h1>
-            <p className="text-gray-600">Plan your next adventure or continue working on existing trips.</p>
+      <div className="relative overflow-hidden z-10 min-h-screen flex items-center justify-center">
+        <div className="relative max-w-4xl mx-auto px-6 text-center">
+          <div className="space-y-6">
+            <p className="text-sm text-slate-600 font-medium tracking-wide uppercase opacity-0 animate-fade-in-up">
+              I'm
+            </p>
+            <h1 className="text-7xl md:text-8xl font-bold tracking-tight opacity-0 animate-fade-in-scale animation-delay-200">
+              roameo
+            </h1>
+            <p className="text-xl md:text-2xl text-slate-600 max-w-2xl mx-auto leading-relaxed opacity-0 animate-fade-in-up animation-delay-400">
+              Here to create a master plan for your dream trip loaded with memories.
+            </p>
           </div>
 
-          <div className="mb-8">
+          <div className="mt-12 opacity-0 animate-fade-in-up animation-delay-600">
             <form
               onSubmit={(e) => {
                 e.preventDefault()
@@ -161,33 +231,60 @@ export default function Dashboard() {
               }}
               className="relative"
             >
-              <div className="bg-white border rounded-lg shadow-sm p-4">
-                <div className="flex items-center gap-3">
+              <div className="bg-white/80 backdrop-blur-md border rounded-3xl shadow-lg p-4 border-zinc-300">
+                <div className="flex items-center gap-3 flex-row">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="flex-shrink-0 w-10 h-10 rounded-full hover:bg-white/80"
+                  >
+                    <Plus className="w-5 h-5" />
+                  </Button>
+
                   <Input
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     placeholder="Where would you like to go? What kind of experience are you looking for?"
-                    className="flex-1 text-base"
+                    className="flex-1 border-0 bg-transparent text-lg placeholder:text-gray-500 focus-visible:ring-0 focus-visible:ring-offset-0 px-0 shadow-none"
                   />
-                  <Button
-                    type="submit"
-                    className="bg-black hover:bg-gray-800 text-white"
-                    disabled={!message.trim()}
-                  >
-                    <Send className="w-4 h-4 mr-2" />
-                    Start Planning
-                  </Button>
+
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="w-10 h-10 rounded-full hover:bg-white/80"
+                    >
+                      <Mic className="w-5 h-5" />
+                    </Button>
+                    <Button
+                      type="submit"
+                      variant="ghost"
+                      size="sm"
+                      className="w-10 h-10 rounded-full hover:bg-white/80"
+                      disabled={!message.trim()}
+                    >
+                      <Send className="w-5 h-5" />
+                    </Button>
+                  </div>
                 </div>
               </div>
             </form>
-          </div>
 
+            <p className="text-xs text-gray-500 text-center mt-3">Roameo can make mistakes. Check important info.</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 relative z-10">
+        <div>
           <div className="flex items-center justify-between mb-8">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Your Trips</h2>
-              <p className="text-gray-600">Manage and explore your planned adventures</p>
+            <div className="opacity-0 animate-slide-in-left animation-delay-800">
+              <h2 className="text-3xl font-bold text-slate-900 mb-2">Your Trips</h2>
+              <p className="text-slate-600">Manage and explore your planned adventures</p>
             </div>
-            <Button className="bg-black hover:bg-gray-800 text-white" onClick={() => router.push("/chat")}>
+            <Button className="bg-white/80 backdrop-blur-md hover:bg-white/90 text-slate-900 rounded-full px-6 opacity-0 animate-fade-in-up animation-delay-800 border border-slate-200/50 shadow-lg" onClick={() => router.push("/chat")}>
               <Plus className="w-4 h-4 mr-2" />
               Plan New Trip
             </Button>
@@ -212,12 +309,12 @@ export default function Dashboard() {
                 return (
                   <Card 
                     key={trip.id} 
-                    className="group hover:shadow-xl transition-all duration-300 overflow-hidden bg-white/20 backdrop-blur-md border border-white/30 rounded-3xl hover:-translate-y-1 cursor-pointer"
+                    className="group hover:shadow-xl transition-all duration-300 overflow-hidden bg-white/80 backdrop-blur-md rounded-3xl hover:-translate-y-1 cursor-pointer border border-slate-200/50"
                     onClick={() => router.push(`/chat?sessionId=${encodeURIComponent(trip.id)}`)}
                   >
                     <div className="p-6">
                       {/* Destination card art */}
-                      <div className="relative h-48 bg-gray-100/50 backdrop-blur-sm rounded-2xl mb-4 overflow-hidden">
+                      <div className="relative h-48 bg-gray-100 rounded-2xl mb-4 overflow-hidden">
                         <DestinationCardArt
                           destination={trip.destination || trip.title}
                           variant="stamp"
@@ -234,7 +331,7 @@ export default function Dashboard() {
                         </div>
                         
                         {/* Destination with subtle styling */}
-                        <div className="flex items-center gap-2 text-gray-600 text-sm">
+                        <div className="flex items-center gap-2 text-gray-500 text-sm">
                           <MapPin className="w-4 h-4" />
                           <span>{trip.destination}</span>
                         </div>
@@ -245,19 +342,19 @@ export default function Dashboard() {
               })}
             </div>
           ) : (
-            <div className="text-center py-16 rounded-2xl bg-white/20 backdrop-blur-md border border-white/30">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-white/30 backdrop-blur-sm flex items-center justify-center">
-                <MapPin className="w-8 h-8 text-gray-600" />
+            <div className="text-center py-16 rounded-2xl bg-white/80 backdrop-blur-md border border-slate-200/50">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 flex items-center justify-center">
+                <MapPin className="w-8 h-8 text-gray-500" />
               </div>
               <h3 className="text-lg font-semibold text-slate-900 mb-2">No trips yet</h3>
               <p className="text-slate-600 mb-6">Start planning your first adventure with Roameo</p>
-              <Button className="bg-black hover:bg-gray-800 text-white rounded-full px-6" onClick={() => router.push("/chat") }>
+              <Button className="bg-white/80 backdrop-blur-md hover:bg-white/90 text-slate-900 rounded-full px-6 border border-slate-200/50 shadow-lg" onClick={() => router.push("/chat") }>
                 <Plus className="w-4 h-4 mr-2" /> Plan New Trip
               </Button>
             </div>
           )}
         </div>
-      </main>
+      </div>
     </div>
   )
 }
