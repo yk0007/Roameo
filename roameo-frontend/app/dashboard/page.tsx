@@ -11,7 +11,6 @@ import { Badge } from "@/components/ui/badge"
 import Image from "next/image"
 import { MapPin, Users, Send, LogOut, Plus, Mic, Clock, ArrowRight, Plane, Camera, Compass, Palmtree, Globe, Map } from "lucide-react"
 import DestinationCardArt from "@/components/DestinationCardArt"
-import { BackgroundRippleEffect } from "@/components/ui/background-ripple-effect"
 import { Cover } from "@/components/ui/cover"
 
 export default function Dashboard() {
@@ -111,8 +110,6 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen w-full bg-[#f8fafc] relative scroll-smooth overflow-hidden">
-      {/* Background Ripple Effect */}
-      <BackgroundRippleEffect />
 
       <header className="flex items-center justify-between px-6 py-3 border-0 bg-white/80 backdrop-blur-md shadow-lg">
         <div className="flex items-center gap-3">
@@ -149,21 +146,14 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <div className="relative overflow-hidden z-10 min-h-screen flex items-center justify-center">
-        <div className="relative max-w-4xl mx-auto px-6 text-center">
-          <div className="space-y-6">
-            <p className="text-sm text-slate-600 font-medium tracking-wide uppercase opacity-0 animate-fade-in-up">
-              I'm
-            </p>
-            <h1 className="text-7xl md:text-8xl font-bold tracking-tight opacity-0 animate-fade-in-scale animation-delay-200 bg-clip-text text-transparent bg-gradient-to-b from-neutral-800 via-neutral-700 to-neutral-700">
-              <Cover>roameo</Cover>
-            </h1>
-            <p className="text-xl md:text-2xl text-slate-600 max-w-2xl mx-auto leading-relaxed opacity-0 animate-fade-in-up animation-delay-400">
-              Here to create a <Cover>master plan</Cover> for your dream trip loaded with memories.
-            </p>
+      <main className="flex-1 p-6">
+        <div className="max-w-6xl mx-auto">
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome back!</h1>
+            <p className="text-gray-600">Plan your next adventure or continue working on existing trips.</p>
           </div>
 
-          <div className="mt-12 opacity-0 animate-fade-in-up animation-delay-600">
+          <div className="mb-8">
             <form
               onSubmit={(e) => {
                 e.preventDefault()
@@ -171,60 +161,33 @@ export default function Dashboard() {
               }}
               className="relative"
             >
-              <div className="bg-white/80 backdrop-blur-md border rounded-3xl shadow-lg p-4 border-zinc-300">
-                <div className="flex items-center gap-3 flex-row">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="flex-shrink-0 w-10 h-10 rounded-full hover:bg-white/80"
-                  >
-                    <Plus className="w-5 h-5" />
-                  </Button>
-
+              <div className="bg-white border rounded-lg shadow-sm p-4">
+                <div className="flex items-center gap-3">
                   <Input
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     placeholder="Where would you like to go? What kind of experience are you looking for?"
-                    className="flex-1 border-0 bg-transparent text-lg placeholder:text-gray-500 focus-visible:ring-0 focus-visible:ring-offset-0 px-0 shadow-none"
+                    className="flex-1 text-base"
                   />
-
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="w-10 h-10 rounded-full hover:bg-white/80"
-                    >
-                      <Mic className="w-5 h-5" />
-                    </Button>
-                    <Button
-                      type="submit"
-                      variant="ghost"
-                      size="sm"
-                      className="w-10 h-10 rounded-full hover:bg-white/80"
-                      disabled={!message.trim()}
-                    >
-                      <Send className="w-5 h-5" />
-                    </Button>
-                  </div>
+                  <Button
+                    type="submit"
+                    className="bg-black hover:bg-gray-800 text-white"
+                    disabled={!message.trim()}
+                  >
+                    <Send className="w-4 h-4 mr-2" />
+                    Start Planning
+                  </Button>
                 </div>
               </div>
             </form>
-
-            <p className="text-xs text-gray-500 text-center mt-3">Roameo can make mistakes. Check important info.</p>
           </div>
-        </div>
-      </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 relative z-10">
-        <div>
           <div className="flex items-center justify-between mb-8">
-            <div className="opacity-0 animate-slide-in-left animation-delay-800">
-              <h2 className="text-3xl font-bold text-slate-900 mb-2">Your Trips</h2>
-              <p className="text-slate-600">Manage and explore your planned adventures</p>
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Your Trips</h2>
+              <p className="text-gray-600">Manage and explore your planned adventures</p>
             </div>
-            <Button className="bg-black hover:bg-gray-800 text-white rounded-full px-6 opacity-0 animate-fade-in-up animation-delay-800" onClick={() => router.push("/chat")}>
+            <Button className="bg-black hover:bg-gray-800 text-white" onClick={() => router.push("/chat")}>
               <Plus className="w-4 h-4 mr-2" />
               Plan New Trip
             </Button>
@@ -294,7 +257,7 @@ export default function Dashboard() {
             </div>
           )}
         </div>
-      </div>
+      </main>
     </div>
   )
 }
