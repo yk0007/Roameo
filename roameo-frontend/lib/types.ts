@@ -92,5 +92,5 @@ export type WsEvent =
   | { type: "session.ready"; data: { sessionId: SessionId; inviteId: InviteId } }
   | { type: "chat.history"; data: ChatMessage[] }
 
-export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:4000"
-export const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:4000/ws"
+export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://roameo.onrender.com"
+export const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "wss://roameo.onrender.com/ws"
