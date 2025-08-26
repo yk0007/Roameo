@@ -3,9 +3,17 @@ import { supabase } from "./supabase/client"
 import { BACKEND_URL, type InviteId, type TripContext, type WsEvent } from "./types"
 
 export async function sendChat({ sessionId, inviteId, message }: { sessionId?: SessionId; inviteId?: InviteId; message: string }) {
+  const { data: { session } } = await supabase.auth.getSession()
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+  }
+  if (session?.access_token) {
+    headers.Authorization = `Bearer ${session.access_token}`
+  }
+  
   const res = await fetch(`${BACKEND_URL}/api/chat/send`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ sessionId, inviteId, message }),
   })
   if (!res.ok) throw new Error(`sendChat failed: ${res.status}`)
@@ -13,9 +21,17 @@ export async function sendChat({ sessionId, inviteId, message }: { sessionId?: S
 }
 
 export async function tripUpdate(sessionId: SessionId, patch: Partial<TripContext>) {
+  const { data: { session } } = await supabase.auth.getSession()
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+  }
+  if (session?.access_token) {
+    headers.Authorization = `Bearer ${session.access_token}`
+  }
+  
   const res = await fetch(`${BACKEND_URL}/api/trip/update`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ sessionId, patch }),
   })
   if (!res.ok) throw new Error(`tripUpdate failed: ${res.status}`)
