@@ -8,7 +8,6 @@ export interface TripContext {
   title?: string
   origin?: string
   destination?: string
-  destinations?: string[] // Support multiple destinations
   days?: number
   travelers?: number
   budget?: string
@@ -24,23 +23,17 @@ export interface ChatMessage {
 export interface POI {
   id: string
   name: string
-  type: "stay" | "restaurant" | "attraction" | "Activity" | "Hotel"
-  lat?: number
-  lng?: number
+  type: "stay" | "restaurant" | "attraction"
+  lat: number
+  lng: number
   rating?: number
   price?: string
   address?: string
   photoUrl?: string
   source?: "google" | "foursquare" | "custom"
-  description?: string
-  openingHours?: string[]
-  phone?: string
-  website?: string
-  priceLevel?: number
 }
 
 export interface Activity {
-  id?: string;
   name: string;
   start: string;
   end: string;
@@ -93,5 +86,5 @@ export type WsEvent =
   | { type: "session.ready"; data: { sessionId: SessionId; inviteId: InviteId } }
   | { type: "chat.history"; data: ChatMessage[] }
 
-export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://roameo.onrender.com"
-export const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "wss://roameo.onrender.com/ws"
+export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:4000"
+export const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:4000/ws"

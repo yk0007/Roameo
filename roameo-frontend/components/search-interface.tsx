@@ -22,7 +22,6 @@ interface SearchInterfaceProps {
 export function SearchInterface({ activeView, onViewChange, results, savedIds, itineraryPoiIds, onAddPoi, onToggleSave, onReplan }: SearchInterfaceProps) {
   const [activeTab, setActiveTab] = useState("Stays")
   const [searchQuery, setSearchQuery] = useState("")
-  const [displayCount, setDisplayCount] = useState(20)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const scrollPosRef = useRef<Record<string, number>>({ Stays: 0, Restaurants: 0, Attractions: 0 })
 
@@ -42,40 +41,10 @@ export function SearchInterface({ activeView, onViewChange, results, savedIds, i
   }, [results, activeTab, searchQuery])
 
   const list = useMemo(() => {
-    return allResults.slice(0, displayCount)
-  }, [allResults, displayCount])
+    return allResults
+  }, [allResults])
 
-  const loadMore = useCallback(() => {
-    if (displayCount < allResults.length) {
-      setDisplayCount(prev => Math.min(prev + 20, allResults.length))
-    }
-  }, [displayCount, allResults.length])
 
-  // Infinite scroll using intersection observer
-  useEffect(() => {
-    const handleScroll = () => {
-      const scrollContainer = scrollRef.current
-      if (!scrollContainer) return
-
-      const { scrollTop, scrollHeight, clientHeight } = scrollContainer
-      const isNearBottom = scrollHeight - scrollTop - clientHeight < 200
-
-      if (isNearBottom && displayCount < allResults.length) {
-        loadMore()
-      }
-    }
-
-    const scrollContainer = scrollRef.current
-    if (scrollContainer) {
-      scrollContainer.addEventListener('scroll', handleScroll, { passive: true })
-      return () => scrollContainer.removeEventListener('scroll', handleScroll)
-    }
-  }, [loadMore, displayCount, allResults.length])
-
-  // Reset display count when tab changes
-  useEffect(() => {
-    setDisplayCount(20)
-  }, [activeTab])
 
   // Restore scroll position on tab switch
   useEffect(() => {
@@ -152,41 +121,22 @@ export function SearchInterface({ activeView, onViewChange, results, savedIds, i
       >
         {!results ? (
           <div className="text-sm text-gray-500">No results yet. Ask Roameo to search for places.</div>
-        ) : (!results.stays || results.stays.length === 0) && 
-             (!results.restaurants || results.restaurants.length === 0) && 
-             (!results.attractions || results.attractions.length === 0) ? (
-          <div className="text-sm text-gray-500">No results yet. Ask Roameo to search for places.</div>
         ) : list.length === 0 ? (
-          <div className="text-sm text-gray-500">
-            No matches for your filters. Try switching to a different tab or clearing your search.
-          </div>
+          <div className="text-sm text-gray-500">No matches for your filters.</div>
         ) : (
-          <>
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-6">
-              {list.map((poi) => (
-                <SearchCard
-                  key={poi.id}
-                  poi={poi}
-                  isSaved={savedIds?.has(poi.id) || false}
-                  isItineraryItem={!!itineraryPoiIds?.has(poi.id)}
-                  onToggleSave={onToggleSave ? (p: POI, n: boolean) => onToggleSave(p, n) : () => {}}
-                  onAddPoi={onAddPoi ? (p: POI) => onAddPoi(p) : () => {}}
-                  onReplan={onReplan ? (p: POI) => onReplan(p) : () => {}}
-                />
-              ))}
-            </div>
-            {displayCount < allResults.length && (
-              <div className="flex justify-center mt-6">
-                <Button 
-                  onClick={loadMore}
-                  variant="outline"
-                  className="rounded-2xl bg-white/50 backdrop-blur-sm border-white/30"
-                >
-                  Load More ({allResults.length - displayCount} remaining)
-                </Button>
-              </div>
-            )}
-          </>
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-6">
+            {list.map((poi) => (
+              <SearchCard
+                key={poi.id}
+                poi={poi}
+                isSaved={savedIds?.has(poi.id) || false}
+                isItineraryItem={!!itineraryPoiIds?.has(poi.id)}
+                onToggleSave={onToggleSave ? (p: POI, n: boolean) => onToggleSave(p, n) : () => {}}
+                onAddPoi={onAddPoi ? (p: POI) => onAddPoi(p) : () => {}}
+                onReplan={onReplan ? (p: POI) => onReplan(p) : () => {}}
+              />
+            ))}
+          </div>
         )}
       </div>
     </div>

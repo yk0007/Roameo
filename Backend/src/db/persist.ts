@@ -49,17 +49,17 @@ export class WriteThroughDb implements Db {
     console.log("[persist] Hydration complete");
   }
 
-  async upsertSession(sessionId: string, data: Partial<SessionRecord>): Promise<SessionRecord> {
+  upsertSession(sessionId: string, data: Partial<SessionRecord>): SessionRecord {
     const rec = this.mem.upsertSession(sessionId, data);
     this.flushUpsert(sessionId, data).catch(() => {});
     return rec;
   }
 
-  async getSession(sessionId: string): Promise<SessionRecord | undefined> {
+  getSession(sessionId: string): SessionRecord | undefined {
     return this.mem.getSession(sessionId);
   }
 
-  async appendMessage(sessionId: string, msg: SessionRecord["messages"][number]): Promise<void> {
+  appendMessage(sessionId: string, msg: SessionRecord["messages"][number]): void {
     this.mem.appendMessage(sessionId, msg);
     console.log(`[persist] appendMessage called for session ${sessionId}, message ${msg.id}`);
     this.flushAppendMessage(sessionId, msg).catch((e) => {
@@ -67,32 +67,32 @@ export class WriteThroughDb implements Db {
     });
   }
 
-  async patchTrip(sessionId: string, patch: Record<string, any>): Promise<void> {
+  patchTrip(sessionId: string, patch: Record<string, any>): void {
     this.mem.patchTrip(sessionId, patch);
     this.flushPatchTrip(sessionId, patch).catch(() => {});
   }
 
-  async setInvite(sessionId: string, inviteId: string): Promise<void> {
+  setInvite(sessionId: string, inviteId: string): void {
     this.mem.setInvite(sessionId, inviteId);
     this.flushSetInvite(sessionId, inviteId).catch(() => {});
   }
 
-  async setPoiSaved(sessionId: string, poiId: string, saved: boolean): Promise<void> {
+  setPoiSaved(sessionId: string, poiId: string, saved: boolean): void {
     this.mem.setPoiSaved(sessionId, poiId, saved);
     this.flushSetPoiSaved(sessionId, poiId, saved).catch(() => {});
   }
 
-  async clearMessages(sessionId: string): Promise<void> {
+  clearMessages(sessionId: string): void {
     this.mem.clearMessages(sessionId);
     this.flushClearMessages(sessionId).catch(() => {});
   }
 
-  async deleteSession(sessionId: string): Promise<void> {
+  deleteSession(sessionId: string): void {
     this.mem.deleteSession(sessionId);
     this.flushDeleteSession(sessionId).catch(() => {});
   }
 
-  async listSessions(): Promise<SessionRecord[]> {
+  listSessions(): SessionRecord[] {
     return this.mem.listSessions();
   }
 
@@ -139,7 +139,7 @@ export class WriteThroughDb implements Db {
     
     try {
       // Save message with session_id that matches the chat_sessions.id
-      const session = await this.mem.getSession(sessionId);
+      const session = this.mem.getSession(sessionId);
       const { error } = await this.client.from("messages").upsert({
         id: msg.id, 
         session_id: sessionId, 
@@ -161,8 +161,7 @@ export class WriteThroughDb implements Db {
 
   private async flushPatchTrip(sessionId: string, patch: Record<string, any>) {
     if (!this.client) return;
-    const session = await this.mem.getSession(sessionId);
-    const cur = session?.trip || {};
+    const cur = this.mem.getSession(sessionId)?.trip || {};
     await this.client.from("chat_sessions").upsert({ session_id: sessionId, trip: cur }, { onConflict: "session_id" });
   }
 

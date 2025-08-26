@@ -16,6 +16,9 @@ yarn-error.log*
 Backend/.env*
 roameo-frontend/.env*
 
+# Reference folder
+Reference/
+
 # Build outputs
 .next/
 dist/

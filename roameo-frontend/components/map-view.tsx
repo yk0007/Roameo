@@ -93,6 +93,15 @@ export function MapView({
     { stay: true, restaurant: true, attraction: true }
   )
   const [savedOnly, setSavedOnly] = useState(false)
+  const localItineraryPoiIds = useMemo(() => {
+    if (!itinerary) return new Set<string>()
+    const ids = new Set<string>()
+    itinerary.daysPlan.forEach(day => {
+      day.activities.forEach(act => act.poiId && ids.add(act.poiId))
+      if (day.accommodation?.poiId) ids.add(day.accommodation.poiId)
+    })
+    return ids
+  }, [itinerary])
 
   const [addedOnly, setAddedOnly] = useState(!!(itineraryPoiIds && itineraryPoiIds.size > 0))
 
@@ -119,13 +128,13 @@ export function MapView({
         if (!savedIds.has(p.id)) return false
       }
       if (addedOnly) {
-        if (!itineraryPoiIds) return false
-        if (!itineraryPoiIds.has(p.id)) return false
+        if (!localItineraryPoiIds) return false
+        if (!localItineraryPoiIds.has(p.id)) return false
       }
       return true
     })
     return list
-  }, [pois, filterAll, filterTypes, savedOnly, savedIds, addedOnly, itineraryPoiIds])
+  }, [pois, filterAll, filterTypes, savedOnly, savedIds, addedOnly, localItineraryPoiIds])
 
   // Close filter menu on outside click / Esc
   useEffect(() => {
@@ -160,44 +169,36 @@ export function MapView({
     if (!window.__gmapsLoading) {
       window.__gmapsLoading = true
       
-      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-      console.log('Google Maps API Key check:', apiKey ? 'Present' : 'Missing');
-      if (!apiKey) {
-        console.error('Google Maps API key not configured. Please set NEXT_PUBLIC_GOOGLE_MAPS_API_KEY.');
-        setApiKeyError(true);
-        return;
-      }
-
-      const script = document.createElement("script");
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geometry,marker&v=weekly&callback=initMap&loading=async`;
-      script.async = true;
-      script.defer = true;
-
-      const init = () => {
-        const ensureReady = () => {
-          if (window.google?.maps?.Map) {
-            setGmapsReady(true);
-            window.__gmapsInitCallbacks?.forEach((cb) => cb());
-            window.__gmapsInitCallbacks = [];
-          } else {
-            setTimeout(ensureReady, 50);
+      // Fetch API key from backend and load script
+      fetch('/api/maps/api-key')
+        .then(response => response.json())
+        .then(data => {
+          const script = document.createElement("script")
+          // Use callback to ensure the core 'maps' library (with google.maps.Map) is fully available
+          script.src = `https://maps.googleapis.com/maps/api/js?key=${data.apiKey}&libraries=geometry,marker&v=weekly&callback=initMap`
+          script.async = true
+          const init = () => {
+            const ensureReady = () => {
+              if (window.google?.maps?.Map) {
+                // Mark as ready and flush callbacks
+                setGmapsReady(true)
+                window.__gmapsInitCallbacks?.forEach((cb) => cb())
+                window.__gmapsInitCallbacks = []
+              } else {
+                // Retry shortly until constructor is available
+                setTimeout(ensureReady, 50)
+              }
+            }
+            ensureReady()
           }
-        };
-        ensureReady();
-      };
-
-      script.addEventListener("error", (e) => {
-        console.error('Failed to load Google Maps script:', e);
-        setApiKeyError(true);
-      });
-
-      script.addEventListener("load", () => {
-        console.log('Google Maps script loaded successfully');
-      });
-
-      (window as any).initMap = init;
-      document.body.appendChild(script);
-      console.log('Google Maps script added to DOM:', script.src);
+          ;(window as any).initMap = init
+          script.addEventListener("load", init)
+          document.body.appendChild(script)
+        })
+        .catch(error => {
+          console.error('Failed to load Google Maps API key:', error)
+          setApiKeyError(true)
+        })
     }
   }, [])
 
@@ -315,38 +316,33 @@ export function MapView({
       if (!poi.lat || !poi.lng) return
 
       const isSaved = savedIds?.has(poi.id)
-      const isAdded = itineraryPoiIds?.has(poi.id)
+      const isAdded = localItineraryPoiIds?.has(poi.id)
 
       const itineraryPois = itinerary?.daysPlan.flatMap(d => d.activities).map(a => a.poiId) || []
       const poiIndex = isAdded ? itineraryPois.indexOf(poi.id) : -1
 
-      // Create marker element for AdvancedMarkerElement
-      const markerElement = document.createElement('div')
-      markerElement.style.width = '24px'
-      markerElement.style.height = '24px'
-      markerElement.style.borderRadius = '50%'
-      markerElement.style.display = 'flex'
-      markerElement.style.alignItems = 'center'
-      markerElement.style.justifyContent = 'center'
-      markerElement.style.fontSize = '12px'
-      markerElement.style.fontWeight = 'bold'
-      markerElement.style.color = 'white'
-      markerElement.style.fontFamily = 'Arial, sans-serif'
-      
-      if (isAdded) {
-        markerElement.style.backgroundColor = 'black'
-        markerElement.style.border = '2px solid white'
-        markerElement.textContent = (poiIndex + 1).toString()
-      } else {
-        markerElement.style.backgroundColor = isSaved ? '#f472b6' : '#2563eb'
-        markerElement.style.border = `2px solid ${isSaved ? '#f9a8d4' : '#60a5fa'}`
-      }
 
-      const marker = new window.google.maps.marker.AdvancedMarkerElement({
+
+      const marker = new window.google.maps.Marker({
         position: { lat: poi.lat, lng: poi.lng },
         map: mapInstance.current!,
         title: poi.name,
-        content: markerElement,
+        icon: isAdded
+          ? {
+              url: `data:image/svg+xml;utf-8,${encodeURIComponent(
+                `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="black" stroke="white" stroke-width="2"/><text x="12" y="16" font-size="12" fill="white" text-anchor="middle" font-family="Arial, sans-serif" font-weight="bold">${poiIndex + 1}</text></svg>`
+              )}`,
+              scaledSize: new window.google.maps.Size(24, 24),
+              anchor: new window.google.maps.Point(12, 12),
+            }
+          : {
+              path: window.google.maps.SymbolPath.CIRCLE,
+              scale: 6,
+              fillColor: isSaved ? '#f9a8d4' : '#60a5fa',
+              fillOpacity: 1,
+              strokeColor: isSaved ? '#f472b6' : '#2563eb',
+              strokeWeight: 2,
+            },
       })
 
       const infoWindow = new window.google.maps.InfoWindow({
@@ -524,7 +520,7 @@ export function MapView({
     }, 100) // Small delay to ensure map is ready
 
     return () => clearTimeout(timeoutId)
-  }, [filteredPois, gmapsReady, savedIds, itineraryPoiIds, onToggleSave, onAddPoi, onReplan])
+  }, [filteredPois, gmapsReady, savedIds, localItineraryPoiIds, onToggleSave, onAddPoi, onReplan])
 
   // Auto-zoom to fit markers and routes
   useEffect(() => {

@@ -25,7 +25,7 @@ export function buildApiRouter(
     const { sessionId, patch } = req.body as { sessionId?: string; patch?: Partial<TripContext> };
     if (!sessionId || !patch) return res.status(400).json({ error: "sessionId and patch required" });
     const event: WsEvent = { type: "navbar.update", data: patch };
-    await db.patchTrip(sessionId, patch as Record<string, any>);
+    db.patchTrip(sessionId, patch as Record<string, any>);
     hub.emit(sessionId, event);
     res.json({ ok: true });
   });
@@ -36,7 +36,7 @@ export function buildApiRouter(
     const { sessionId } = req.body as { sessionId?: string };
     if (!sessionId) return res.status(400).json({ error: "sessionId required" });
     const inviteId = randomUUID().slice(0, 8);
-    await db.setInvite(sessionId, inviteId);
+    db.setInvite(sessionId, inviteId);
     res.json({ inviteId });
   });
 
@@ -44,7 +44,7 @@ export function buildApiRouter(
   r.post("/poi/save", async (req: Request, res: Response) => {
     const { sessionId, poiId, saved } = req.body as { sessionId?: string; poiId?: string; saved?: boolean };
     if (!sessionId || !poiId) return res.status(400).json({ error: "sessionId and poiId required" });
-    await db.setPoiSaved(sessionId, poiId, Boolean(saved));
+    db.setPoiSaved(sessionId, poiId, Boolean(saved));
     res.json({ ok: true, saved: Boolean(saved) });
   });
 
@@ -52,7 +52,7 @@ export function buildApiRouter(
   r.post("/chat/clear", async (req: Request, res: Response) => {
     const { sessionId } = req.body as { sessionId?: string };
     if (!sessionId) return res.status(400).json({ error: "sessionId required" });
-    await db.clearMessages(sessionId);
+    db.clearMessages(sessionId);
     hub.emit(sessionId, { type: "chat.append", data: { id: "sys", role: "assistant", content: "Chat cleared.", createdAt: new Date().toISOString() } as any });
     res.json({ ok: true });
   });
@@ -61,7 +61,7 @@ export function buildApiRouter(
   r.delete("/sessions/:sessionId", authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
     const { sessionId } = req.params;
     if (!sessionId) return res.status(400).json({ error: "sessionId required" });
-    await db.deleteSession(sessionId);
+    db.deleteSession(sessionId);
     // Also clear any parallel in-memory cache, if provided
     try {
       opts?.onDeleteSession?.(sessionId);
@@ -72,7 +72,7 @@ export function buildApiRouter(
   // Expose saved POI IDs for a session so the client can restore Saved tab state
   r.get("/sessions/:sessionId/saved-pois", authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
     const { sessionId } = req.params;
-    const s = await db.getSession(sessionId);
+    const s = db.getSession(sessionId);
     if (!s) return res.status(404).json({ error: "Session not found" });
     res.json({ ids: Array.from(s.savedPoiIds || []) });
   });
@@ -81,7 +81,7 @@ export function buildApiRouter(
   r.get("/session/saved", async (req: Request, res: Response) => {
     const { sessionId } = req.query as { sessionId?: string };
     if (!sessionId) return res.status(400).json({ error: "sessionId required" });
-    const s = await db.getSession(sessionId);
+    const s = db.getSession(sessionId);
     if (!s) return res.status(404).json({ error: "Session not found" });
     res.json({ ids: Array.from(s.savedPoiIds || []) });
   });
@@ -117,10 +117,10 @@ export function buildApiRouter(
     }
 
     const sid = sessionId as string;
-    await db.appendMessage(sid, { id: randomUUID(), role: "user", content: message, createdAt: new Date().toISOString() });
+    db.appendMessage(sid, { id: randomUUID(), role: "user", content: message, createdAt: new Date().toISOString() });
 
     try {
-      const session = await db.getSession(sid);
+      const session = db.getSession(sid);
       let wsEvents: any[] = [];
       if (session) {
         // Fetch chat history for context
@@ -131,7 +131,7 @@ export function buildApiRouter(
           hub.emit(sid, e);
           // Persist assistant messages to database
           if (e.type === "chat.append" && e.data.role === "assistant") {
-            await db.appendMessage(sid, e.data);
+            db.appendMessage(sid, e.data);
           }
           // Update trip data when navbar update event occurs
           if (e.type === "navbar.update") {
@@ -141,7 +141,7 @@ export function buildApiRouter(
               days: e.data.days,
               title: e.data.title
             };
-            await db.patchTrip(sid, tripUpdate);
+            db.patchTrip(sid, tripUpdate);
           }
         }
       }
@@ -153,7 +153,7 @@ export function buildApiRouter(
         data: errorMessage,
       });
       // Persist error message to database
-      await db.appendMessage(sid, errorMessage as any);
+      db.appendMessage(sid, errorMessage as any);
       return res.json({ sessionId, inviteId, created: isNew, events: [] });
     }
   });

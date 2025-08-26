@@ -15,13 +15,13 @@ export interface SessionRecord {
 }
 
 export interface Db {
-  upsertSession(sessionId: string, data: Partial<SessionRecord>): Promise<SessionRecord>;
-  getSession(sessionId: string): Promise<SessionRecord | undefined>;
-  appendMessage(sessionId: string, msg: SessionRecord["messages"][number]): Promise<void>;
-  patchTrip(sessionId: string, patch: Record<string, any>): Promise<void>;
-  setInvite(sessionId: string, inviteId: string): Promise<void>;
-  setPoiSaved(sessionId: string, poiId: string, saved: boolean): Promise<void>;
-  clearMessages(sessionId: string): Promise<void>;
-  deleteSession(sessionId: string): Promise<void>;
-  listSessions(): Promise<SessionRecord[]>;
+  upsertSession(sessionId: string, data: Partial<SessionRecord>): SessionRecord;
+  getSession(sessionId: string): SessionRecord | undefined;
+  appendMessage(sessionId: string, msg: SessionRecord["messages"][number]): void;
+  patchTrip(sessionId: string, patch: Record<string, any>): void;
+  setInvite(sessionId: string, inviteId: string): void;
+  setPoiSaved(sessionId: string, poiId: string, saved: boolean): void;
+  clearMessages(sessionId: string): void;
+  deleteSession(sessionId: string): void;
+  listSessions(): SessionRecord[];
 }
