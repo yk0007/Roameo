@@ -3,7 +3,7 @@ import type { Db, SessionRecord } from "./types.js";
 export class MemoryDb implements Db {
   private sessions = new Map<string, SessionRecord>();
 
-  upsertSession(sessionId: string, data: Partial<SessionRecord>): SessionRecord {
+  async upsertSession(sessionId: string, data: Partial<SessionRecord>): Promise<SessionRecord> {
     const existing = this.sessions.get(sessionId);
     if (existing) {
       const merged: SessionRecord = {
@@ -27,42 +27,42 @@ export class MemoryDb implements Db {
     return created;
   }
 
-  getSession(sessionId: string): SessionRecord | undefined {
+  async getSession(sessionId: string): Promise<SessionRecord | undefined> {
     return this.sessions.get(sessionId);
   }
 
-  appendMessage(sessionId: string, msg: SessionRecord["messages"][number]): void {
-    const s = this.upsertSession(sessionId, {});
+  async appendMessage(sessionId: string, msg: SessionRecord["messages"][number]): Promise<void> {
+    const s = await this.upsertSession(sessionId, {});
     s.messages.push(msg);
     console.log(`[memory] appendMessage: session ${sessionId} now has ${s.messages.length} messages`);
   }
 
-  patchTrip(sessionId: string, patch: Record<string, any>): void {
-    const s = this.upsertSession(sessionId, {});
+  async patchTrip(sessionId: string, patch: Record<string, any>): Promise<void> {
+    const s = await this.upsertSession(sessionId, {});
     s.trip = { ...s.trip, ...patch };
   }
 
-  setInvite(sessionId: string, inviteId: string): void {
-    const s = this.upsertSession(sessionId, {});
+  async setInvite(sessionId: string, inviteId: string): Promise<void> {
+    const s = await this.upsertSession(sessionId, {});
     s.inviteId = inviteId;
   }
 
-  setPoiSaved(sessionId: string, poiId: string, saved: boolean): void {
-    const s = this.upsertSession(sessionId, {});
+  async setPoiSaved(sessionId: string, poiId: string, saved: boolean): Promise<void> {
+    const s = await this.upsertSession(sessionId, {});
     if (saved) s.savedPoiIds.add(poiId);
     else s.savedPoiIds.delete(poiId);
   }
 
-  clearMessages(sessionId: string): void {
-    const s = this.upsertSession(sessionId, {});
+  async clearMessages(sessionId: string): Promise<void> {
+    const s = await this.upsertSession(sessionId, {});
     s.messages = [];
   }
 
-  deleteSession(sessionId: string): void {
+  async deleteSession(sessionId: string): Promise<void> {
     this.sessions.delete(sessionId);
   }
 
-  listSessions(): SessionRecord[] {
+  async listSessions(): Promise<SessionRecord[]> {
     return Array.from(this.sessions.values());
   }
 }
