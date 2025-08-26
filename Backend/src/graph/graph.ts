@@ -8,6 +8,7 @@ import { mapAgent } from "../agents/map.js";
 import { chatAgent } from "../agents/chat.js";
 import { intentAgent } from "../agents/intent.js";
 import { generateSessionTitle } from "../agents/title.js";
+import { destinationExtractionAgent, immediatePoiSearchAgent, generateDestinationChatResponse } from "../agents/destination.js";
 
 export type GraphInput = {
   sessionId: string;
@@ -19,7 +20,14 @@ interface State {
   messages: Message[];
   input: GraphInput;
   events: WsEvent[];
-  route: "planner" | "chat";
+  route: "planner" | "destination_search" | "chat";
+  extractedDestination?: {
+    destination?: string;
+    destinations?: string[];
+    days?: number;
+    origin?: string;
+    hasDestination: boolean;
+  };
 }
 
 const graphState: StateGraphArgs<State>["channels"] = {
@@ -39,14 +47,22 @@ const graphState: StateGraphArgs<State>["channels"] = {
     reducer: (x, y) => y ?? x,
     default: () => "chat",
   },
+  extractedDestination: {
+    reducer: (x, y) => y ?? x,
+    default: () => undefined,
+  },
 };
 
 const graph = new StateGraph<State>({ channels: graphState })
   .addNode("router", async (state: State) => {
     const { message } = state.input;
     const intent = await intentAgent(message);
+    console.log(`[router] Intent detected: ${intent} for message: "${message}"`);
+    
     if (intent === "PLAN_TRIP") {
       return { route: "planner" };
+    } else if (intent === "DESTINATION_SEARCH") {
+      return { route: "destination_search" };
     }
     return { route: "chat" };
   })
@@ -123,6 +139,77 @@ const graph = new StateGraph<State>({ channels: graphState })
 
     return { events, input: { ...state.input, trip: updatedTrip } };
   })
+  .addNode("destination_search", async (state: State) => {
+    const { message, trip } = state.input;
+    
+    // Extract destination information immediately
+    const extraction = await destinationExtractionAgent(message);
+    console.log(`[destination_search] Extracted destinations:`, extraction);
+    
+    const events: WsEvent[] = [];
+    
+    // Trigger immediate POI search first to get POI data
+    const poiEvents = await immediatePoiSearchAgent(extraction);
+    
+    // Extract POI data for chat response generation
+    let poiData: { stays: any[]; restaurants: any[]; attractions: any[] } | undefined;
+    const poiSearchEvent = poiEvents.find(event => event.type === "search.results");
+    if (poiSearchEvent && poiSearchEvent.data) {
+      poiData = {
+        stays: poiSearchEvent.data.stays || [],
+        restaurants: poiSearchEvent.data.restaurants || [],
+        attractions: poiSearchEvent.data.attractions || []
+      };
+    }
+    
+    // Generate AI-powered conversational response with POI formatting
+    const chatResponse = await generateDestinationChatResponse(extraction, message, poiData);
+    
+    // Add chat response
+    events.push({
+      type: "chat.append",
+      data: {
+        id: randomUUID(),
+        role: "assistant",
+        content: chatResponse,
+        createdAt: new Date().toISOString(),
+      },
+    });
+    
+    // Update navbar with destination info if available
+    const destinations = extraction.destinations || (extraction.destination ? [extraction.destination] : []);
+    if (extraction.hasDestination && destinations.length > 0) {
+      events.push({
+        type: "navbar.update",
+        data: {
+          destination: extraction.destination || destinations[0],
+          destinations: extraction.destinations,
+          days: extraction.days,
+          title: destinations.length === 1 
+            ? `Exploring ${destinations[0]}` 
+            : `Multi-destination trip`,
+        },
+      });
+    }
+    
+    // Add POI search results and map data
+    events.push(...poiEvents);
+    
+    // Update trip context with extracted information
+    const updatedTrip = {
+      ...trip,
+      destination: extraction.destination || trip.destination,
+      destinations: extraction.destinations || trip.destinations,
+      days: extraction.days || trip.days,
+      origin: extraction.origin || trip.origin,
+    };
+    
+    return { 
+      events, 
+      extractedDestination: extraction,
+      input: { ...state.input, trip: updatedTrip }
+    };
+  })
   .addNode("chat", async (state: State) => {
     const chatResponse = await chatAgent(state.input.message, state.messages);
     const event: WsEvent = {
@@ -134,9 +221,11 @@ const graph = new StateGraph<State>({ channels: graphState })
   .setEntryPoint("router")
   .addConditionalEdges("router", (state: State) => state.route, {
     planner: "planner",
+    destination_search: "destination_search",
     chat: "chat",
   })
   .addEdge("planner", END)
+  .addEdge("destination_search", END)
   .addEdge("chat", END);
 
 const app = graph.compile();

@@ -247,6 +247,15 @@ export function MapView({
         ...(mapId ? { mapId } : {}),
       });
       console.log('Google Maps initialized successfully');
+      
+      // Explicitly set world map view after initialization
+      setTimeout(() => {
+        if (mapInstance.current) {
+          console.log('Setting initial world map view');
+          mapInstance.current.setCenter({ lat: 20, lng: 0 });
+          mapInstance.current.setZoom(2);
+        }
+      }, 100);
     } catch (error) {
       console.error('Failed to initialize Google Maps:', error);
       setApiKeyError(true);
@@ -287,9 +296,16 @@ export function MapView({
       // Trigger resize after a small delay to ensure the container is visible
       setTimeout(() => {
         window.google.maps.event.trigger(mapInstance.current, 'resize')
+        
+        // If no POIs are visible, ensure world map view
+        if (filteredPois.length === 0) {
+          console.log('Map became visible with no POIs - setting world view');
+          mapInstance.current.setCenter({ lat: 20, lng: 0 })
+          mapInstance.current.setZoom(2)
+        }
       }, 50)
     }
-  }, [isVisible])
+  }, [isVisible, filteredPois])
 
   // Render POI markers
   useEffect(() => {
@@ -549,10 +565,14 @@ export function MapView({
       }
     })
 
+    console.log('Auto-zoom effect:', { hasContent, markersCount: markersRef.current.length, polylinesCount: polylinesRef.current.length });
+
     if (hasContent) {
+      console.log('Fitting bounds to content');
       mapInstance.current.fitBounds(bounds, 50) // 50px padding
     } else {
       // Show world map when no content
+      console.log('No content - setting world map view');
       mapInstance.current.setCenter({ lat: 20, lng: 0 })
       mapInstance.current.setZoom(2)
     }
