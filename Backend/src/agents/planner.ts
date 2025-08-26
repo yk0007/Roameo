@@ -3,11 +3,12 @@ import { GeminiClient } from "../tools/gemini.js";
 import { GoogleMapsClient } from "../tools/maps.js";
 
 export async function plannerAgent(
-  _ctx: { origin?: string; destination?: string; days?: number },
+  _ctx: { origin?: string; destination?: string; destinations?: string[]; days?: number },
   message: string
-): Promise<{ chatResponse: string; itinerary: Itinerary; destination: string; days: number } | null> {
+): Promise<{ chatResponse: string; itinerary: Itinerary; destination: string; destinations?: string[]; days: number } | null> {
     const extractedDetails = await extractTripDetails(message);
   const destination = extractedDetails.destination || _ctx.destination;
+  const destinations = extractedDetails.destinations || _ctx.destinations;
   const days = extractedDetails.days || _ctx.days;
   const origin = _ctx.origin || "Current location";
   const maps = new GoogleMapsClient();
@@ -17,12 +18,19 @@ export async function plannerAgent(
     const gemini = new GeminiClient({ model: "flash" });
 
     let chatPrompt;
-    if (!days) {
-      chatPrompt = `You are a friendly travel planning assistant. The user wants to plan a trip to ${destination}. Ask them for the number of days they want to stay. Be enthusiastic and suggest some popular attraction types like coffee plantations, waterfalls, and viewpoints.`;
-    } else {
-    chatPrompt = `You are an expert travel planning assistant. Your goal is to create a beautifully formatted travel itinerary in **Markdown** for a ${days}-day trip to ${destination} from ${origin}.
+    const finalDestinations = destinations || (destination ? [destination] : []);
+    const destinationText = finalDestinations.length > 1 
+      ? finalDestinations.join(", ") 
+      : (destination || finalDestinations[0] || "your destination");
 
-**CRITICAL**: You MUST create the itinerary for "${destination}" ONLY. Do NOT substitute with any other destination like Goa, Mumbai, or Delhi. The user specifically requested "${destination}".
+    if (!days) {
+      chatPrompt = `You are a friendly travel planning assistant. The user wants to plan a trip to ${destinationText}. Ask them for the number of days they want to stay. Be enthusiastic and suggest some popular attraction types like coffee plantations, waterfalls, and viewpoints.`;
+    } else {
+    chatPrompt = `You are an expert travel planning assistant. Your goal is to create a beautifully formatted travel itinerary in **Markdown** for a ${days}-day trip to ${destinationText} from ${origin}.
+
+**CRITICAL**: You MUST create the itinerary for "${destinationText}" ONLY. Do NOT substitute with any other destination like Goa, Mumbai, or Delhi. The user specifically requested "${destinationText}".
+
+${finalDestinations.length > 1 ? `**MULTI-DESTINATION TRIP**: This is a multi-destination trip covering ${finalDestinations.join(", ")}. Allocate days appropriately across destinations and include travel time between locations.` : ''}
 
 **IMPORTANT**: Start the response *directly* with the itinerary. Do NOT include any conversational introduction, greeting, or lead-in paragraph.
 
@@ -113,26 +121,44 @@ Make the itinerary **engaging, structured, and easy to follow** with ample spaci
     }
 
     // If we don't have enough info for an itinerary, return just the chat response.
-    // If we don't have enough info for an itinerary, return just the chat response.
-    if (!destination || !days) {
+    if ((!destination && !destinations) || !days) {
       return {
         chatResponse,
         itinerary: { origin, destination: destination || "", days: 0, daysPlan: [] },
         destination: destination || "",
+        destinations,
         days: days || 0,
       };
     }
 
-    // --- Step 2: Fetch real POIs to build a structured itinerary --- //
-        const [attractions, restaurants, stays] = await Promise.all([
-      maps.searchPlaces({ q: `tourist attractions in ${destination}` }, "attraction").catch(() => []),
-      maps.searchPlaces({ q: `restaurants in ${destination}` }, "restaurant").catch(() => []),
-      maps.searchPlaces({ q: `hotels in ${destination}` }, "stay").catch(() => []),
-    ]);
+    // --- Step 2: Fetch real POIs for all destinations --- //
+    const allDestinations = destinations || (destination ? [destination] : []);
+    const poiPromises = [];
+    
+    for (const dest of allDestinations) {
+      poiPromises.push(
+        maps.searchPlaces({ q: `tourist attractions in ${dest}` }, "attraction").catch(() => []),
+        maps.searchPlaces({ q: `restaurants in ${dest}` }, "restaurant").catch(() => []),
+        maps.searchPlaces({ q: `hotels in ${dest}` }, "stay").catch(() => [])
+      );
+    }
+    
+    const poiResults = await Promise.all(poiPromises);
+    
+    // Combine all POIs from all destinations
+    const attractions: POI[] = [];
+    const restaurants: POI[] = [];
+    const stays: POI[] = [];
+    
+    for (let i = 0; i < poiResults.length; i += 3) {
+      attractions.push(...(poiResults[i] || []));
+      restaurants.push(...(poiResults[i + 1] || []));
+      stays.push(...(poiResults[i + 2] || []));
+    }
 
-        const itinerary = await createStructuredItinerary(chatResponse, { ..._ctx, destination, days }, { attractions, restaurants, stays });
+    const itinerary = await createStructuredItinerary(chatResponse, { ..._ctx, destination, days }, { attractions, restaurants, stays });
 
-    return { chatResponse, itinerary, destination, days };
+    return { chatResponse, itinerary, destination: destination || allDestinations[0], destinations, days };
 
   } catch (e: any) {
     console.warn("[planner] Gemini or Maps failed:", e);
@@ -245,24 +271,29 @@ function createDummyItinerary(ctx: { origin?: string; destination?: string; days
   return { origin: ctx.origin || "", destination: ctx.destination!, days: ctx.days!, daysPlan };
 }
 
-async function extractTripDetails(message: string): Promise<{ destination?: string; days?: number }> {
+async function extractTripDetails(message: string): Promise<{ destination?: string; destinations?: string[]; days?: number }> {
   const gemini = new GeminiClient({ model: "flash" });
-  const prompt = `Extract the destination and number of days from the user's message. Be very precise with destination names.
+  const prompt = `Extract the destination(s) and number of days from the user's message. Be very precise with destination names.
 
 User message: "${message}"
 
-CRITICAL: Extract the EXACT destination mentioned by the user. Do NOT change or substitute destination names.
+CRITICAL: Extract the EXACT destination(s) mentioned by the user. Do NOT change or substitute destination names.
 - If user says "ooty", extract "Ooty"
 - If user says "coonoor", extract "Coonoor" 
 - If user says "kodaikanal", extract "Kodaikanal"
 - Do NOT substitute with other destinations like Goa, Mumbai, etc.
 
-Respond with ONLY a JSON object with "destination" and "days" keys. If a value is not present, omit the key.
-For example:
-{
-  "destination": "Ooty",
-  "days": 3
-}`;
+For MULTIPLE destinations:
+- If user mentions multiple places like "ooty and coonoor" or "kerala, goa and rajasthan", extract all destinations
+- Use "destinations" array for multiple places
+- Use "destination" for single place
+
+Respond with ONLY a JSON object with "destination", "destinations", and "days" keys. If a value is not present, omit the key.
+
+Examples:
+Single destination: {"destination": "Ooty", "days": 3}
+Multiple destinations: {"destinations": ["Kerala", "Goa", "Rajasthan"], "days": 10}
+Multiple with days per location: {"destinations": ["Ooty", "Coonoor"], "days": 5}`;
   const jsonResponse = await gemini.chat(prompt);
   console.log(`[planner] Trip details extraction response: ${jsonResponse}`);
   const cleanedJson = jsonResponse.replace(/^```json\s*/i, "").replace(/\s*```\s*$/i, "").trim();

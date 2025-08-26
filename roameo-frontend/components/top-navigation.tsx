@@ -208,7 +208,9 @@ export function TopNavigation({
               onClick={() => handleEdit("destination")}
               className="text-gray-700 p-0 h-auto hover:bg-transparent"
             >
-              {trip.destination || "Destination"}
+              {trip.destinations && trip.destinations.length > 1 
+                ? `${trip.destinations.length} destinations` 
+                : trip.destination || trip.destinations?.[0] || "Destination"}
             </Button>
           )}
         </div>

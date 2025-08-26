@@ -7,6 +7,7 @@ export const TripContextSchema = z.object({
   title: z.string().optional(),
   origin: z.string().optional(),
   destination: z.string().optional(),
+  destinations: z.array(z.string()).optional(), // Support multiple destinations
   days: z.number().optional(),
   travelers: z.number().optional(),
   budget: z.string().optional(),

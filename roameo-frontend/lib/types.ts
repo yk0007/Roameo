@@ -8,6 +8,7 @@ export interface TripContext {
   title?: string
   origin?: string
   destination?: string
+  destinations?: string[] // Support multiple destinations
   days?: number
   travelers?: number
   budget?: string

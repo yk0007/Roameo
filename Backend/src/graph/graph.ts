@@ -69,7 +69,12 @@ const graph = new StateGraph<State>({ channels: graphState })
       };
     }
 
-    const updatedTrip = { ...trip, destination: res.destination, days: res.days };
+    const updatedTrip = { 
+      ...trip, 
+      destination: res.destination, 
+      destinations: res.destinations,
+      days: res.days 
+    };
     const title = await generateSessionTitle({
       message,
       origin: updatedTrip.origin,
@@ -93,6 +98,7 @@ const graph = new StateGraph<State>({ channels: graphState })
         type: "navbar.update",
         data: {
           destination: res.destination,
+          destinations: res.destinations,
           days: res.days,
           title,
         },
@@ -101,7 +107,11 @@ const graph = new StateGraph<State>({ channels: graphState })
 
     if (res.itinerary.daysPlan.length > 0) {
       events.push(emitItineraryUpdate(res.itinerary));
-      const poiEvt = await poiAgent({ destination: res.destination });
+      // Handle POI search for multiple destinations
+      const searchDestination = res.destinations && res.destinations.length > 0 
+        ? res.destinations[0] // Use first destination for POI search
+        : res.destination;
+      const poiEvt = await poiAgent({ destination: searchDestination });
       if (poiEvt) {
         events.push(poiEvt);
         if (poiEvt.type === "search.results") {
