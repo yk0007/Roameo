@@ -15,6 +15,16 @@ export const metadata: Metadata = {
   title: "Roameo - AI Travel Planner",
   description: "Multi-agent AI travel planner that creates personalized, budget-aware itineraries",
   generator: "Roameo",
+  icons: {
+    icon: [
+      {
+        url: '/favicon.svg',
+        type: 'image/svg+xml',
+      }
+    ],
+    shortcut: '/favicon.svg',
+    apple: '/apple-touch-icon.svg'
+  }
 }
 
 export default function RootLayout({
@@ -24,6 +34,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${inter.variable}`}>
+      <head>
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="shortcut icon" href="/favicon.svg" />
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#0f172a" />
+      </head>
       <body
         className="antialiased font-sans"
         style={{ fontFamily: "var(--font-inter), ui-sans-serif, system-ui, sans-serif" }}

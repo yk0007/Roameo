@@ -6,6 +6,7 @@ import type { Db } from "../db/types.js";
 import type { SimpleRateLimiter } from "../utils/rateLimiter.js";
 import type { runRouter } from "../graph/graph.js";
 import { buildMapsRouter } from "./maps.js";
+import { buildCacheRouter } from "./cache.js";
 import { optionalAuth, authenticateUser, type AuthenticatedRequest } from "../middleware/auth.js";
 
 export function buildApiRouter(
@@ -462,6 +463,9 @@ export function buildApiRouter(
 
   // Mount maps proxy router
   r.use("/maps", buildMapsRouter());
+
+  // Mount cache management router
+  r.use("/cache", buildCacheRouter(db));
 
   return r;
 }

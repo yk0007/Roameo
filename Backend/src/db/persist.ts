@@ -2,22 +2,182 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Db, SessionRecord } from "./types.js";
 import { MemoryDb } from "./memory.js";
 
+// Connection pool configuration for better performance
+const SUPABASE_CONFIG = {
+  auth: { persistSession: false },
+  global: {
+    headers: {
+      'x-application-name': 'roameo-backend'
+    }
+  }
+} as const;
+
 export class WriteThroughDb implements Db {
   private mem = new MemoryDb();
   private client: SupabaseClient | null = null;
+  private connectionHealth = true;
+  private lastHealthCheck = 0;
+  private readonly HEALTH_CHECK_INTERVAL = 30000; // 30 seconds
 
   constructor(url?: string, serviceKey?: string) {
     if (url && serviceKey) {
-      this.client = createClient(url, serviceKey, { auth: { persistSession: false } });
+      this.client = createClient(url, serviceKey, SUPABASE_CONFIG);
+      this.setupHealthMonitoring();
     }
   }
 
-  // One-time hydrate from Supabase -> memory
-  async hydrateFromRemote(): Promise<void> {
+  // Health monitoring for database connection
+  private setupHealthMonitoring(): void {
     if (!this.client) return;
-    console.log("[persist] Starting hydration from Supabase...");
+    
+    setInterval(async () => {
+      try {
+        const { error } = await this.client!.from('chat_sessions').select('session_id').limit(1);
+        this.connectionHealth = !error;
+        this.lastHealthCheck = Date.now();
+      } catch (e) {
+        console.warn('[persist] Database health check failed:', e);
+        this.connectionHealth = false;
+      }
+    }, this.HEALTH_CHECK_INTERVAL);
+  }
+
+  private isConnectionHealthy(): boolean {
+    const timeSinceLastCheck = Date.now() - this.lastHealthCheck;
+    return this.connectionHealth && timeSinceLastCheck < this.HEALTH_CHECK_INTERVAL * 2;
+  }
+
+  // Optimized one-time hydrate from Supabase -> memory with batch processing
+  async hydrateFromRemote(): Promise<void> {
+    if (!this.client) {
+      console.warn('[persist] No Supabase client available, skipping hydration');
+      return;
+    }
+    
+    // For startup hydration, don't require health check - just try to connect
+    console.log("[persist] Starting optimized hydration from Supabase...");
+    
+    try {
+      // Test connection first with a simple query
+      const { error: testError } = await this.client
+        .from('chat_sessions')
+        .select('session_id')
+        .limit(1);
+        
+      if (testError) {
+        console.warn('[persist] Database connection test failed:', testError);
+        console.warn('[persist] Skipping hydration due to connection issues');
+        return;
+      }
+      
+      // Mark connection as healthy since the test succeeded
+      this.connectionHealth = true;
+      this.lastHealthCheck = Date.now();
+      
+      // Use a custom query to get all sessions with recent messages for hydration
+      // Since get_session_with_recent_messages requires a specific session_id, 
+      // we'll use a different approach for bulk hydration
+      const { data: sessions, error: sessionsError } = await this.client
+        .from('chat_sessions')
+        .select('session_id, invite_id, trip, created_at, updated_at');
+        
+      if (sessionsError) {
+        console.error("[persist] Failed to fetch sessions:", sessionsError);
+        return this.hydrateFromRemoteClassic();
+      }
+      
+      if (!sessions || sessions.length === 0) {
+        console.log("[persist] No sessions found");
+        return;
+      }
+      
+      // Get recent messages for all sessions in batches
+      const sessionIds = sessions.map(s => s.session_id);
+      const { data: allMessages, error: messagesError } = await this.client
+        .from('messages')
+        .select('id, role, content, created_at, session_id')
+        .in('session_id', sessionIds)
+        .order('created_at', { ascending: false })
+        .limit(100 * sessions.length); // Reasonable limit per session
+        
+      if (messagesError) {
+        console.error("[persist] Failed to fetch messages:", messagesError);
+        return this.hydrateFromRemoteClassic();
+      }
+      
+      // Group messages by session and limit to recent messages
+      const messagesBySession = new Map<string, any[]>();
+      (allMessages || []).forEach(msg => {
+        if (!messagesBySession.has(msg.session_id)) {
+          messagesBySession.set(msg.session_id, []);
+        }
+        const sessionMessages = messagesBySession.get(msg.session_id)!;
+        if (sessionMessages.length < 100) { // Limit per session
+          sessionMessages.push(msg);
+        }
+      });
+      
+      // Reverse messages to get chronological order for each session
+      messagesBySession.forEach(messages => {
+        messages.reverse();
+      });
+      
+      const sessionsWithMessages = sessions.map(session => ({
+        ...session,
+        messages: messagesBySession.get(session.session_id) || []
+      }));
+      
+      console.log(`[persist] Found ${sessionsWithMessages?.length || 0} sessions`);
+      
+      // Batch fetch all saved POIs for all sessions
+      const { data: allSavedPois } = await this.client
+        .from("saved_pois")
+        .select("session_id, poi_id")
+        .in('session_id', sessionIds);
+      
+      // Group saved POIs by session
+      const savedPoisBySession = new Map<string, string[]>();
+      (allSavedPois || []).forEach((poi: any) => {
+        if (!savedPoisBySession.has(poi.session_id)) {
+          savedPoisBySession.set(poi.session_id, []);
+        }
+        savedPoisBySession.get(poi.session_id)!.push(poi.poi_id);
+      });
+      
+      // Process each session
+      for (const session of sessionsWithMessages || []) {
+        const messages = Array.isArray(session.messages) ? session.messages : [];
+        const savedPoiIds = savedPoisBySession.get(session.session_id) || [];
+        
+        console.log(`[persist] Session ${session.session_id}: ${messages.length} messages, ${savedPoiIds.length} saved POIs`);
+        
+        this.mem.upsertSession(session.session_id, {
+          inviteId: session.invite_id ?? undefined,
+          trip: session.trip || {},
+          messages: messages.map((m: any) => ({
+            id: m.id,
+            role: m.role,
+            content: m.content,
+            createdAt: m.createdAt || new Date().toISOString()
+          })),
+          savedPoiIds: new Set(savedPoiIds),
+        });
+      }
+      
+      console.log("[persist] Optimized hydration complete");
+    } catch (error) {
+      console.error('[persist] Error during optimized hydration:', error);
+      // Fallback to classic method
+      return this.hydrateFromRemoteClassic();
+    }
+  }
+  
+  // Fallback classic hydration method
+  private async hydrateFromRemoteClassic(): Promise<void> {
+    if (!this.client) return;
+    console.log("[persist] Using classic hydration method...");
     const { data: sessions, error } = await this.client
-      .from("sessions")
+      .from("chat_sessions")
       .select("session_id, invite_id, trip");
     if (error) {
       console.error("[persist] Failed to fetch sessions:", error);
@@ -59,12 +219,80 @@ export class WriteThroughDb implements Db {
     return this.mem.getSession(sessionId);
   }
 
+  // Performance monitoring helper
+  private async withPerformanceMonitoring<T>(
+    operation: string,
+    fn: () => Promise<T>
+  ): Promise<T> {
+    const start = Date.now();
+    try {
+      const result = await fn();
+      const duration = Date.now() - start;
+      if (duration > 1000) { // Log slow queries
+        console.warn(`[persist] Slow ${operation}: ${duration}ms`);
+      }
+      return result;
+    } catch (error) {
+      const duration = Date.now() - start;
+      console.error(`[persist] Failed ${operation} after ${duration}ms:`, error);
+      throw error;
+    }
+  }
+
+  // Optimized message append with batching capability
+  private messageQueue = new Map<string, SessionRecord["messages"][number][]>();
+  private flushTimeout: NodeJS.Timeout | null = null;
+  
   appendMessage(sessionId: string, msg: SessionRecord["messages"][number]): void {
     this.mem.appendMessage(sessionId, msg);
-    console.log(`[persist] appendMessage called for session ${sessionId}, message ${msg.id}`);
-    this.flushAppendMessage(sessionId, msg).catch((e) => {
-      console.error(`[persist] flushAppendMessage failed:`, e);
-    });
+    
+    // Add to queue for batch processing
+    if (!this.messageQueue.has(sessionId)) {
+      this.messageQueue.set(sessionId, []);
+    }
+    this.messageQueue.get(sessionId)!.push(msg);
+    
+    // Batch flush messages for better performance
+    if (this.flushTimeout) {
+      clearTimeout(this.flushTimeout);
+    }
+    
+    this.flushTimeout = setTimeout(() => {
+      this.flushQueuedMessages().catch((e) => {
+        console.error(`[persist] Failed to flush queued messages:`, e);
+      });
+    }, 100); // 100ms batching window
+  }
+  
+  private async flushQueuedMessages(): Promise<void> {
+    if (!this.client || this.messageQueue.size === 0) return;
+    
+    const allMessages: any[] = [];
+    
+    for (const [sessionId, messages] of this.messageQueue.entries()) {
+      const session = this.mem.getSession(sessionId);
+      for (const msg of messages) {
+        allMessages.push({
+          id: msg.id,
+          session_id: sessionId,
+          role: msg.role,
+          content: msg.content,
+          created_at: msg.createdAt,
+          user_id: session?.userId || '00000000-0000-0000-0000-000000000000'
+        });
+      }
+    }
+    
+    if (allMessages.length > 0) {
+      await this.withPerformanceMonitoring('batch-insert-messages', async () => {
+        const { error } = await this.client!.from("messages").upsert(allMessages, { onConflict: "id" });
+        if (error) throw error;
+      });
+      
+      console.log(`[persist] Batch flushed ${allMessages.length} messages`);
+    }
+    
+    this.messageQueue.clear();
   }
 
   patchTrip(sessionId: string, patch: Record<string, any>): void {

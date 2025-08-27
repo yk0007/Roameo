@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback, useMemo, memo } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase/client"
 import { ChevronDown, User, MapPin, Calendar, Users, LogOut, Settings, Loader2 } from "lucide-react"
@@ -38,10 +38,11 @@ interface TopNavigationProps {
   onDeleteTrip?: () => void
   isDeleting?: boolean
   onReplan?: () => void
+  onPopulateInput?: (text: string) => void
   onSignOut?: () => void
 }
 
-export function TopNavigation({
+export const TopNavigation = memo(function TopNavigation({
   trip,
   onTripUpdate,
   isRightPanelVisible,
@@ -52,6 +53,7 @@ export function TopNavigation({
   onDeleteTrip,
   isDeleting,
   onReplan,
+  onPopulateInput,
   onSignOut,
 }: TopNavigationProps) {
   const [editingField, setEditingField] = useState<string | null>(null)
@@ -66,14 +68,14 @@ export function TopNavigation({
   const [showInvitePopover, setShowInvitePopover] = useState(false)
   const router = useRouter()
 
-  const handleSignOut = async () => {
+  const handleSignOut = useCallback(async () => {
     // Navigate immediately for instant UX
     window.location.href = "/auth/login"
     // Sign out in background
     await supabase.auth.signOut()
-  }
+  }, [])
 
-  const handleLogoClick = async () => {
+  const handleLogoClick = useCallback(async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (session) router.push("/dashboard")
@@ -81,9 +83,9 @@ export function TopNavigation({
     } catch {
       router.push("/")
     }
-  }
+  }, [router])
 
-  const handleEdit = (field: string) => {
+  const handleEdit = useCallback((field: string) => {
     setEditingField(field)
     setTempValues({
       title: trip.title,
@@ -93,17 +95,17 @@ export function TopNavigation({
       travelers: trip.travelers,
       budget: trip.budget,
     })
-  }
+  }, [trip])
 
-  const handleSave = (field: string) => {
+  const handleSave = useCallback((field: string) => {
     onTripUpdate({
       ...trip,
       [field]: tempValues[field as keyof typeof tempValues],
     })
     setEditingField(null)
-  }
+  }, [onTripUpdate, trip, tempValues])
 
-  const handleCancel = () => {
+  const handleCancel = useCallback(() => {
     setEditingField(null)
     setTempValues({
       title: trip.title,
@@ -113,227 +115,233 @@ export function TopNavigation({
       travelers: trip.travelers,
       budget: trip.budget,
     })
-  }
+  }, [trip])
 
   return (
-    <div className="flex items-center justify-between px-6 py-3 relative">
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2">
-          <button onClick={handleLogoClick} className="hover:opacity-80 transition-opacity flex items-center gap-3">
+    <div className="flex items-center justify-between px-8 py-3 bg-white border-b border-gray-200 shadow-sm">
+      {/* Left Section - Logo & Trip Title */}
+      <div className="flex items-center gap-6">
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={handleLogoClick} 
+            className="flex items-center gap-3"
+          >
             <div className="w-8 h-8 bg-black rounded-full flex items-center justify-center">
               <div className="w-2 h-2 bg-white rounded-full"></div>
             </div>
-            <span className="text-xl font-bold text-gray-900">roameo</span>
+            <span className="text-xl font-bold text-black">roameo</span>
           </button>
         </div>
-        {editingField === "title" ? (
-          <div className="flex items-center gap-2">
-            <Input
-              value={tempValues.title}
-              onChange={(e) => setTempValues({ ...tempValues, title: e.target.value })}
-              className="w-48 h-8 text-sm rounded-full bg-white/80 backdrop-blur-sm border-white/30"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleSave("title")
-                if (e.key === "Escape") handleCancel()
-              }}
-              autoFocus
-            />
-            <Button size="sm" onClick={() => handleSave("title")} className="h-8 px-3 text-xs">✓</Button>
-          </div>
-        ) : (
-          <Button
-            variant="ghost"
-            className="text-lg font-semibold p-0 h-auto hover:bg-transparent border-slate-200 rounded-full border-0"
-            onClick={() => handleEdit("title")}
-            title="Edit title"
-          >
-            {trip.title}
-            <ChevronDown className="w-4 h-4 ml-1" />
-          </Button>
-        )}
+        
+        {/* Trip Title - Compact format like "Vizag → Coonoor, 2 days" */}
+        <div className="flex items-center gap-2">
+          {editingField === "title" ? (
+            <div className="flex items-center gap-2">
+              <Input
+                value={tempValues.title}
+                onChange={(e) => setTempValues({ ...tempValues, title: e.target.value })}
+                className="w-64 h-8 text-sm border-gray-300 rounded-md"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSave("title")
+                  if (e.key === "Escape") handleCancel()
+                }}
+                autoFocus
+              />
+              <Button size="sm" onClick={() => handleSave("title")} className="h-8 px-3 text-sm rounded-md">✓</Button>
+            </div>
+          ) : (
+            <Button
+              variant="ghost"
+              className="text-lg font-medium px-2 py-1 h-auto hover:bg-gray-100 flex items-center gap-2"
+              onClick={() => handleEdit("title")}
+            >
+              <span className="text-gray-900">{trip.title || "My Trip"}</span>
+              <ChevronDown className="w-4 h-4 text-gray-500" />
+            </Button>
+          )}
+        </div>
       </div>
 
-      <div className="flex items-center gap-4 text-sm">
+      {/* Center Section - Trip Details in horizontal badges */}
+      <div className="flex items-center gap-4">
         {/* Origin */}
         <div className="flex items-center gap-1">
-          <MapPin className="w-4 h-4 text-gray-500 rounded p-0.5 border-transparent px-0 py-0 border-0" />
+          <MapPin className="w-4 h-4 text-gray-500" />
           {editingField === "origin" ? (
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2">
               <Input
                 value={tempValues.origin}
                 onChange={(e) => setTempValues({ ...tempValues, origin: e.target.value })}
-                className="w-24 h-6 text-xs rounded-full bg-white/80 backdrop-blur-sm border-white/30"
+                className="w-24 h-7 text-sm border-gray-300 rounded-md"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleSave("origin")
                   if (e.key === "Escape") handleCancel()
                 }}
                 autoFocus
               />
-              <Button size="sm" onClick={() => handleSave("origin")} className="h-6 px-2 text-xs">
-                ✓
-              </Button>
+              <Button size="sm" onClick={() => handleSave("origin")} className="h-7 px-2 text-sm rounded-md">✓</Button>
             </div>
           ) : (
-            <Button
-              variant="ghost"
+            <span 
               onClick={() => handleEdit("origin")}
-              className="text-gray-700 p-0 h-auto hover:bg-transparent border-0"
+              className="text-xs text-gray-600 cursor-pointer hover:text-gray-900 font-medium"
             >
-              {trip.origin || "Add origin"}
-            </Button>
+              {trip.origin || "Origin"}
+            </span>
           )}
         </div>
 
         {/* Destination */}
         <div className="flex items-center gap-1">
-          <MapPin className="w-4 h-4 text-gray-500 rounded p-0.5 border-transparent border-0 px-0 py-0" />
+          <MapPin className="w-4 h-4 text-gray-500" />
           {editingField === "destination" ? (
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2">
               <Input
                 value={tempValues.destination}
                 onChange={(e) => setTempValues({ ...tempValues, destination: e.target.value })}
-                className="w-32 h-6 text-xs rounded-full bg-white/80 backdrop-blur-sm border-white/30"
+                className="w-28 h-7 text-sm border-gray-300 rounded-md"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleSave("destination")
                   if (e.key === "Escape") handleCancel()
                 }}
                 autoFocus
               />
-              <Button size="sm" onClick={() => handleSave("destination")} className="h-6 px-2 text-xs">
-                ✓
-              </Button>
+              <Button size="sm" onClick={() => handleSave("destination")} className="h-7 px-2 text-sm rounded-md">✓</Button>
             </div>
           ) : (
-            <Button
-              variant="ghost"
+            <span 
               onClick={() => handleEdit("destination")}
-              className="text-gray-700 p-0 h-auto hover:bg-transparent"
+              className="text-xs text-gray-600 cursor-pointer hover:text-gray-900 font-medium"
             >
               {trip.destinations && trip.destinations.length > 1 
                 ? `${trip.destinations.length} destinations` 
                 : trip.destination || trip.destinations?.[0] || "Destination"}
-            </Button>
+            </span>
           )}
         </div>
 
         {/* Duration */}
-        {editingField === "duration" ? (
-          <div className="flex items-center gap-1">
-            <Input
-              type="number"
-              placeholder="Days"
-              value={parseInt(/\d+/.exec(tempValues.duration || "")?.[0] || "", 10) as any}
-              onChange={(e) => {
-                const v = e.target.value
-                setTempValues({ ...tempValues, duration: v ? `${v} days` : "" })
-              }}
-              className="w-24 h-6 text-xs rounded-full bg-white/80 backdrop-blur-sm border-white/30"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleSave("duration")
-                if (e.key === "Escape") handleCancel()
-              }}
-              autoFocus
-            />
-            <Button size="sm" onClick={() => handleSave("duration")} className="h-6 px-2 text-xs">
-              ✓
-            </Button>
-          </div>
-        ) : (
-          <Badge
-            variant="secondary"
-            onClick={() => handleEdit("duration")}
-            className="bg-white/80 backdrop-blur-sm text-gray-700 hover:bg-white/90 cursor-pointer border border-white/30 rounded-full"
-          >
-            <Calendar className="w-3 h-3 mr-1 border-current rounded p-0.5 border-transparent px-0 py-0 border-0" />
-            {trip.duration || "Days"}
-          </Badge>
-        )}
+        <div className="flex items-center gap-1">
+          <Calendar className="w-4 h-4 text-gray-500" />
+          {editingField === "duration" ? (
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                placeholder="Days"
+                value={parseInt(/\d+/.exec(tempValues.duration || "")?.[0] || "", 10) as any}
+                onChange={(e) => {
+                  const v = e.target.value
+                  setTempValues({ ...tempValues, duration: v ? `${v} days` : "" })
+                }}
+                className="w-20 h-7 text-sm border-gray-300 rounded-md"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSave("duration")
+                  if (e.key === "Escape") handleCancel()
+                }}
+                autoFocus
+              />
+              <Button size="sm" onClick={() => handleSave("duration")} className="h-7 px-2 text-sm rounded-md">✓</Button>
+            </div>
+          ) : (
+            <span 
+              onClick={() => handleEdit("duration")}
+              className="text-xs text-gray-600 cursor-pointer hover:text-gray-900 font-medium"
+            >
+              {trip.duration || "0 days"}
+            </span>
+          )}
+        </div>
 
         {/* Travelers */}
-        {editingField === "travelers" ? (
-          <div className="flex items-center gap-1">
-            <Input
-              type="number"
-              placeholder="Travellers"
-              value={parseInt(/\d+/.exec(tempValues.travelers || "")?.[0] || "", 10) as any}
-              onChange={(e) => {
-                const v = e.target.value
-                setTempValues({ ...tempValues, travelers: v ? `${v} travelers` : "" })
-              }}
-              className="w-28 h-6 text-xs rounded-full bg-white/80 backdrop-blur-sm border-white/30"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleSave("travelers")
-                if (e.key === "Escape") handleCancel()
-              }}
-              autoFocus
-            />
-            <Button size="sm" onClick={() => handleSave("travelers")} className="h-6 px-2 text-xs">
-              ✓
-            </Button>
-          </div>
-        ) : (
-          <Badge
-            variant="secondary"
-            onClick={() => handleEdit("travelers")}
-            className="bg-white/80 backdrop-blur-sm text-gray-700 hover:bg-white/90 cursor-pointer border border-white/30 rounded-full"
-          >
-            <Users className="w-3 h-3 mr-1 border-current rounded p-0.5 border-transparent border-0 px-0 py-0" />
-            {trip.travelers || "Travellers"}
-          </Badge>
-        )}
+        <div className="flex items-center gap-1">
+          <Users className="w-4 h-4 text-gray-500" />
+          {editingField === "travelers" ? (
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                placeholder="Travelers"
+                value={parseInt(/\d+/.exec(tempValues.travelers || "")?.[0] || "", 10) as any}
+                onChange={(e) => {
+                  const v = e.target.value
+                  setTempValues({ ...tempValues, travelers: v ? `${v} travelers` : "" })
+                }}
+                className="w-20 h-7 text-sm border-gray-300 rounded-md"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSave("travelers")
+                  if (e.key === "Escape") handleCancel()
+                }}
+                autoFocus
+              />
+              <Button size="sm" onClick={() => handleSave("travelers")} className="h-7 px-2 text-sm rounded-md">✓</Button>
+            </div>
+          ) : (
+            <span 
+              onClick={() => handleEdit("travelers")}
+              className="text-xs text-gray-600 cursor-pointer hover:text-gray-900 font-medium"
+            >
+              {trip.travelers || "1 travelers"}
+            </span>
+          )}
+        </div>
 
         {/* Budget */}
-        {editingField === "budget" ? (
-          <div className="flex items-center gap-1">
-            <Input
-              type="number"
-              placeholder="Budget"
-              value={parseInt((tempValues.budget || "").replace(/[^0-9]/g, "") || "", 10) as any}
-              onChange={(e) => {
-                const v = e.target.value
-                setTempValues({ ...tempValues, budget: v })
-              }}
-              className="w-24 h-6 text-xs rounded-full bg-white/80 backdrop-blur-sm border-white/30"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleSave("budget")
-                if (e.key === "Escape") handleCancel()
-              }}
-              autoFocus
-            />
-            <Button size="sm" onClick={() => handleSave("budget")} className="h-6 px-2 text-xs">
-              ✓
-            </Button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <Badge
-              variant="secondary"
+        <div className="flex items-center gap-1">
+          <span className="text-gray-500 font-medium">₹</span>
+          {editingField === "budget" ? (
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                placeholder="Budget"
+                value={parseInt((tempValues.budget || "").replace(/[^0-9]/g, "") || "", 10) as any}
+                onChange={(e) => {
+                  const v = e.target.value
+                  setTempValues({ ...tempValues, budget: v })
+                }}
+                className="w-24 h-7 text-sm border-gray-300 rounded-md"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSave("budget")
+                  if (e.key === "Escape") handleCancel()
+                }}
+                autoFocus
+              />
+              <Button size="sm" onClick={() => handleSave("budget")} className="h-7 px-2 text-sm rounded-md">✓</Button>
+            </div>
+          ) : (
+            <span 
               onClick={() => handleEdit("budget")}
-              className="bg-white/80 backdrop-blur-sm text-gray-700 hover:bg-white/90 cursor-pointer border border-white/30 rounded-full"
+              className="text-xs text-gray-600 cursor-pointer hover:text-gray-900 font-medium"
             >
-              {trip.budget ? `₹${trip.budget}` : "Budget"}
-            </Badge>
-            {onReplan && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="rounded-full bg-white/80 backdrop-blur-sm border-0 shadow-md hover:shadow-lg transition-shadow"
-                onClick={onReplan}
-                title="Update plan with current trip details"
-              >
-                Update plan
-              </Button>
-            )}
-          </div>
+              Budget
+            </span>
+          )}
+        </div>
+
+        {/* Update Plan Button - positioned beside budget as requested */}
+        {onPopulateInput && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 h-8 text-sm rounded-full"
+            onClick={() => {
+              const base = `Replan the itinerary optimizing for travel time and experience. Keep origin ${trip.origin || ""} and destination ${trip.destination || ""} for ${trip.duration || "?"}. ${trip.travelers ? `For ${trip.travelers}.` : ""} ${trip.budget && trip.budget !== "Budget" ? `Budget: ${trip.budget}.` : ""}`
+              onPopulateInput(base)
+            }}
+            title="Update plan with current trip details"
+          >
+            Update plan
+          </Button>
         )}
       </div>
 
+      {/* Right Section - Invite and User Menu */}
       <div className="flex items-center gap-3">
+        
+        {/* Invite Button */}
         <div className="relative">
           <Button
             variant="outline"
             size="sm"
-            className="rounded-full bg-white/80 backdrop-blur-sm border-0 shadow-md hover:shadow-lg transition-shadow"
+            className="border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 h-8 text-sm rounded-full"
             onClick={async () => {
               if (!inviteLink) {
                 onInvite()
@@ -344,18 +352,26 @@ export function TopNavigation({
             Invite
           </Button>
           {showInvitePopover && (
-            <div className="absolute right-0 mt-2 w-72 bg-white border-0 rounded-xl shadow-xl p-3 z-[9999]">
+            <div className="absolute right-0 mt-3 w-80 bg-white border border-gray-200 rounded-lg shadow-xl p-4 z-[9999]">
               {inviteLink ? (
                 <>
-                  <div className="text-xs text-gray-600 mb-2">Share this link to invite collaborators:</div>
+                  <div className="text-sm text-gray-600 mb-3 font-medium">Share this link to invite collaborators:</div>
                   <div className="flex items-center gap-2">
-                    <Input readOnly value={inviteLink} className="h-8 text-xs" onFocus={(e) => e.currentTarget.select()} />
+                    <Input 
+                      readOnly 
+                      value={inviteLink} 
+                      className="h-8 text-sm bg-gray-50 border-gray-200" 
+                      onFocus={(e) => e.currentTarget.select()} 
+                    />
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-8"
+                      className="h-8 px-3 rounded-md"
                       onClick={async () => {
-                        try { await navigator.clipboard.writeText(inviteLink) } catch {}
+                        try { 
+                          await navigator.clipboard.writeText(inviteLink)
+                          // Could add a toast notification here
+                        } catch {}
                       }}
                     >
                       Copy
@@ -363,50 +379,64 @@ export function TopNavigation({
                   </div>
                 </>
               ) : (
-                <div className="text-xs text-gray-600">Generating invite link...</div>
+                <div className="text-sm text-gray-600 flex items-center gap-2">
+                  <div className="animate-spin w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+                  Generating invite link...
+                </div>
               )}
             </div>
           )}
         </div>
+        
+        {/* User Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               variant="outline"
               size="sm"
-              className="rounded-full bg-white/80 backdrop-blur-sm border-0 shadow-md hover:shadow-lg transition-shadow"
+              className="border-gray-300 bg-white hover:bg-gray-50 w-8 h-8 p-0 rounded-full"
             >
-              <User className="w-4 h-4 border-current rounded p-0.5 border-0 px-0 py-0" />
+              <User className="w-4 h-4 text-gray-700" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48 bg-white/95 backdrop-blur-md border-0 shadow-xl rounded-xl z-[10001]">
+          <DropdownMenuContent align="end" className="w-52 bg-white border border-gray-200 shadow-xl rounded-lg p-2 z-[10001]">
             {onDeleteTrip && (
               <DropdownMenuItem
-                className="flex items-center gap-2 cursor-pointer text-red-600"
+                className="flex items-center gap-3 cursor-pointer text-red-600 hover:bg-red-50 rounded-lg p-3 transition-all"
                 disabled={!!isDeleting}
                 onClick={isDeleting ? undefined : onDeleteTrip}
               >
-                {isDeleting && <Loader2 className="w-4 h-4 animate-spin" />}
-                {isDeleting ? "Deleting…" : "Delete trip"}
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-red-600 text-sm">🗑️</span>
+                    <span className="font-medium">Delete trip</span>
+                  </>
+                )}
               </DropdownMenuItem>
             )}
-            <DropdownMenuSeparator />
+            <DropdownMenuSeparator className="my-2 bg-gray-100" />
             <DropdownMenuItem asChild>
-              <Link href="/profile" className="flex items-center gap-2 cursor-pointer">
-                <User className="w-4 h-4" />
-                Profile
+              <Link href="/profile" className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 rounded-lg p-3 transition-all">
+                <User className="w-4 h-4 text-blue-600" />
+                <span className="font-medium">Profile</span>
               </Link>
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
+            <DropdownMenuSeparator className="my-2 bg-gray-100" />
             <DropdownMenuItem 
-              className="flex items-center gap-2 cursor-pointer text-red-600"
+              className="flex items-center gap-3 cursor-pointer text-red-600 hover:bg-red-50 rounded-lg p-3 transition-all"
               onClick={onSignOut || handleSignOut}
             >
-              <LogOut className="w-4 h-4" />
-              Logout
+              <LogOut className="w-4 h-4 text-red-600" />
+              <span className="font-medium">Logout</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
     </div>
   )
-}
+})

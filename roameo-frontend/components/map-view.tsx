@@ -85,6 +85,7 @@ export function MapView({
   const markersByIdRef = useRef<Record<string, any>>({})
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const persistentInfoWindowRef = useRef<any | null>(null)
+  const reactRootsRef = useRef<Map<Element, any>>(new Map()) // Track React roots for cleanup
   const [customStyle, setCustomStyle] = useState(true)
   const [zoom, setZoom] = useState(5)
   const [autoZoomOnHover, setAutoZoomOnHover] = useState(true)
@@ -156,6 +157,21 @@ export function MapView({
     }
   }, [showFilterMenu])
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      // Clean up React roots
+      reactRootsRef.current.forEach((root, element) => {
+        try {
+          root.unmount()
+        } catch (error) {
+          console.warn('Error unmounting React root:', error)
+        }
+      })
+      reactRootsRef.current.clear()
+    }
+  }, [])
+
   // Load Google Maps script (and notify when ready)
   useEffect(() => {
     // Only mark ready when the Map constructor exists
@@ -170,14 +186,16 @@ export function MapView({
       window.__gmapsLoading = true
       
       // Fetch API key from backend and load script
-      fetch('/api/maps/api-key')
+      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:4000"
+      fetch(`${BACKEND_URL}/api/maps/api-key`)
         .then(response => response.json())
         .then(data => {
           const script = document.createElement("script")
-          // Use callback to ensure the core 'maps' library (with google.maps.Map) is fully available
-          script.src = `https://maps.googleapis.com/maps/api/js?key=${data.apiKey}&libraries=geometry,marker&v=weekly&callback=initMap`
+          // Use async loading without callback parameter for better performance
+          script.src = `https://maps.googleapis.com/maps/api/js?key=${data.apiKey}&libraries=geometry,marker&v=weekly&loading=async`
           script.async = true
-          const init = () => {
+          
+          script.addEventListener("load", () => {
             const ensureReady = () => {
               if (window.google?.maps?.Map) {
                 // Mark as ready and flush callbacks
@@ -190,9 +208,8 @@ export function MapView({
               }
             }
             ensureReady()
-          }
-          ;(window as any).initMap = init
-          script.addEventListener("load", init)
+          })
+          
           document.body.appendChild(script)
         })
         .catch(error => {
@@ -247,15 +264,6 @@ export function MapView({
         ...(mapId ? { mapId } : {}),
       });
       console.log('Google Maps initialized successfully');
-      
-      // Explicitly set world map view after initialization
-      setTimeout(() => {
-        if (mapInstance.current) {
-          console.log('Setting initial world map view');
-          mapInstance.current.setCenter({ lat: 20, lng: 0 });
-          mapInstance.current.setZoom(2);
-        }
-      }, 100);
     } catch (error) {
       console.error('Failed to initialize Google Maps:', error);
       setApiKeyError(true);
@@ -296,16 +304,11 @@ export function MapView({
       // Trigger resize after a small delay to ensure the container is visible
       setTimeout(() => {
         window.google.maps.event.trigger(mapInstance.current, 'resize')
-        
-        // If no POIs are visible, ensure world map view
-        if (filteredPois.length === 0) {
-          console.log('Map became visible with no POIs - setting world view');
-          mapInstance.current.setCenter({ lat: 20, lng: 0 })
-          mapInstance.current.setZoom(2)
-        }
       }, 50)
     }
-  }, [isVisible, filteredPois])
+  }, [isVisible])
+
+
 
   // Render POI markers
   useEffect(() => {
@@ -317,6 +320,16 @@ export function MapView({
       markersRef.current.forEach((m) => m.setMap(null))
       markersRef.current = []
       markersByIdRef.current = {}
+      
+      // Clean up React roots
+      reactRootsRef.current.forEach((root, element) => {
+        try {
+          root.unmount()
+        } catch (error) {
+          console.warn('Error unmounting React root:', error)
+        }
+      })
+      reactRootsRef.current.clear()
       
       // Close any open info windows when re-rendering markers
       if (activeInfoWindowRef.current) {
@@ -461,7 +474,13 @@ export function MapView({
               iwWrapper.style.boxShadow = 'none'
             }
             
-            const root = createRoot(content)
+            // Check if this container already has a React root
+            let root = reactRootsRef.current.get(content)
+            if (!root) {
+              root = createRoot(content)
+              reactRootsRef.current.set(content, root)
+            }
+            
             root.render(
               <CompactPoiCard
                 poi={poi}
@@ -568,11 +587,29 @@ export function MapView({
     console.log('Auto-zoom effect:', { hasContent, markersCount: markersRef.current.length, polylinesCount: polylinesRef.current.length });
 
     if (hasContent) {
-      console.log('Fitting bounds to content');
-      mapInstance.current.fitBounds(bounds, 50) // 50px padding
+      console.log('Fitting bounds to content - showing POIs/routes')
+      // Add padding and ensure proper zoom level
+      mapInstance.current.fitBounds(bounds, {
+        top: 50,
+        right: 50,
+        bottom: 50,
+        left: 50
+      })
+      
+      // Ensure minimum zoom level for usability
+      setTimeout(() => {
+        if (mapInstance.current) {
+          const currentZoom = mapInstance.current.getZoom()
+          if (currentZoom && currentZoom > 18) {
+            mapInstance.current.setZoom(16)
+          } else if (currentZoom && currentZoom < 8 && markersRef.current.length <= 3) {
+            mapInstance.current.setZoom(12)
+          }
+        }
+      }, 100)
     } else {
       // Show world map when no content
-      console.log('No content - setting world map view');
+      console.log('No content - setting world map view')
       mapInstance.current.setCenter({ lat: 20, lng: 0 })
       mapInstance.current.setZoom(2)
     }

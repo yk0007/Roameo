@@ -2,6 +2,32 @@
 
 Roameo is an intelligent multi-agent AI travel planning platform that helps users create personalized itineraries through natural language conversations. Built with LangGraph multi-agent architecture and modern web technologies, it provides an intuitive chat-based interface powered by specialized AI agents for comprehensive trip planning.
 
+## ✨ Current Implementation Status
+
+**Frontend (Next.js 14)**: ✅ Fully Implemented
+- Interactive dashboard with trip management
+- Real-time chat interface with WebSocket integration
+- Google Maps integration with POI visualization
+- Responsive design with Tailwind CSS and Shadcn/ui
+- Authentication system with Supabase Auth
+- Multi-panel interface (chat, map, itinerary views)
+
+**Backend (Node.js + TypeScript)**: ✅ Fully Implemented
+- Express.js server with comprehensive API routes
+- WebSocket server for real-time communication
+- LangGraph multi-agent AI system with specialized agents
+- Google Maps API integration with photo proxy
+- Supabase PostgreSQL database integration
+- Memcached caching layer for performance optimization
+- Rate limiting and security middleware
+
+**Database & Infrastructure**: ✅ Production Ready
+- Supabase PostgreSQL with optimized schema
+- Real-time database subscriptions
+- User authentication and session management
+- Message persistence and trip data storage
+- Database health monitoring and connection pooling
+
 ## 🏗️ Architecture
 
 ### System Architecture Diagram
@@ -86,56 +112,77 @@ graph TB
 ### Technology Stack
 
 **Frontend (Next.js 14 + TypeScript)**
-- **Framework**: Next.js 14 with App Router
-- **Styling**: Tailwind CSS + Shadcn/ui components
-- **Authentication**: Supabase Auth
-- **State Management**: React hooks and context
-- **Real-time**: WebSocket integration for live chat
+- **Framework**: Next.js 14 with App Router and advanced optimizations
+- **Styling**: Tailwind CSS + Shadcn/ui component library (54 components)
+- **Authentication**: Supabase Auth with Google OAuth integration
+- **State Management**: React hooks, context, and real-time subscriptions
+- **Real-time**: WebSocket integration with health monitoring
+- **Maps**: Google Maps JavaScript API with custom markers and InfoWindows
+- **Image Optimization**: Next.js Image with proxy for Google Photos API
+- **Build Tools**: Webpack with bundle splitting and SVG optimization
 
 **Backend (Node.js + TypeScript)**
-- **Runtime**: Node.js with TypeScript
-- **Framework**: Express.js
-- **AI Integration**: LangGraph JS for conversation flows
-- **Database**: Supabase (PostgreSQL)
-- **Real-time**: WebSocket server for chat functionality
+- **Runtime**: Node.js 18+ with TypeScript and ES modules
+- **Framework**: Express.js with CORS and JSON middleware
+- **AI Integration**: LangGraph JS with 9 specialized agents
+- **Database**: Supabase PostgreSQL with connection pooling
+- **Caching**: In-memory caching with database fallback (no external cache)
+- **Real-time**: WebSocket server with session management
+- **APIs**: Google Maps Places, Directions, and Photos APIs
+- **AI Models**: Google Gemini 2.5 Flash and Pro for conversations
+- **Security**: Rate limiting, input validation, and secure headers
 
 ### Database Schema
 ```sql
--- Core tables for trip management and chat functionality
-trips: id, title, destination, duration, travelers, created_at
-messages: id, session_id, content, role, timestamp
-pois: id, name, location, description, coordinates
+-- Complete Supabase PostgreSQL schema
+chat_sessions: id, session_id, user_id, invite_id, trip (JSONB), created_at, updated_at
+messages: id, session_id, user_id, role, content, created_at
+saved_pois: id, session_id, user_id, poi_id, created_at
+sessions: id, session_id, user_id, invite_id, trip (JSONB), created_at, updated_at
+
+-- Optimized indexes for performance
+idx_messages_session_id, idx_messages_user_id, idx_messages_created_at
+idx_saved_pois_session_id, idx_chat_sessions_session_id
+auto-updating triggers for timestamps
 ```
 
 ## 🤖 Multi-Agent AI Architecture
 
 Roameo implements a sophisticated **multi-agent AI system** using LangGraph, where specialized agents collaborate to deliver comprehensive travel planning:
 
-### **Specialized AI Agents**
+### **Specialized AI Agents** (9 Agents Implemented)
 
-**🎯 Trip Planning Agent**
-- Extracts destination preferences and requirements
-- Analyzes budget constraints and duration
-- Researches destination-specific information
-- Matches user preferences with travel opportunities
+**🎯 Trip Planning Agent** (`planner.ts`)
+- Extracts destination preferences, duration, and budget constraints
+- Researches destination-specific information with Google Maps integration
+- Creates structured markdown itineraries with day-by-day planning
+- Generates accommodation, meals, and budget recommendations
+- Handles multi-destination trips with travel time allocation
 
-**📍 POI Discovery Agent** 
-- Performs intelligent location searches
-- Filters attractions by category and user interests
-- Ranks points of interest based on relevance
-- Generates curated POI recommendations
+**📍 POI Discovery Agent** (`poi.ts`)
+- Integrates with Google Maps Places API for real-time POI data
+- Filters attractions, restaurants, and hotels by category
+- Provides mock fallback data for 4 major destinations (Ooty, Mumbai, Goa, Delhi)
+- Ranks points of interest based on ratings and relevance
 
-**🗓️ Itinerary Builder Agent**
-- Creates optimized day-by-day schedules
-- Performs route optimization for efficient travel
-- Allocates appropriate time for each activity
-- Balances itinerary pacing and user preferences
+**🗺️ Map Visualization Agent** (`map.ts`)
+- Manages Google Maps integration with custom markers
+- Handles world view defaults and POI clustering
+- Provides directions and route optimization
+- Creates interactive map experiences with InfoWindows
 
-**💬 Conversation Agent**
-- Maintains conversation context and memory
-- Handles general chat and clarifications
-- Manages user session state
-- Provides natural language responses
+**💬 Conversation Agent** (`chat.ts`)
+- Maintains conversation context and session memory
+- Handles general chat and travel-related clarifications
+- Manages real-time WebSocket communication
+- Provides natural language responses with Gemini AI
+
+**🎯 Intent Classification Agent** (`intent.ts`)
+- Analyzes user messages to determine conversation intent
+- Routes requests to appropriate specialized agents
+- Maintains conversation flow and context switching
+
+**Additional Agents**: Content Extraction (`extractor.ts`), Destination Research (`destination.ts`), Title Generation (`title.ts`), Router Coordination (`router.ts`)
 
 ### **Agent Coordination**
 - **LangGraph Orchestration**: Coordinates agent workflows and decision routing
@@ -318,60 +365,96 @@ stateDiagram-v2
 
 ## ✨ Features Implemented
 
-### 🎨 User Interface
-- **Modern Dashboard**: Clean, card-based trip overview
-- **Destination Card Art**: Custom SVG artwork for each destination (stamp, aura, topo variants)
-- **Responsive Design**: Mobile-first approach with Tailwind CSS
-- **Interactive Chat**: Real-time messaging with typing indicators
-- **Navigation**: Seamless routing between dashboard and chat views
+### 🎨 User Interface & Design
+- **Modern Dashboard**: Clean, card-based trip overview with animated background elements
+- **Destination Card Art**: Custom SVG artwork with 3 variants (stamp, aura, topo)
+- **Responsive Design**: Mobile-first approach with Tailwind CSS and grid layouts
+- **Interactive Chat**: Real-time messaging with typing indicators and message history
+- **Multi-Panel Layout**: Resizable panels for chat, map, and itinerary views
+- **54 UI Components**: Complete Shadcn/ui component library integration
 
-### 🤖 AI & Chat System
-- **Natural Language Processing**: Conversational trip planning
-- **WebSocket Integration**: Real-time bidirectional communication
-- **Session Management**: Persistent chat sessions per trip
-- **Context Awareness**: AI maintains conversation context
+### 🤖 AI & Conversation System
+- **LangGraph Multi-Agent**: 9 specialized agents with intelligent routing
+- **Natural Language Processing**: Google Gemini 2.5 Flash/Pro integration
+- **WebSocket Real-time**: Bidirectional communication with health monitoring
+- **Session Persistence**: Resume conversations across browser sessions
+- **Context Awareness**: Maintains trip context and user preferences
+- **POI Hover Cards**: Interactive POI information with inline actions
 
-### 🗺️ Trip Planning
-- **POI Management**: Add, save, and organize points of interest
-- **Itinerary Building**: Dynamic trip planning with AI suggestions
-- **Multi-panel Interface**: Chat, map, and itinerary views
-- **Trip Persistence**: Save and resume trip planning sessions
+### 🗺️ Google Maps Integration
+- **Places API**: Real-time POI discovery with photos and ratings
+- **Interactive Maps**: Custom markers, InfoWindows, and clustering
+- **Photo Proxy**: CORS-compliant image serving for Google Photos
+- **Directions API**: Route optimization and travel time calculation
+- **Mock Fallbacks**: Offline-capable with pre-defined POI data
+
+### 🗄️ Data & Performance
+- **Supabase Integration**: PostgreSQL with real-time subscriptions
+- **In-Memory Caching**: Session and data caching for performance
+- **Session Hydration**: Database-to-memory synchronization
+- **Health Monitoring**: Database connection health checks
+- **Connection Pooling**: Optimized database connection management
+
+> **Note**: The current implementation uses in-memory caching with a no-op cache layer for simplicity. Memcached infrastructure is available but currently disabled to avoid connection complexity. This can be easily enabled in production for distributed caching.
 
 ### 🔐 Authentication & Security
-- **Supabase Auth**: Secure user authentication
-- **Session Management**: Protected routes and user sessions
-- **Data Privacy**: Secure handling of user travel data
-
-### 🎯 UI/UX Features
-- **Custom Components**: Reusable UI components with Shadcn/ui
-- **Animations**: Smooth transitions and hover effects
-- **Visual Feedback**: Loading states and interactive elements
-- **Accessibility**: WCAG compliant design patterns
+- **Supabase Auth**: Email/password and Google OAuth integration
+- **Protected Routes**: Middleware-based route protection
+- **Rate Limiting**: 60 requests per minute per IP protection
+- **Security Headers**: XSS protection, content sniffing prevention
 
 ## 📁 Project Structure
 
 ```
 TTT/
-├── Backend/                    # Node.js backend
+├── Backend/                           # Node.js TypeScript backend
 │   ├── src/
-│   │   ├── agents/            # LangGraph AI agents
-│   │   ├── api/               # Express routes
-│   │   ├── config/            # Configuration files
-│   │   └── utils/             # Utility functions
-│   ├── dist/                  # Compiled JavaScript
-│   └── package.json
-├── roameo-frontend/           # Next.js frontend
-│   ├── app/                   # App router pages
-│   │   ├── auth/             # Authentication pages
-│   │   ├── chat/             # Chat interface
-│   │   └── dashboard/        # Main dashboard
-│   ├── components/           # Reusable components
-│   │   ├── ui/               # Shadcn/ui components
-│   │   └── DestinationCardArt.tsx
-│   ├── lib/                  # Utilities and configurations
-│   └── public/               # Static assets
-├── database_schema.sql       # Database schema
-└── README.md
+│   │   ├── agents/                   # LangGraph AI agents (9 agents)
+│   │   │   ├── planner.ts           # Trip planning and itinerary generation
+│   │   │   ├── poi.ts               # POI discovery and management
+│   │   │   ├── chat.ts              # Conversation handling
+│   │   │   ├── destination.ts       # Destination research
+│   │   │   └── [5 more agents]      # Intent, extractor, map, router, title
+│   │   ├── api/                     # Express.js API routes
+│   │   │   ├── router.ts            # Main API router
+│   │   │   ├── maps.ts              # Google Maps proxy
+│   │   │   └── cache.ts             # Cache management API
+│   │   ├── cache/                   # In-memory caching layer
+   │   │   ├── cached-db.ts         # Database wrapper with caching
+   │   │   └── memcached.ts         # Memcached implementation (unused)
+│   │   ├── config/                  # Configuration management
+│   │   ├── db/                      # Database abstraction layer
+│   │   ├── tools/                   # External API integrations
+│   │   ├── ws/                      # WebSocket implementation
+│   │   └── index.ts                 # Server entry point
+│   ├── dist/                        # Compiled JavaScript output
+│   └── package.json                 # Dependencies and scripts
+├── roameo-frontend/                  # Next.js 14 React frontend
+│   ├── app/                         # App Router pages
+│   │   ├── auth/                    # Authentication pages
+│   │   ├── chat/                    # Chat interface
+│   │   ├── dashboard/               # Main dashboard
+│   │   └── profile/                 # User profile
+│   ├── components/                  # React components (34 components)
+│   │   ├── ui/                      # Shadcn/ui library (54 components)
+│   │   ├── chat-interface.tsx       # Main chat component
+│   │   ├── map-view.tsx             # Google Maps integration
+│   │   ├── dashboard.tsx            # Trip dashboard
+│   │   └── [30 more components]     # Additional UI components
+│   ├── lib/                         # Utilities and configurations
+│   │   ├── supabase/                # Supabase client configuration
+│   │   ├── api.ts                   # API client functions
+│   │   └── types.ts                 # TypeScript definitions
+│   ├── public/                      # Static assets (56 files)
+│   └── package.json                 # Dependencies and scripts
+├── Database Schema/                  # SQL scripts
+│   ├── database_schema.sql          # Core database schema
+│   ├── database_performance_optimization.sql
+│   └── rls_policies_final.sql       # Security policies
+└── Documentation/                    # Project documentation
+    ├── README.md                    # This file
+    ├── IMPLEMENTATION_SUMMARY.md    # Implementation details
+    └── MEMCACHED.md                 # Cache documentation
 ```
 
 ## 🚀 Getting Started
@@ -389,90 +472,121 @@ git clone <repository-url>
 cd TTT
 ```
 
-2. **Backend Setup**
+2. **Database Setup (Supabase)**
+```bash
+# Create a new Supabase project at https://supabase.com
+# Run the database schema in SQL editor:
+psql -d your_database < database_schema.sql
+# Apply performance optimizations:
+psql -d your_database < database_performance_optimization.sql
+```
+
+3. **Backend Setup**
 ```bash
 cd Backend
 npm install
 cp .env.example .env
-# Configure environment variables
-npm run dev
+# Configure environment variables (see below)
+npm run dev  # Starts on http://localhost:4000
 ```
 
-3. **Frontend Setup**
+4. **Frontend Setup**
 ```bash
 cd roameo-frontend
 npm install
 cp .env.local.example .env.local
-# Configure Supabase credentials
-npm run dev
+# Configure frontend environment variables
+npm run dev  # Starts on http://localhost:3001
 ```
 
-4. **Database Setup**
+5. **Database Performance** (Optional)
 ```bash
-# Run the database schema
-psql -d your_database < database_schema.sql
+# Apply performance optimizations
+psql -d your_database < database_performance_optimization.sql
+# Set up Row Level Security
+psql -d your_database < rls_policies_final.sql
 ```
 
 ### Environment Variables
 
 **Backend (.env)**
-```
-DATABASE_URL=your_supabase_database_url
-SUPABASE_URL=your_supabase_url
+```bash
+# Server Configuration
+NODE_ENV=development
+PORT=4000
+
+# Google AI and Maps
+GEMINI_API_KEY=your_gemini_api_key
+GEMINI_MODEL_FLASH=gemini-2.5-flash
+GEMINI_MODEL_PRO=gemini-2.5-pro
+GOOGLE_MAPS_API_KEY=your_google_maps_api_key
+
+# Supabase Database
+SUPABASE_URL=your_supabase_project_url
 SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+
+# Optional APIs
+TAVILY_API_KEY=your_tavily_api_key
 ```
 
 **Frontend (.env.local)**
-```
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+```bash
+# Supabase Configuration
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# Backend API Configuration
+NEXT_PUBLIC_API_URL=http://localhost:4000
+NEXT_PUBLIC_WS_URL=ws://localhost:4000/ws
 ```
 
-## 🛣️ Roadmap
+### API Keys Setup Guide
 
-### 🎨 UI/UX Refinements
-- [ ] Enhanced animations and micro-interactions
-- [ ] Dark mode support
-- [ ] Advanced filtering and search
-- [ ] Mobile app optimization
-- [ ] Accessibility improvements
+1. **Google AI Studio**: Get Gemini API key from [Google AI Studio](https://aistudio.google.com/app/apikey)
+2. **Google Cloud Console**: Enable Maps JavaScript API, Places API, and Directions API
+3. **Supabase**: Create project at [supabase.com](https://supabase.com) and get URL/keys
+4. **Tavily (Optional)**: Get search API key from [tavily.com](https://tavily.com)
 
-### ⚡ Backend Migration
-- [ ] **Switch to FastAPI**: Migrate from Node.js/Express to Python FastAPI
-- [ ] Performance optimizations
-- [ ] Enhanced API documentation with OpenAPI
-- [ ] Better error handling and logging
-- [ ] Caching layer implementation
+### Required API Services
+- ✅ **Google Gemini AI**: Conversation and planning intelligence
+- ✅ **Google Maps Platform**: POI discovery, photos, and directions
+- ✅ **Supabase**: Database, authentication, and real-time features
+- 🔄 **Tavily Search**: Enhanced web search (optional)
 
-### 🔧 Backend Enhancements
-- [ ] Advanced AI conversation flows
-- [ ] Integration with travel APIs (flights, hotels, weather)
-- [ ] Real-time collaboration features
-- [ ] Advanced trip analytics
-- [ ] Notification system
+## 🛣️ Roadmap & Future Enhancements
 
-### ✨ Additional Features
-- [ ] **Hover Interactions**: Enhanced UI feedback and tooltips
-- [ ] Social sharing capabilities
-- [ ] Trip collaboration and sharing
-- [ ] Offline mode support
-- [ ] Export trip itineraries (PDF, calendar)
-- [ ] Integration with calendar apps
-- [ ] Budget tracking and management
-- [ ] Photo integration and trip memories
+### 🎨 UI/UX Improvements
+- [ ] **Dark Mode**: Complete theme switching with system preference detection
+- [ ] **Enhanced Animations**: Framer Motion micro-interactions and page transitions
+- [ ] **Mobile Optimization**: Progressive Web App (PWA) with offline support
+- [ ] **Advanced Filtering**: Multi-criteria POI filtering and sorting
+- [ ] **Accessibility**: WCAG 2.1 AA compliance and screen reader optimization
+- [ ] **Multi-language**: i18n support for global markets
 
-### 📝 Content & Community
-- [ ] **Travel Blog**: Integrated blog system for travel tips and stories
-- [ ] User-generated content
-- [ ] Community features and trip sharing
-- [ ] Travel guides and recommendations
-- [ ] Review and rating system
+### 🚀 Performance & Scalability
+- [ ] **CDN Integration**: Global content delivery for faster loading
+- [ ] **Image Optimization**: Advanced WebP/AVIF conversion and compression
+- [ ] **Database Sharding**: Horizontal scaling for large user bases
+- [ ] **External Caching**: Redis or Memcached integration for distributed caching
+- [ ] **Edge Computing**: Deploy functions closer to users globally
+- [ ] **Monitoring**: Application performance monitoring (APM) integration
 
-### 🔍 Analytics & Insights
-- [ ] User behavior analytics
-- [ ] Trip success metrics
-- [ ] Personalized recommendations
-- [ ] Travel trend analysis
+### 🤖 AI & Intelligence Enhancements
+- [ ] **Voice Integration**: Speech-to-text for hands-free trip planning
+- [ ] **Image Recognition**: Photo-based POI discovery and recommendations
+- [ ] **Predictive Analytics**: Weather-aware and crowd-based suggestions
+- [ ] **Personalization**: ML-driven recommendations based on user history
+- [ ] **Multi-language AI**: Gemini models for non-English conversations
+- [ ] **Advanced Agents**: Hotel booking, flight search, and activity reservation agents
+
+### 🌐 API & Integration Expansions
+- [ ] **Booking APIs**: Integrate Booking.com, Expedia, Airbnb for reservations
+- [ ] **Flight APIs**: Amadeus or Skyscanner for flight recommendations
+- [ ] **Weather APIs**: Real-time weather integration for trip planning
+- [ ] **Currency APIs**: Live exchange rates and budget calculations
+- [ ] **Calendar Integration**: Google Calendar, Outlook, Apple Calendar sync
+- [ ] **Social Platforms**: Instagram, TikTok integration for travel inspiration
 
 ## 🤝 Contributing
 

@@ -1,0 +1,21 @@
+{
+  "name": "Roameo - AI Travel Planner",
+  "short_name": "Roameo",
+  "description": "Multi-agent AI travel planner that creates personalized, budget-aware itineraries",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/apple-touch-icon.svg",
+      "sizes": "180x180",
+      "type": "image/svg+xml"
+    }
+  ]
+}

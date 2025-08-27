@@ -10,7 +10,7 @@ import type { WsEvent, TripContext } from "./types/schemas.js";
 import { buildApiRouter } from "./api/router.js";
 import { runRouter } from "./graph/graph.js";
 import type { Db } from "./db/types.js";
-import { WriteThroughDb } from "./db/persist.js";
+import { CachedDb } from "./cache/cached-db.js";
 import { SimpleRateLimiter } from "./utils/rateLimiter.js";
 
 const app = express();
@@ -20,8 +20,8 @@ app.use(express.json());
 const httpServer = createServer(app);
 const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
 const hub = new WsHub();
-// Prefer persistent DB if Supabase env is configured; write-through to Supabase while serving from memory for speed
-const db: Db = new WriteThroughDb(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+// Prefer cached DB with Memcached for better performance; falls back gracefully if cache unavailable
+const db: Db = new CachedDb(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const chatLimiter = new SimpleRateLimiter(60, 60_000); // 60 req/min per IP
 
 // Mount REST API router
@@ -36,7 +36,7 @@ app.use("/api", buildApiRouter(hub, db, {
   },
 }));
 
-wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
+wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
   // Expect: ws://host/ws?sessionId=...
   const url = new URL(req.url || "", `http://${req.headers.host}`);
   const sessionId = url.searchParams.get("sessionId");
@@ -45,10 +45,71 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     return;
   }
 
-  // Do NOT implicitly create sessions on WS connect. If the session does not exist,
-  // close the socket. New sessions must be created via REST /api/chat/send.
-  const existing = db.getSession(sessionId);
+  // Check if session exists in memory first
+  let existing = db.getSession(sessionId);
+  
+  // If not in memory, try to load from database
+  if (!existing && typeof (db as any).loadSessionFromDatabase === 'function') {
+    try {
+      existing = await (db as any).loadSessionFromDatabase(sessionId);
+      if (existing) {
+        console.log(`[ws] Loaded session ${sessionId} from database`);
+      }
+    } catch (e) {
+      console.warn(`[ws] Failed to load session ${sessionId} from database:`, e);
+    }
+  }
+  
+  // If session still doesn't exist, check directly in Supabase as fallback
+  if (!existing && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+      
+      const { data: sessionData, error } = await supabase
+        .from('chat_sessions')
+        .select('session_id, invite_id, trip')
+        .eq('session_id', sessionId)
+        .maybeSingle();
+        
+      if (!error && sessionData) {
+        console.log(`[ws] Found session ${sessionId} in database, hydrating...`);
+        
+        // Load messages and saved POIs
+        const { data: messages } = await supabase
+          .from('messages')
+          .select('id, role, content, created_at')
+          .eq('session_id', sessionId)
+          .order('created_at', { ascending: true });
+          
+        const { data: savedPois } = await supabase
+          .from('saved_pois')
+          .select('poi_id')
+          .eq('session_id', sessionId);
+        
+        // Upsert session into memory
+        existing = db.upsertSession(sessionId, {
+          inviteId: sessionData.invite_id || undefined,
+          trip: sessionData.trip || {},
+          messages: (messages || []).map((m: any) => ({
+            id: m.id,
+            role: m.role,
+            content: m.content,
+            createdAt: new Date(m.created_at).toISOString()
+          })),
+          savedPoiIds: new Set((savedPois || []).map((p: any) => p.poi_id))
+        });
+        
+        console.log(`[ws] Successfully hydrated session ${sessionId}`);
+      }
+    } catch (e) {
+      console.warn(`[ws] Failed to check database for session ${sessionId}:`, e);
+    }
+  }
+
+  // If session still doesn't exist after all checks, close connection
   if (!existing) {
+    console.log(`[ws] Session ${sessionId} not found in memory or database`);
     ws.close(1008, "unknown sessionId");
     return;
   }
@@ -86,14 +147,25 @@ const port = process.env.PORT || 4000;
 async function init() {
   // Best-effort: hydrate from Supabase at startup so existing trips/messages are available immediately
   try {
-    // @ts-ignore - optional method for write-through DB
+    // @ts-ignore - enhanced method for cached DB
     if (typeof (db as any).hydrateFromRemote === "function") {
-      console.log("[roameo-backend] hydrating from Supabase...");
+      console.log("[roameo-backend] hydrating from Supabase with cache warming...");
       await (db as any).hydrateFromRemote();
-      console.log("[roameo-backend] hydration complete");
+      console.log("[roameo-backend] hydration and cache warming complete");
     }
   } catch (e) {
     console.warn("[roameo-backend] hydrateFromRemote failed (continuing):", e);
+  }
+
+  // Perform cache health check
+  try {
+    // @ts-ignore - cache health check method
+    if (typeof (db as any).cacheHealthCheck === "function") {
+      const healthCheck = await (db as any).cacheHealthCheck();
+      console.log(`[roameo-backend] Cache health: ${healthCheck.healthy ? 'OK' : 'WARN'} - ${healthCheck.message}`);
+    }
+  } catch (e) {
+    console.warn("[roameo-backend] Cache health check failed:", e);
   }
 
   httpServer.listen(port, () => {

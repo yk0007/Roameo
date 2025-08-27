@@ -1,6 +1,22 @@
 import { env } from "../config/env.js";
 import type { POI } from "../types/schemas.js";
 
+// Helper function to get the backend base URL
+function getBackendBaseUrl(): string {
+  // In production, use the deployed backend URL
+  if (process.env.NODE_ENV === 'production') {
+    return process.env.BACKEND_URL || 'https://roameo.onrender.com';
+  }
+  // In development, use localhost
+  return process.env.BACKEND_URL || 'http://localhost:4000';
+}
+
+// Helper function to generate absolute photo proxy URLs
+function createPhotoProxyUrl(photoReference: string): string {
+  const baseUrl = getBackendBaseUrl();
+  return `${baseUrl}/api/proxy/photo?photo_reference=${encodeURIComponent(photoReference)}&maxwidth=800&key=${encodeURIComponent(env.GOOGLE_MAPS_API_KEY!)}`;
+}
+
 export interface PlaceQuery {
   q: string; // e.g. "hotels in Goa" or "restaurants near Goa"
   lat?: number;
@@ -48,9 +64,7 @@ export class GoogleMapsClient {
         rating: typeof r.rating === "number" ? (r.rating as number) : undefined,
         photoUrl:
           (r.photos && r.photos[0]?.photo_reference &&
-            `/api/proxy/photo?photo_reference=${encodeURIComponent(r.photos[0].photo_reference)}&maxwidth=800&key=${encodeURIComponent(
-              env.GOOGLE_MAPS_API_KEY!
-            )}`) || undefined,
+            createPhotoProxyUrl(r.photos[0].photo_reference)) || undefined,
         source: "google",
       }));
       try {

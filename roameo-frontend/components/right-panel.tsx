@@ -113,7 +113,14 @@ export function RightPanel({
 
         {activeView === "itinerary" && (
           <div className="h-full overflow-y-auto">
-            <ItineraryPanel itinerary={itinerary} trip={trip} />
+            <ItineraryPanel 
+              itinerary={itinerary} 
+              trip={trip}
+              savedIds={savedIds}
+              onToggleSave={onToggleSave}
+              onAddPoi={onAddPoi}
+              onReplan={onReplan}
+            />
           </div>
         )}
         

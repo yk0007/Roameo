@@ -45,6 +45,7 @@ export default function ChatPage() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
   const [savedPoiIds, setSavedPoiIds] = useState<Set<string>>(new Set())
+  const [inputMessage, setInputMessage] = useState<string>("") // Add state for controlling input
   const reconnectAttemptsRef = useRef(0)
   const reconnectTimerRef = useRef<number | null>(null)
   const [authChecked, setAuthChecked] = useState(false)
@@ -280,14 +281,17 @@ export default function ChatPage() {
     return () => window.clearTimeout(timer)
   }, [isRightPanelVisible, activeRightView])
 
-  // Set tab title to chat session/trip title
+  // Set tab title to chat session/trip title - only update when planning occurs
   useEffect(() => {
     if (typeof document === "undefined") return
     const base = "Roameo"
     const sessionSuffix = sessionId ? ` – ${sessionId.slice(-6)}` : ""
-    const title = trip.title ? `Chat – ${trip.title}` : `Chat${sessionSuffix}`
+    
+    // Only update title when we have meaningful trip data (destination or itinerary)
+    const hasPlanning = trip.destination || itinerary
+    const title = hasPlanning && trip.title ? `Chat – ${trip.title}` : `Chat${sessionSuffix}`
     document.title = `${base} | ${title}`
-  }, [trip.title, sessionId])
+  }, [trip.destination, itinerary, sessionId, trip.title])
 
   // On first load: capture inviteId and initial message from query
   useEffect(() => {
@@ -436,12 +440,18 @@ export default function ChatPage() {
     }
   }
 
+
   const handleAddPoi = async (poi: POI) => {
-    // MVP: ask AI to add POI to itinerary
+    // Just populate the input box, don't auto-send
     const loc = poi.address ? ` at ${poi.address}` : ""
     const coord = poi.lat && poi.lng ? ` (coords: ${poi.lat}, ${poi.lng})` : ""
     const msg = `Please add ${poi.name}${loc}${coord} to my itinerary in an appropriate slot. If needed, adjust nearby activities accordingly.`
-    await handleSendMessage(msg)
+    setInputMessage(msg)
+    setActiveLeftView("chat")
+  }
+
+  const handlePopulateInput = (text: string) => {
+    setInputMessage(text)
     setActiveLeftView("chat")
   }
 
@@ -477,6 +487,7 @@ export default function ChatPage() {
           budget: trip.budget || "Budget",
         }}
         onReplan={() => handleReplan()}
+        onPopulateInput={handlePopulateInput}
         inviteLink={inviteId ? `${typeof window !== "undefined" ? window.location.origin : ""}/chat?inviteId=${inviteId}` : undefined}
         onTripUpdate={async (t) => {
           const daysMatch = /\d+/.exec(t.duration || "")
@@ -611,6 +622,9 @@ export default function ChatPage() {
                   onToggleSave={handleToggleSave}
                   onAddPoi={handleAddPoi}
                   onReplan={handleReplan}
+                  onPopulateInput={handlePopulateInput}
+                  inputValue={inputMessage}
+                  onInputChange={setInputMessage}
                 />
               )}
               {activeLeftView === "search" && (

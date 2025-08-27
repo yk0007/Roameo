@@ -1,0 +1,14 @@
+<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Main circle with gradient background -->
+  <defs>
+    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+  </defs>
+  <circle cx="90" cy="90" r="90" fill="url(#gradient)"/>
+  <!-- Inner white dot with subtle shadow -->
+  <circle cx="90" cy="90" r="28" fill="#ffffff" opacity="0.95"/>
+  <!-- Small highlight for depth -->
+  <circle cx="78" cy="78" r="8" fill="#ffffff" opacity="0.4"/>
+</svg>

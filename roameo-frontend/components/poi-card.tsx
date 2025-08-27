@@ -4,6 +4,7 @@ import { Heart, Plus, Hotel, MapPin, Star, RefreshCw, X, Check, Bookmark } from 
 import { Button } from "@/components/ui/button"
 import Image from "next/image"
 import { motion } from "framer-motion"
+import { memo, useCallback } from "react"
 import type { POI } from "@/lib/types"
 
 interface PoiCardProps {
@@ -17,10 +18,21 @@ interface PoiCardProps {
 
 
 // Compact version for map hover cards
-export function CompactPoiCard({ poi, isSaved, isItineraryItem, onToggleSave, onAddPoi, onReplan }: PoiCardProps) {
+export const CompactPoiCard = memo(function CompactPoiCard({ poi, isSaved, isItineraryItem, onToggleSave, onAddPoi, onReplan }: PoiCardProps) {
+  const handleToggleSave = useCallback(() => {
+    onToggleSave(poi, !isSaved)
+  }, [poi, isSaved, onToggleSave])
+
+  const handleAddPoi = useCallback(() => {
+    onAddPoi(poi)
+  }, [poi, onAddPoi])
+
+  const handleReplan = useCallback(() => {
+    onReplan(poi)
+  }, [poi, onReplan])
   return (
     <motion.div 
-      className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100"
+      className="bg-white rounded-2xl overflow-hidden shadow-sm border-0"
       whileHover={{
         scale: 1.05,
         y: -8,
@@ -36,7 +48,12 @@ export function CompactPoiCard({ poi, isSaved, isItineraryItem, onToggleSave, on
           width={400}
           height={160}
           className="w-full h-40 object-cover"
-          quality={80}
+          quality={85}
+          priority={true}
+          loading="eager"
+          sizes="(max-width: 768px) 100vw, 400px"
+          placeholder="blur"
+          blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q=="
         />
         
         {/* Top right love button */}
@@ -45,31 +62,22 @@ export function CompactPoiCard({ poi, isSaved, isItineraryItem, onToggleSave, on
             size="icon"
             variant="secondary"
             className="w-7 h-7 rounded-full bg-white/80 hover:bg-white shadow-md"
-            onClick={() => onToggleSave(poi, !isSaved)}
+            onClick={handleToggleSave}
           >
             <Heart className={`w-4 h-4 ${isSaved ? 'fill-red-500 text-red-500' : 'text-gray-600'}`} />
           </Button>
         </div>
         
-        {/* Add to trip / Added state */}
+        {/* Info badge - no longer clickable for auto-add */}
         <div className="absolute top-3 left-3">
           {isItineraryItem ? (
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled
-              className="rounded-full bg-white text-gray-700 shadow-sm cursor-default px-3 py-0.5 text-xs"
-            >
-              <Check className="w-4 h-4 mr-1" /> Added
-            </Button>
+            <div className="bg-white/90 text-gray-700 rounded-full px-3 py-0.5 text-xs font-medium shadow-sm">
+              <Check className="w-4 h-4 mr-1 inline" /> In Itinerary
+            </div>
           ) : (
-            <Button
-              size="sm"
-              className="bg-black/80 hover:bg-black text-white rounded-full px-3 py-0.5 text-xs"
-              onClick={() => onAddPoi(poi)}
-            >
-              Add to trip
-            </Button>
+            <div className="bg-white/90 text-gray-700 rounded-full px-3 py-0.5 text-xs font-medium shadow-sm">
+              <MapPin className="w-3 h-3 mr-1 inline" /> Available
+            </div>
           )}
         </div>
         
@@ -80,7 +88,7 @@ export function CompactPoiCard({ poi, isSaved, isItineraryItem, onToggleSave, on
           <h3 className="font-semibold text-base text-gray-900 leading-tight">{poi.name}</h3>
           {poi.rating && (
             <div className="flex items-center gap-1 ml-2">
-              <Star className="w-4 h-4 fill-black text-black" />
+              <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
               <span className="text-sm font-medium text-gray-900">{poi.rating}</span>
               <span className="text-sm text-gray-500">(995)</span>
             </div>
@@ -96,4 +104,4 @@ export function CompactPoiCard({ poi, isSaved, isItineraryItem, onToggleSave, on
       </div>
     </motion.div>
   )
-}
+})

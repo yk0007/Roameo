@@ -1,11 +1,12 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react"
+import { useEffect, useMemo, useRef, useState, useCallback, memo } from "react"
 import { Search, Calendar, Users, SlidersHorizontal, Heart, Plus, Hotel, MapPin, Star, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { CachedImage } from "@/components/cached-image"
 import { SearchCard } from "@/components/search-card"
+import { useSearchDebounce } from "@/lib/utils/performance"
 import type { SearchResults, POI } from "@/lib/types"
 
 interface SearchInterfaceProps {
@@ -19,16 +20,27 @@ interface SearchInterfaceProps {
   onReplan?: (poi?: POI) => void
 }
 
-export function SearchInterface({ activeView, onViewChange, results, savedIds, itineraryPoiIds, onAddPoi, onToggleSave, onReplan }: SearchInterfaceProps) {
+export const SearchInterface = memo(function SearchInterface({ activeView, onViewChange, results, savedIds, itineraryPoiIds, onAddPoi, onToggleSave, onReplan }: SearchInterfaceProps) {
   const [activeTab, setActiveTab] = useState("Stays")
   const [searchQuery, setSearchQuery] = useState("")
+  const [debouncedQuery, setDebouncedQuery] = useState("")
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const scrollPosRef = useRef<Record<string, number>>({ Stays: 0, Restaurants: 0, Attractions: 0 })
 
   const tabs = ["Stays", "Restaurants", "Attractions"]
 
+  // Debounced search to avoid excessive filtering
+  const debouncedSetQuery = useSearchDebounce((query: string) => {
+    setDebouncedQuery(query)
+  }, 300)
+
+  // Trigger debounced search when query changes
+  useEffect(() => {
+    debouncedSetQuery(searchQuery)
+  }, [searchQuery, debouncedSetQuery])
+
   const allResults = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase()
+    const q = debouncedQuery.trim().toLowerCase()
     let arr: POI[] = []
     
     if (!results) return arr
@@ -37,14 +49,12 @@ export function SearchInterface({ activeView, onViewChange, results, savedIds, i
     if (activeTab === "Attractions") arr = results.attractions || []
     
     if (!q) return arr
-    return arr.filter((p) => p.name.toLowerCase().includes(q) || (p.address || "").toLowerCase().includes(q))
-  }, [results, activeTab, searchQuery])
-
-  const list = useMemo(() => {
-    return allResults
-  }, [allResults])
-
-
+    
+    // Filter results based on search query
+    return arr.filter((p) => 
+      p.name.toLowerCase().includes(q) || (p.address || "").toLowerCase().includes(q)
+    )
+  }, [results, activeTab, debouncedQuery])
 
   // Restore scroll position on tab switch
   useEffect(() => {
@@ -85,28 +95,8 @@ export function SearchInterface({ activeView, onViewChange, results, savedIds, i
               className="pl-10 rounded-2xl bg-white/80 backdrop-blur-sm border-white/30"
             />
           </div>
-          <Button className="bg-black/80 text-white hover:bg-black/90 rounded-2xl px-6 backdrop-blur-sm" onClick={() => { /* hook to future manual search */ }}>
+          <Button className="bg-black/80 text-white hover:bg-black/90 rounded-2xl px-6 backdrop-blur-sm" onClick={useCallback(() => { /* hook to future manual search */ }, [])}>
             Search
-          </Button>
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
-          <Button variant="outline" size="sm" className="rounded-2xl bg-white/50 backdrop-blur-sm border-white/30">
-            <Calendar className="w-4 h-4 mr-1" />
-            Dates
-          </Button>
-          <Button variant="outline" size="sm" className="rounded-2xl bg-white/50 backdrop-blur-sm border-white/30">
-            <Users className="w-4 h-4 mr-1" />Guests
-          </Button>
-          <Button variant="outline" size="sm" className="rounded-2xl bg-white/50 backdrop-blur-sm border-white/30">
-            Location
-          </Button>
-          <Button variant="outline" size="sm" className="rounded-2xl bg-white/50 backdrop-blur-sm border-white/30">
-            Any budget
-          </Button>
-          <Button variant="outline" size="sm" className="rounded-2xl bg-white/50 backdrop-blur-sm border-white/30">
-            <SlidersHorizontal className="w-4 h-4 mr-1" />
-            Filters
           </Button>
         </div>
       </div>
@@ -121,24 +111,28 @@ export function SearchInterface({ activeView, onViewChange, results, savedIds, i
       >
         {!results ? (
           <div className="text-sm text-gray-500">No results yet. Ask Roameo to search for places.</div>
-        ) : list.length === 0 ? (
+        ) : allResults.length === 0 ? (
           <div className="text-sm text-gray-500">No matches for your filters.</div>
         ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-6">
-            {list.map((poi) => (
-              <SearchCard
-                key={poi.id}
-                poi={poi}
-                isSaved={savedIds?.has(poi.id) || false}
-                isItineraryItem={!!itineraryPoiIds?.has(poi.id)}
-                onToggleSave={onToggleSave ? (p: POI, n: boolean) => onToggleSave(p, n) : () => {}}
-                onAddPoi={onAddPoi ? (p: POI) => onAddPoi(p) : () => {}}
-                onReplan={onReplan ? (p: POI) => onReplan(p) : () => {}}
-              />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-6">
+              {allResults.map((poi) => (
+                <SearchCard
+                  key={poi.id}
+                  poi={poi}
+                  isSaved={savedIds?.has(poi.id) || false}
+                  isItineraryItem={!!itineraryPoiIds?.has(poi.id)}
+                  onToggleSave={onToggleSave ? (p: POI, n: boolean) => onToggleSave(p, n) : () => {}}
+                  onAddPoi={onAddPoi ? (p: POI) => onAddPoi(p) : () => {}}
+                  onReplan={onReplan ? (p: POI) => onReplan(p) : () => {}}
+                />
+              ))}
+            </div>
+
+
+          </>
         )}
       </div>
     </div>
   )
-}
+})

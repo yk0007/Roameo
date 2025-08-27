@@ -148,7 +148,84 @@ const graph = new StateGraph<State>({ channels: graphState })
     
     const events: WsEvent[] = [];
     
-    // Trigger immediate POI search first to get POI data
+    // Check if we have both destination and days -> trigger full itinerary planning
+    if (extraction.hasDestination && extraction.days && (extraction.destination || (extraction.destinations && extraction.destinations.length > 0))) {
+      console.log(`[destination_search] Both destination and days found, triggering itinerary planning`);
+      
+      // Create trip context for planner agent
+      const planningTrip = {
+        ...trip,
+        destination: extraction.destination || (extraction.destinations ? extraction.destinations[0] : trip.destination),
+        destinations: extraction.destinations || (extraction.destination ? [extraction.destination] : trip.destinations),
+        days: extraction.days,
+        origin: extraction.origin || trip.origin,
+      };
+      
+      // Use planner agent to generate full itinerary
+      const res = await plannerAgent(planningTrip, message);
+      
+      if (res) {
+        const updatedTrip = { 
+          ...planningTrip, 
+          destination: res.destination, 
+          destinations: res.destinations,
+          days: res.days 
+        };
+        
+        const title = await generateSessionTitle({
+          message,
+          origin: updatedTrip.origin,
+          destination: res.destination,
+          days: res.days,
+          existingTitle: trip.title,
+        });
+
+        events.push({
+          type: "chat.append",
+          data: {
+            id: randomUUID(),
+            role: "assistant",
+            content: res.chatResponse,
+            createdAt: new Date().toISOString(),
+          },
+        });
+        
+        events.push({
+          type: "navbar.update",
+          data: {
+            destination: res.destination,
+            destinations: res.destinations,
+            days: res.days,
+            title,
+          },
+        });
+
+        if (res.itinerary.daysPlan.length > 0) {
+          events.push(emitItineraryUpdate(res.itinerary));
+          
+          // Handle POI search for multiple destinations
+          const searchDestination = res.destinations && res.destinations.length > 0 
+            ? res.destinations[0] // Use first destination for POI search
+            : res.destination;
+          const poiEvt = await poiAgent({ destination: searchDestination });
+          if (poiEvt) {
+            events.push(poiEvt);
+            if (poiEvt.type === "search.results") {
+              const pois = [...poiEvt.data.stays, ...poiEvt.data.restaurants, ...poiEvt.data.attractions];
+              events.push(await mapAgent(pois));
+            }
+          }
+        }
+        
+        return { 
+          events, 
+          extractedDestination: extraction,
+          input: { ...state.input, trip: updatedTrip }
+        };
+      }
+    }
+    
+    // Otherwise, proceed with immediate POI search and ask for remaining details
     const poiEvents = await immediatePoiSearchAgent(extraction);
     
     // Extract POI data for chat response generation
@@ -162,19 +239,54 @@ const graph = new StateGraph<State>({ channels: graphState })
       };
     }
     
-    // Generate AI-powered conversational response with POI formatting
-    const chatResponse = await generateDestinationChatResponse(extraction, message, poiData);
+    // Generate AI-powered conversational response with POI formatting + ask for missing info
+    const destinationChatResponse = await generateDestinationChatResponse(extraction, message, poiData);
     
-    // Add chat response
+    // Generate follow-up questions for missing information
+    let followUpResponse = "";
+    const missingInfo = [];
+    if (!extraction.days) missingInfo.push("duration");
+    if (!extraction.origin && !trip.origin) missingInfo.push("origin");
+    
+    if (missingInfo.length > 0) {
+      followUpResponse = `\n\nTo create a perfect itinerary for you, could you please tell me:\n`;
+      if (missingInfo.includes("duration")) {
+        followUpResponse += `• How many days will you be visiting?\n`;
+      }
+      if (missingInfo.includes("origin")) {
+        followUpResponse += `• Where will you be traveling from?\n`;
+      }
+    }
+    
+    // ALSO activate general chat agent for additional conversational context
+    const generalChatResponse = await chatAgent(message, state.messages);
+    
+    // Add destination-specific chat response first
     events.push({
       type: "chat.append",
       data: {
         id: randomUUID(),
         role: "assistant",
-        content: chatResponse,
+        content: destinationChatResponse + followUpResponse,
         createdAt: new Date().toISOString(),
       },
     });
+    
+    // Add general chat response as a follow-up if it provides additional value
+    if (generalChatResponse && 
+        generalChatResponse.length > 20 && 
+        !generalChatResponse.toLowerCase().includes("sorry") &&
+        !generalChatResponse.toLowerCase().includes("trouble")) {
+      events.push({
+        type: "chat.append",
+        data: {
+          id: randomUUID(),
+          role: "assistant",
+          content: generalChatResponse,
+          createdAt: new Date().toISOString(),
+        },
+      });
+    }
     
     // Update navbar with destination info if available
     const destinations = extraction.destinations || (extraction.destination ? [extraction.destination] : []);

@@ -18,6 +18,7 @@ interface SearchCardProps {
 
 export function SearchCard({ poi, isSaved, isItineraryItem, onToggleSave, onAddPoi, onReplan, compact = false }: SearchCardProps) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
+  const [imageError, setImageError] = useState(false)
   
   // Mock multiple images - in real app, poi would have multiple photos
   const images = poi.photoUrl ? [poi.photoUrl] : []
@@ -34,6 +35,10 @@ export function SearchCard({ poi, isSaved, isItineraryItem, onToggleSave, onAddP
     }
   }
 
+  const handleImageError = () => {
+    setImageError(true)
+  }
+
   const imgClass = "w-full h-48 object-cover"
   const padClass = compact ? "p-3" : "p-4"
   const titleClass = compact ? "font-semibold text-base text-gray-900 leading-tight" : "font-semibold text-lg text-gray-900 leading-tight"
@@ -42,13 +47,18 @@ export function SearchCard({ poi, isSaved, isItineraryItem, onToggleSave, onAddP
     <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
       <div className="relative">
         <Image 
-          src={images[currentImageIndex] || poi.photoUrl || '/placeholder.svg'} 
+          src={imageError ? '/placeholder.svg' : (images[currentImageIndex] || poi.photoUrl || '/placeholder.svg')} 
           alt={poi.name} 
           className={imgClass}
           width={400}
           height={300}
-          quality={80}
-          priority={false}
+          quality={85}
+          priority={true}
+          loading="eager"
+          sizes="(max-width: 768px) 100vw, 400px"
+          placeholder="blur"
+          blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q=="
+          onError={handleImageError}
         />
         
         {/* Navigation arrows */}

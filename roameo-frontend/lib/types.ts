@@ -31,6 +31,11 @@ export interface POI {
   address?: string
   photoUrl?: string
   source?: "google" | "foursquare" | "custom"
+  description?: string
+  priceLevel?: number
+  phone?: string
+  website?: string
+  openingHours?: string[]
 }
 
 export interface Activity {

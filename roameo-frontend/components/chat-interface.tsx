@@ -30,6 +30,9 @@ interface ChatInterfaceProps {
   onToggleSave?: (poi: POI, nextSaved: boolean) => void
   onAddPoi?: (poi: POI) => void
   onReplan?: (poi: POI) => void
+  onPopulateInput?: (text: string) => void
+  inputValue?: string
+  onInputChange?: (value: string) => void
 }
 
 
@@ -48,8 +51,11 @@ export function ChatInterface({
   onToggleSave,
   onAddPoi,
   onReplan,
+  onPopulateInput,
+  inputValue: externalInputValue,
+  onInputChange,
 }: ChatInterfaceProps) {
-  const [inputValue, setInputValue] = useState("")
+  const [inputValue, setInputValue] = useState(externalInputValue || "")
   const [showSuggestion, setShowSuggestion] = useState(false)
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
   const [userJustSent, setUserJustSent] = useState(false)
@@ -58,6 +64,19 @@ export function ChatInterface({
   const typedMessageIdsRef = useRef<Set<string>>(new Set())
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // Sync external input value with internal state
+  useEffect(() => {
+    if (externalInputValue !== undefined && externalInputValue !== inputValue) {
+      setInputValue(externalInputValue)
+    }
+  }, [externalInputValue])
+
+  // Handle input changes
+  const handleInputChange = (value: string) => {
+    setInputValue(value)
+    onInputChange?.(value)
+  }
 
   const safeMessages = messages || []
   const lastMessage = useMemo(() => {
@@ -122,12 +141,12 @@ export function ChatInterface({
           flat.toLowerCase().includes(p.name.toLowerCase())
         )
       : undefined
-    if (matchingPoi && onAddPoi) {
+    if (matchingPoi && onPopulateInput) {
       const isSaved = savedIds?.has?.(matchingPoi.id || '') ?? false
       return (
         <HoverCard>
           <HoverCardTrigger asChild>
-            <strong className="font-semibold text-gray-900 cursor-pointer hover:underline" onClick={() => onAddPoi(matchingPoi)}>
+            <strong className="font-semibold text-gray-900 cursor-default">
               {children}
             </strong>
           </HoverCardTrigger>
@@ -137,7 +156,10 @@ export function ChatInterface({
               isSaved={isSaved}
               isItineraryItem={false}
               onToggleSave={(poi, next) => onToggleSave?.(poi, next)}
-              onAddPoi={(poi) => onAddPoi?.(poi)}
+              onAddPoi={(poi) => {
+                // Only call onAddPoi without populating input to prevent chat spam
+                onAddPoi?.(poi)
+              }}
               onReplan={(poi) => onReplan?.(poi)}
             />
           </HoverCardContent>
@@ -163,15 +185,14 @@ export function ChatInterface({
               poiName.toLowerCase().includes(poi.name.toLowerCase())
             )
             
-            if (matchingPoi && isAssistant && onAddPoi) {
+            if (matchingPoi && isAssistant && onPopulateInput) {
               const isSaved = savedIds?.has?.(matchingPoi.id || '') ?? false
               return (
                 <HoverCard key={`${poiName}-${index}`}>
                   <HoverCardTrigger asChild>
                     <span
-                      className="cursor-pointer text-blue-600 hover:text-blue-800 hover:underline font-semibold"
-                      onClick={() => onAddPoi(matchingPoi)}
-                      title={`Click to add ${matchingPoi.name} to map`}
+                      className="cursor-default text-blue-600 font-semibold"
+                      title={`Information about ${matchingPoi.name}`}
                     >
                       {pin} {poiName}
                     </span>
@@ -182,7 +203,12 @@ export function ChatInterface({
                       isSaved={isSaved}
                       isItineraryItem={false}
                       onToggleSave={(poi, next) => onToggleSave?.(poi, next)}
-                      onAddPoi={(poi) => onAddPoi?.(poi)}
+                      onAddPoi={(poi) => {
+                        const loc = poi.address ? ` at ${poi.address}` : ""
+                        const coord = poi.lat && poi.lng ? ` (coords: ${poi.lat}, ${poi.lng})` : ""
+                        const msg = `Please add ${poi.name}${loc}${coord} to my itinerary in an appropriate slot. If needed, adjust nearby activities accordingly.`
+                        onPopulateInput(msg)
+                      }}
                       onReplan={(poi) => onReplan?.(poi)}
                     />
                   </HoverCardContent>
@@ -449,7 +475,7 @@ const handleSubmit = (e: React.FormEvent) => {
     
     setResponseType(isPlanningMessage ? 'planning' : 'general')
     onSendMessage(inputValue.trim())
-    setInputValue("")
+    handleInputChange("") // Clear both internal and external input
   }
 }
 
@@ -461,12 +487,12 @@ return (
             <div key={message.id} className={`flex gap-3 mb-4 ${message.role === "user" ? "justify-end" : "justify-start"}`}>
               <Avatar className={`w-8 h-8 flex-shrink-0 ${message.role === "user" ? "order-2" : "order-1"}`}>
                 <AvatarFallback className={message.role === "user" ? "bg-orange-500 text-white" : "bg-black text-white flex items-center justify-center"}>
-                  {message.role === "user" ? "N" : <div className="w-3 h-3 bg-white rounded-full"></div>}
+                  {message.role === "user" ? "N" : <div className="w-2 h-2 bg-white rounded-full"></div>}
                 </AvatarFallback>
               </Avatar>
               <div className={`max-w-[78%] ${message.role === "user" ? "order-1" : "order-2"}`}>
-                <div className={`prose prose-sm max-w-none px-4 py-3 rounded-2xl shadow-sm ${message.role === "user" ? "bg-orange-50 border border-orange-100" : "bg-white/85 border border-zinc-200"}`}>
-                  <div className="leading-relaxed">
+                <div className={`prose prose-xs max-w-none px-4 py-3 rounded-2xl shadow-sm ${message.role === "user" ? "bg-orange-50 border border-orange-100" : "bg-white/85 border border-zinc-200"}`}>
+                  <div className="leading-relaxed text-sm">
                     {message.role === "user" ? (
                       <ReactMarkdown>{String(message.content).replace(/\\[object Object\\]/g, "").trim()}</ReactMarkdown>
                     ) : (
@@ -503,16 +529,18 @@ return (
             <div className="flex gap-3 mb-4">
               <Avatar className="w-8 h-8 flex-shrink-0">
                 <AvatarFallback className="bg-black text-white flex items-center justify-center">
-                  <div className="w-3 h-3 bg-white rounded-full"></div>
+                  <div className="w-2 h-2 bg-white rounded-full"></div>
                 </AvatarFallback>
               </Avatar>
               <div className="max-w-[78%]">
-                <div className="prose prose-sm max-w-none px-4 py-3 rounded-2xl shadow-sm bg-white/85 border border-zinc-200">
+                <div className="prose prose-xs max-w-none px-4 py-3 rounded-2xl shadow-sm bg-white/85 border border-zinc-200">
+                  <div className="leading-relaxed text-sm">
                   {responseType === 'planning' ? (
                     <InlinePlanningStatus isVisible={true} />
                   ) : (
                     <TypingIndicator isVisible={true} />
                   )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -536,9 +564,9 @@ return (
               </Button>
               <Input
                 value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
+                onChange={(e) => handleInputChange(e.target.value)}
                 placeholder="Ask anything..."
-                className="flex-1 border-0 bg-transparent text-lg placeholder:text-gray-500 focus-visible:ring-0 focus-visible:ring-offset-0 px-0 shadow-none"
+                className="flex-1 border-0 bg-transparent text-sm placeholder:text-gray-500 focus-visible:ring-0 focus-visible:ring-offset-0 px-0 shadow-none"
               />
               <div className="flex items-center gap-2 flex-shrink-0">
                 <Button type="button" variant="ghost" size="sm" className="w-10 h-10 rounded-full hover:bg-white/80">
