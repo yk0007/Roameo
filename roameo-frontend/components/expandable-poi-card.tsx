@@ -105,6 +105,7 @@ export function ExpandablePoiCard({
                   height={320}
                   quality={90}
                   priority={true}
+                  placeholder="empty"
                 />
               </motion.div>
 

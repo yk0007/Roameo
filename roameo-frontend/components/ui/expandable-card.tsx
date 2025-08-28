@@ -89,6 +89,9 @@ export function ExpandableCard({ cards }: ExpandableCardProps) {
                   src={active.src}
                   alt={active.title}
                   className="w-full h-80 lg:h-80 sm:rounded-tr-lg sm:rounded-tl-lg object-cover object-top"
+                  priority={true}
+                  quality={90}
+                  placeholder="empty"
                 />
               </motion.div>
 
@@ -154,6 +157,9 @@ export function ExpandableCard({ cards }: ExpandableCardProps) {
                   src={card.src}
                   alt={card.title}
                   className="h-40 w-40 md:h-14 md:w-14 rounded-lg object-cover object-top"
+                  priority={true}
+                  quality={90}
+                  placeholder="empty"
                 />
               </motion.div>
               <div className="">

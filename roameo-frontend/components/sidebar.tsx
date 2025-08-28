@@ -96,7 +96,7 @@ export function Sidebar() {
       <div className="p-4 border-t border-border">
         <div className="flex items-center gap-3">
           <Avatar className="w-8 h-8">
-            <AvatarFallback className="bg-orange-500 text-white text-sm">N</AvatarFallback>
+            <AvatarFallback className="bg-blue-500 text-white text-sm">N</AvatarFallback>
           </Avatar>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-gray-900">Neil</p>

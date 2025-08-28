@@ -49,6 +49,7 @@ export function PoiDetailModal({
               height={256}
               quality={90}
               priority={true}
+              placeholder="empty"
             />
             
             {/* Action buttons overlay */}

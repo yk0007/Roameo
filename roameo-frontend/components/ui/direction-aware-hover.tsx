@@ -45,6 +45,9 @@ export const DirectionAwareHover = ({
               imageError ? `/placeholder.svg?height=400&width=600&query=scenic travel destination landscape` : imageUrl
             }
             onError={() => setImageError(true)}
+            priority={true}
+            quality={90}
+            placeholder="empty"
           />
           <div
             className={cn(

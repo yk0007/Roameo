@@ -170,7 +170,7 @@ export function LandingPage() {
       </section>
 
       {/* How it Works Section */}
-      <section className="px-6 min-h-screen flex items-center bg-slate-50">
+      <section className="px-6 min-h-screen flex items-center bg-white">
         <div className="max-w-7xl mx-auto">
           <h2 className="text-5xl font-bold text-center text-gray-900 mb-4 font-sans">How it Works</h2>
           <p className="text-xl text-gray-600 text-center mb-16 ">Three simple steps to your perfect trip</p>

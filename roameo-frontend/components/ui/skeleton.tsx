@@ -66,11 +66,11 @@ export const ChatMessageSkeleton = memo(function ChatMessageSkeleton({
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
       <div className={`max-w-[80%] ${
         isUser 
-          ? 'bg-black text-white rounded-2xl rounded-br-md' 
+          ? 'bg-blue-100 text-gray-800 rounded-2xl rounded-br-md border border-blue-200' 
           : 'bg-gray-100 rounded-2xl rounded-bl-md'
       } p-4`}>
-        <Skeleton className={`h-4 w-full mb-2 ${isUser ? 'bg-gray-700' : 'bg-gray-300'}`} />
-        <Skeleton className={`h-4 w-3/4 ${isUser ? 'bg-gray-700' : 'bg-gray-300'}`} />
+        <Skeleton className={`h-4 w-full mb-2 ${isUser ? 'bg-blue-200' : 'bg-gray-300'}`} />
+        <Skeleton className={`h-4 w-3/4 ${isUser ? 'bg-blue-200' : 'bg-gray-300'}`} />
       </div>
     </div>
   )

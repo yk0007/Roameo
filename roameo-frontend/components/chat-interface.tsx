@@ -505,12 +505,12 @@ return (
           {safeMessages.map((message) => (
             <div key={message.id} className={`flex gap-3 mb-4 ${message.role === "user" ? "justify-end" : "justify-start"}`}>
               <Avatar className={`w-8 h-8 flex-shrink-0 ${message.role === "user" ? "order-2" : "order-1"}`}>
-                <AvatarFallback className={message.role === "user" ? "bg-orange-500 text-white" : "bg-black text-white flex items-center justify-center"}>
+                <AvatarFallback className={message.role === "user" ? "bg-blue-500 text-white" : "bg-black text-white flex items-center justify-center"}>
                   {message.role === "user" ? "N" : <div className="w-2 h-2 bg-white rounded-full"></div>}
                 </AvatarFallback>
               </Avatar>
               <div className={`max-w-[78%] ${message.role === "user" ? "order-1" : "order-2"}`}>
-                <div className={`prose prose-xs max-w-none px-4 py-3 rounded-2xl shadow-sm ${message.role === "user" ? "bg-orange-50 border border-orange-100" : "bg-white/85 border border-zinc-200"}`}>
+                <div className={`prose prose-xs max-w-none px-4 py-3 rounded-2xl shadow-sm ${message.role === "user" ? "bg-blue-100 border border-blue-200" : "bg-white/85 border border-zinc-200"}`}>
                   <div className="leading-relaxed text-sm">
                     {message.role === "user" ? (
                       <ReactMarkdown>{String(message.content).replace(/\\[object Object\\]/g, "").trim()}</ReactMarkdown>

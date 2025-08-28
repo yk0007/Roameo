@@ -30,7 +30,6 @@ export function CachedImage({ src, alt, className, onError }: CachedImageProps) 
       alt={alt}
       className={className}
       onError={handleError}
-      loading="eager"
       decoding="sync"
     />
   )
