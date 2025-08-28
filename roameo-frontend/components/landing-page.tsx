@@ -52,6 +52,30 @@ export function LandingPage() {
 
   return (
     <div className="min-h-screen bg-white">
+      {/* Mobile Notice - Only visible on small screens */}
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-white p-6 md:hidden">
+        <div className="text-center max-w-sm">
+          <div className="w-16 h-16 bg-black rounded-full flex items-center justify-center mx-auto mb-6">
+            <div className="w-4 h-4 bg-white rounded-full"></div>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">roameo</h1>
+          <h2 className="text-xl font-semibold text-gray-800 mb-4">Desktop Experience Required</h2>
+          <p className="text-gray-600 mb-6 leading-relaxed">
+            For the best experience, please visit our website on a desktop or laptop computer.
+          </p>
+          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
+            <p className="text-orange-800 text-sm font-medium">
+              📱 Mobile version coming soon!
+            </p>
+          </div>
+          <p className="text-sm text-gray-500">
+            We're working on an amazing mobile experience for you.
+          </p>
+        </div>
+      </div>
+
+      {/* Main content - Hidden on mobile */}
+      <div className="hidden md:block">
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 px-6 py-4 flex items-center justify-between bg-white/80 backdrop-blur-md border-b border-white/30 shadow-lg">
         <div className="flex items-center gap-3">
@@ -393,103 +417,114 @@ export function LandingPage() {
       </section>
 
       {/* Popular Destinations */}
-      <section className="px-6 py-24 bg-gray-50 min-h-screen flex items-center relative z-10">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-20">
-            <h2 className="text-4xl font-bold text-gray-900 mb-6 font-sans">Popular Destinations</h2>
-            <p className="text-xl text-gray-600 font-sans">
-              Discover India's most breathtaking hill stations and coastal gems
-            </p>
+      <section className="px-6 py-4 bg-white mb-8">
+        <div className="max-w-5xl mx-auto">
+          <div className="mb-3">
+            <h2 className="text-2xl font-bold text-gray-900 mb-1">Popular destinations</h2>
           </div>
 
-          <div className="max-w-6xl mx-auto">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-              <DirectionAwareHover
-                imageUrl="/munnar-tea-mist.png"
-                className="w-full rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-300"
-              >
-                <div className="text-white">
-                  <h3 className="text-lg font-semibold mb-1">Munnar, Kerala</h3>
-                  <p className="text-xs opacity-90">Misty tea gardens and rolling hills</p>
+          <div className="grid grid-cols-6 gap-2 h-[476px] relative overflow-hidden">
+            {/* Spain - Large card spanning 2 columns and full height */}
+            <div className="col-span-2 row-span-2 relative group cursor-pointer overflow-hidden">
+              <div className="w-full h-full max-h-[476px] overflow-hidden rounded-2xl">
+                <img
+                  src="https://images.unsplash.com/photo-1539037116277-4db20889f2d4?q=80&w=2070&auto=format&fit=crop"
+                  alt="Sagrada Familia, Barcelona, Spain"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
+                <div className="absolute bottom-4 left-4">
+                  <span className="bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-medium text-gray-900">
+                    Spain
+                  </span>
                 </div>
-              </DirectionAwareHover>
+              </div>
+            </div>
 
-              <DirectionAwareHover
-                imageUrl="/ooty-nilgiri-hills.png"
-                className="w-full rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-300"
-              >
-                <div className="text-white">
-                  <h3 className="text-lg font-semibold mb-1">Ooty, Tamil Nadu</h3>
-                  <p className="text-xs opacity-90">Queen of hill stations</p>
+            {/* London - Medium card spanning 2 columns, top half */}
+            <div className="col-span-2 relative group cursor-pointer overflow-hidden">
+              <div className="w-full h-full max-h-[476px] overflow-hidden rounded-2xl">
+                <img
+                  src="https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?q=80&w=2070&auto=format&fit=crop"
+                  alt="London with red double-decker bus"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
+                <div className="absolute bottom-4 left-4">
+                  <span className="bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-medium text-gray-900">
+                    London
+                  </span>
                 </div>
-              </DirectionAwareHover>
+              </div>
+            </div>
 
-              <DirectionAwareHover
-                imageUrl="/darjeeling-toy-train.png"
-                className="w-full rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-300"
-              >
-                <div className="text-white">
-                  <h3 className="text-lg font-semibold mb-1">Darjeeling, West Bengal</h3>
-                  <p className="text-xs opacity-90">Himalayan views and tea culture</p>
+            {/* Croatia - Medium card spanning 2 columns, top half */}
+            <div className="col-span-2 relative group cursor-pointer overflow-hidden">
+              <div className="w-full h-full max-h-[476px] overflow-hidden rounded-2xl">
+                <img
+                  src="https://images.unsplash.com/photo-1603551664565-1b3c3dd61075?q=80&w=2070&auto=format&fit=crop"
+                  alt="Dubrovnik, Croatia coastal view"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
+                <div className="absolute bottom-4 left-4">
+                  <span className="bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-medium text-gray-900">
+                    Croatia
+                  </span>
                 </div>
-              </DirectionAwareHover>
+              </div>
+            </div>
 
-              <DirectionAwareHover
-                imageUrl="/araku-valley-waterfalls.png"
-                className="w-full rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-300"
-              >
-                <div className="text-white">
-                  <h3 className="text-lg font-semibold mb-1">Araku Valley</h3>
-                  <p className="text-xs opacity-90">Coffee plantations and tribal culture</p>
+            {/* Bratislava - Small card, bottom left */}
+            <div className="relative group cursor-pointer overflow-hidden">
+              <div className="w-full h-full max-h-[476px] overflow-hidden rounded-2xl">
+                <img
+                  src="https://images.unsplash.com/photo-1567072584703-e445170f9478?q=80&w=987&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+                  alt="Bratislava Castle and Danube River"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
+                <div className="absolute bottom-4 left-4">
+                  <span className="bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-medium text-gray-900">
+                    Bratislava
+                  </span>
                 </div>
-              </DirectionAwareHover>
+              </div>
+            </div>
 
-              <DirectionAwareHover
-                imageUrl="/rk-beach-visakhapatnam-golden-sand.png"
-                className="w-full rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-300"
-              >
-                <div className="text-white">
-                  <h3 className="text-lg font-semibold mb-1">RK Beach, Visakhapatnam</h3>
-                  <p className="text-xs opacity-90">Golden sands and coastal charm</p>
+            {/* Copenhagen - Small card, bottom center */}
+            <div className="relative group cursor-pointer overflow-hidden">
+              <div className="w-full h-full max-h-[476px] overflow-hidden rounded-2xl">
+                <img
+                  src="https://images.unsplash.com/photo-1513622470522-26c3c8a854bc?q=80&w=2070&auto=format&fit=crop"
+                  alt="Copenhagen colorful buildings and architecture"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
+                <div className="absolute bottom-4 left-4">
+                  <span className="bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-medium text-gray-900">
+                    Copenhagen
+                  </span>
                 </div>
-              </DirectionAwareHover>
+              </div>
+            </div>
 
-              <DirectionAwareHover
-                imageUrl="/kodaikanal-lake-mist.png"
-                className="w-full rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-300"
-              >
-                <div className="text-white">
-                  <h3 className="text-lg font-semibold mb-1">Kodaikanal, Tamil Nadu</h3>
-                  <p className="text-xs opacity-90">Princess of hill stations</p>
+            {/* Lisbon - Medium card spanning 2 columns, bottom half */}
+            <div className="col-span-2 relative group cursor-pointer overflow-hidden">
+              <div className="w-full h-full max-h-[476px] overflow-hidden rounded-2xl">
+                <img
+                  src="https://images.unsplash.com/photo-1555881400-74d7acaacd8b?q=80&w=2070&auto=format&fit=crop"
+                  alt="Lisbon historic tram and architecture"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
+                <div className="absolute bottom-4 left-4">
+                  <span className="bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-medium text-gray-900">
+                    Lisbon
+                  </span>
                 </div>
-              </DirectionAwareHover>
-
-              <DirectionAwareHover
-                imageUrl="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?q=80&w=2070&auto=format&fit=crop"
-                className="w-full rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-300"
-              >
-                <div className="text-white">
-                  <h3 className="text-lg font-semibold mb-1">Shimla, Himachal Pradesh</h3>
-                  <p className="text-xs opacity-90">Colonial charm in the mountains</p>
-                </div>
-              </DirectionAwareHover>
-
-              <DirectionAwareHover
-                imageUrl="https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=2070&auto=format&fit=crop"
-                className="w-full rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-300"
-              >
-                <div className="text-white">
-                  <h3 className="text-lg font-semibold mb-1">Manali, Himachal Pradesh</h3>
-                  <p className="text-xs opacity-90">Adventure and serenity combined</p>
-                </div>
-              </DirectionAwareHover>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       {/* Call-to-Action Section */}
-      <section className="px-6 bg-gradient-to-br from-sky-400 via-blue-600 to-blue-800 text-white py-20">
+      <section className="px-6 bg-gradient-to-br from-sky-400 via-blue-600 to-blue-800 text-white py-12">
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-5xl font-bold mb-6 leading-tight font-sans">
             Ready for Your Next
@@ -501,7 +536,7 @@ export function LandingPage() {
             itinerary today.
           </p>
 
-          <div className="flex items-center justify-center gap-6 mb-16">
+          <div className="flex items-center justify-center gap-6 mb-8">
             <Button
               onClick={() => handleProtectedAction("plan my trip now")}
               size="lg"
@@ -560,6 +595,7 @@ export function LandingPage() {
           </div>
         </div>
       </footer>
+      </div>
     </div>
   )
 }

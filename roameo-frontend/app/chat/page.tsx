@@ -13,6 +13,17 @@ import { MessageCircle, Search, Bookmark, Map as MapIcon, Calendar } from "lucid
 import { connectWs } from "@/lib/ws"
 import { sendChat, tripUpdate, createInvite, deleteTrip as apiDeleteTrip, savePoi as apiSavePoi, getSavedPoiIds } from "@/lib/api"
 import { toast } from "@/hooks/use-toast"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import type { ChatMessage, Itinerary, SearchResults, TripContext, WsEvent, POI } from "@/lib/types"
 
 export default function ChatPage() {
@@ -44,8 +55,10 @@ export default function ChatPage() {
   const [mapData, setMapData] = useState<any>(undefined)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
+  const [detectedIntent, setDetectedIntent] = useState<"PLAN_TRIP" | "DESTINATION_SEARCH" | "CHAT" | null>(null)
   const [savedPoiIds, setSavedPoiIds] = useState<Set<string>>(new Set())
   const [inputMessage, setInputMessage] = useState<string>("") // Add state for controlling input
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const reconnectAttemptsRef = useRef(0)
   const reconnectTimerRef = useRef<number | null>(null)
   const [authChecked, setAuthChecked] = useState(false)
@@ -185,7 +198,10 @@ export default function ChatPage() {
           }
           return [...m, evt.data]
         })
-        if (evt.data.role === "assistant") setIsTyping(false)
+        if (evt.data.role === "assistant") {
+          setIsTyping(false)
+          setDetectedIntent(null) // Clear intent when assistant responds
+        }
       } else if (evt.type === "navbar.update") {
         setTrip((t) => ({ ...t, ...evt.data }))
       } else if (evt.type === "itinerary.update") {
@@ -201,6 +217,10 @@ export default function ChatPage() {
         if (evt.data !== null && evt.data !== undefined) {
           setMapData(evt.data)
         }
+      } else if (evt.type === "intent.detected") {
+        // Set detected intent when server classifies user message
+        console.log('[client] Intent detected:', evt.data.intent, 'for message:', evt.data.message)
+        setDetectedIntent(evt.data.intent)
       }
     }
 
@@ -224,7 +244,11 @@ export default function ChatPage() {
           }
           // If the backend rejected the session (e.g., restarted and lost memory), clear session
           if (ev?.code === 1008) {
-            toast({ title: "Session expired", description: "Starting a new trip." })
+            toast({ 
+              title: "Session expired", 
+              description: "Starting a new trip.",
+              variant: "warning" as any
+            })
             setMessages([])
             setItinerary(undefined)
             setSearchResults(undefined)
@@ -243,7 +267,11 @@ export default function ChatPage() {
           const delay = Math.min(1000 * Math.pow(2, attempt), 10000)
           // Avoid spamming toasts: only show on first disconnect in a cycle
           if (attempt === 1) {
-            toast({ title: "Connection lost", description: `Reconnecting in ${Math.round(delay / 1000)}s...` })
+            toast({ 
+              title: "Connection lost", 
+              description: `Reconnecting in ${Math.round(delay / 1000)}s...`,
+              variant: "warning" as any
+            })
           }
           if (reconnectTimerRef.current) window.clearTimeout(reconnectTimerRef.current)
           reconnectTimerRef.current = window.setTimeout(() => {
@@ -291,7 +319,7 @@ export default function ChatPage() {
     const hasPlanning = trip.destination || itinerary
     const title = hasPlanning && trip.title ? `Chat – ${trip.title}` : `Chat${sessionSuffix}`
     document.title = `${base} | ${title}`
-  }, [trip.destination, itinerary, sessionId, trip.title])
+  }, [trip.destination, trip.title, itinerary, sessionId])
 
   // On first load: capture inviteId and initial message from query
   useEffect(() => {
@@ -315,16 +343,16 @@ export default function ChatPage() {
     console.log("[backend] Saving trip:", trip)
   }
 
-  const handleDeleteTrip = async () => {
+  const handleDeleteTrip = () => {
+    setShowDeleteDialog(true)
+  }
+  
+  const confirmDeleteTrip = async () => {
     if (!sessionId) return
     if (isDeleting) return
     
-    if (typeof window !== "undefined") {
-      const ok = window.confirm("Delete this trip and all its data? This cannot be undone.")
-      if (!ok) return
-    }
-    
     setIsDeleting(true)
+    setShowDeleteDialog(false)
     
     try {
       // Close WebSocket connection before deletion to prevent reconnection issues
@@ -346,7 +374,10 @@ export default function ChatPage() {
       setSessionId(undefined)
       
       // Show success message
-      toast({ title: "Trip deleted successfully" })
+      toast({ 
+        title: "Trip deleted successfully",
+        variant: "success" as any
+      })
       
       // Navigate to dashboard immediately
       router.push("/dashboard")
@@ -356,7 +387,7 @@ export default function ChatPage() {
       toast({ 
         title: "Failed to delete trip", 
         description: e?.message || "Please try again.", 
-        variant: "destructive" 
+        variant: "destructive"
       })
     } finally {
       setIsDeleting(false)
@@ -401,7 +432,10 @@ export default function ChatPage() {
             }
             return [...m, (evt as any).data]
           })
-          if ((evt as any).data?.role === "assistant") setIsTyping(false)
+          if ((evt as any).data?.role === "assistant") {
+            setIsTyping(false)
+            setDetectedIntent(null) // Clear intent when assistant responds
+          }
         } else if (evt.type === "navbar.update") {
           setTrip((t) => ({ ...t, ...(evt as any).data }))
         } else if (evt.type === "itinerary.update") {
@@ -419,7 +453,10 @@ export default function ChatPage() {
           if (data !== null && data !== undefined) {
             setMapData(data)
           }
-
+        } else if (evt.type === "intent.detected") {
+          // Set detected intent when server classifies user message via HTTP
+          console.log('[client] Intent detected via HTTP:', (evt as any).data.intent, 'for message:', (evt as any).data.message)
+          setDetectedIntent((evt as any).data.intent)
         }
       })
     }
@@ -436,7 +473,11 @@ export default function ChatPage() {
         return next
       })
     } catch (e: any) {
-      toast({ title: "Failed to update saved", description: e?.message || "Please try again.", variant: "destructive" })
+      toast({ 
+        title: "Failed to update saved", 
+        description: e?.message || "Please try again.", 
+        variant: "destructive"
+      })
     }
   }
 
@@ -465,11 +506,40 @@ export default function ChatPage() {
 
   if (!authChecked) {
     return (
-      <div className="h-screen flex items-center justify-center bg-background">
+      <div className="h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-indigo-50">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Preparing chat…</p>
+          {/* Roameo Logo Animation */}
+          <div className="mb-6 relative">
+            <div className="w-16 h-16 bg-black rounded-full flex items-center justify-center mx-auto mb-3 relative overflow-hidden">
+              <div className="w-6 h-6 bg-white rounded-full animate-pulse"></div>
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-30 animate-sweep"></div>
+            </div>
+            <div className="absolute inset-0 w-16 h-16 bg-black rounded-full mx-auto opacity-20 animate-ping"></div>
+          </div>
+          
+          {/* Roameo Text */}
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            roameo
+          </h2>
+          <p className="text-gray-600 mb-4">Initializing your travel companion...</p>
+          
+          {/* Loading dots */}
+          <div className="flex justify-center items-center space-x-1">
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+          </div>
         </div>
+        
+        <style jsx>{`
+          @keyframes sweep {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+          }
+          .animate-sweep {
+            animation: sweep 2s ease-in-out infinite;
+          }
+        `}</style>
       </div>
     )
   }
@@ -618,6 +688,7 @@ export default function ChatPage() {
                   setIsRightPanelVisible={setIsRightPanelVisible}
                   pois={mapPois}
                   isTyping={isTyping}
+                  detectedIntent={detectedIntent}
                   savedIds={savedPoiIds}
                   onToggleSave={handleToggleSave}
                   onAddPoi={handleAddPoi}
@@ -680,6 +751,82 @@ export default function ChatPage() {
           />
         </div>
       </div>
+      
+      {/* Delete Trip Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent className="sm:max-w-[400px] p-0 bg-white rounded-2xl border-0 shadow-2xl">
+          {/* Close Button */}
+          <button
+            onClick={() => setShowDeleteDialog(false)}
+            className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors z-10"
+            disabled={isDeleting}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+          
+          <div className="p-8 text-center">
+            {/* Warning Icon */}
+            <div className="mx-auto mb-6 w-20 h-20 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center relative overflow-hidden">
+              {/* Diagonal stripes pattern */}
+              <div className="absolute inset-0 bg-black opacity-20">
+                <div className="absolute inset-0" style={{
+                  backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 3px, black 3px, black 6px)',
+                  opacity: 0.8
+                }}></div>
+              </div>
+            </div>
+            
+            {/* Title */}
+            <h2 className="text-xl font-bold text-gray-900 mb-3">
+              Are you sure you want to delete?
+            </h2>
+            
+            {/* Description */}
+            <p className="text-gray-600 text-sm mb-6 leading-relaxed">
+              Click on Agree if you like to delete this trip permanently. If not click on cancel!
+            </p>
+            
+            {/* Warning Banner */}
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-6 flex items-center gap-2">
+              <div className="w-5 h-5 rounded-full bg-orange-400 flex items-center justify-center flex-shrink-0">
+                <span className="text-white text-xs font-bold">!</span>
+              </div>
+              <span className="text-orange-800 text-sm font-medium">
+                You can't revert back if once deleted!
+              </span>
+            </div>
+            
+            {/* Action Buttons */}
+            <div className="space-y-3">
+              <button
+                onClick={confirmDeleteTrip}
+                disabled={isDeleting}
+                className="w-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-semibold py-3 px-6 rounded-full transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isDeleting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2 inline-block" />
+                    Deleting...
+                  </>
+                ) : (
+                  'Agree'
+                )}
+              </button>
+              
+              <button
+                onClick={() => setShowDeleteDialog(false)}
+                disabled={isDeleting}
+                className="w-full bg-transparent border border-orange-300 text-orange-600 hover:bg-orange-50 font-semibold py-3 px-6 rounded-full transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

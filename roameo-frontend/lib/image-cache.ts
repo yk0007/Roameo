@@ -51,7 +51,7 @@ class ImageCache {
     
     // If it's a proxy URL, prepend the backend base URL
     if (url.startsWith('/api/proxy/')) {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000'
       return `${backendUrl}${url}`
     }
     

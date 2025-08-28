@@ -11,6 +11,7 @@ import { useOutsideClick } from "@/hooks/use-outside-click"
 import {
   Clock,
   MapPin,
+  Bed,
   Star,
   Heart,
   ExternalLink,

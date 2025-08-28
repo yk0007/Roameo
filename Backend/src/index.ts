@@ -36,7 +36,7 @@ app.use("/api", buildApiRouter(hub, db, {
   },
 }));
 
-wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
+wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
   // Expect: ws://host/ws?sessionId=...
   const url = new URL(req.url || "", `http://${req.headers.host}`);
   const sessionId = url.searchParams.get("sessionId");
@@ -45,71 +45,10 @@ wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
     return;
   }
 
-  // Check if session exists in memory first
-  let existing = db.getSession(sessionId);
-  
-  // If not in memory, try to load from database
-  if (!existing && typeof (db as any).loadSessionFromDatabase === 'function') {
-    try {
-      existing = await (db as any).loadSessionFromDatabase(sessionId);
-      if (existing) {
-        console.log(`[ws] Loaded session ${sessionId} from database`);
-      }
-    } catch (e) {
-      console.warn(`[ws] Failed to load session ${sessionId} from database:`, e);
-    }
-  }
-  
-  // If session still doesn't exist, check directly in Supabase as fallback
-  if (!existing && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    try {
-      const { createClient } = await import('@supabase/supabase-js');
-      const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-      
-      const { data: sessionData, error } = await supabase
-        .from('chat_sessions')
-        .select('session_id, invite_id, trip')
-        .eq('session_id', sessionId)
-        .maybeSingle();
-        
-      if (!error && sessionData) {
-        console.log(`[ws] Found session ${sessionId} in database, hydrating...`);
-        
-        // Load messages and saved POIs
-        const { data: messages } = await supabase
-          .from('messages')
-          .select('id, role, content, created_at')
-          .eq('session_id', sessionId)
-          .order('created_at', { ascending: true });
-          
-        const { data: savedPois } = await supabase
-          .from('saved_pois')
-          .select('poi_id')
-          .eq('session_id', sessionId);
-        
-        // Upsert session into memory
-        existing = db.upsertSession(sessionId, {
-          inviteId: sessionData.invite_id || undefined,
-          trip: sessionData.trip || {},
-          messages: (messages || []).map((m: any) => ({
-            id: m.id,
-            role: m.role,
-            content: m.content,
-            createdAt: new Date(m.created_at).toISOString()
-          })),
-          savedPoiIds: new Set((savedPois || []).map((p: any) => p.poi_id))
-        });
-        
-        console.log(`[ws] Successfully hydrated session ${sessionId}`);
-      }
-    } catch (e) {
-      console.warn(`[ws] Failed to check database for session ${sessionId}:`, e);
-    }
-  }
-
-  // If session still doesn't exist after all checks, close connection
+  // Do NOT implicitly create sessions on WS connect. If the session does not exist,
+  // close the socket. New sessions must be created via REST /api/chat/send.
+  const existing = db.getSession(sessionId);
   if (!existing) {
-    console.log(`[ws] Session ${sessionId} not found in memory or database`);
     ws.close(1008, "unknown sessionId");
     return;
   }

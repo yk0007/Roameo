@@ -12,6 +12,12 @@ const config: Config = {
   ],
   theme: {
   	extend: {
+  		fontFamily: {
+  			sans: ['var(--font-inter)', 'ui-sans-serif', 'system-ui'],
+  			'roboto-mono': ['var(--font-roboto-mono)', 'monospace'],
+  			pacifico: ['var(--font-pacifico)', 'cursive'],
+  			prompt: ['var(--font-prompt)', 'sans-serif'],
+  		},
   		colors: {
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',

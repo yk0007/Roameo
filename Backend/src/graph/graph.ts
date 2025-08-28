@@ -59,12 +59,21 @@ const graph = new StateGraph<State>({ channels: graphState })
     const intent = await intentAgent(message);
     console.log(`[router] Intent detected: ${intent} for message: "${message}"`);
     
-    if (intent === "PLAN_TRIP") {
-      return { route: "planner" };
-    } else if (intent === "DESTINATION_SEARCH") {
-      return { route: "destination_search" };
+    // Emit intent detection event for planning and destination search intents
+    const events: WsEvent[] = [];
+    if (intent === "PLAN_TRIP" || intent === "DESTINATION_SEARCH") {
+      events.push({
+        type: "intent.detected",
+        data: { intent, message }
+      });
     }
-    return { route: "chat" };
+    
+    if (intent === "PLAN_TRIP") {
+      return { route: "planner", events };
+    } else if (intent === "DESTINATION_SEARCH") {
+      return { route: "destination_search", events };
+    }
+    return { route: "chat", events };
   })
   .addNode("planner", async (state: State) => {
     const { trip, message } = state.input;
@@ -148,16 +157,28 @@ const graph = new StateGraph<State>({ channels: graphState })
     
     const events: WsEvent[] = [];
     
-    // Check if we have both destination and days -> trigger full itinerary planning
-    if (extraction.hasDestination && extraction.days && (extraction.destination || (extraction.destinations && extraction.destinations.length > 0))) {
-      console.log(`[destination_search] Both destination and days found, triggering itinerary planning`);
+    // Check if user is asking for trip planning (even without explicit days)
+    const planningKeywords = ["plan", "trip", "itinerary", "travel", "visit"];
+    const messageContainsPlanningKeywords = planningKeywords.some(keyword => 
+      message.toLowerCase().includes(keyword)
+    );
+    
+    // Check if we have destination and either:
+    // 1. Both destination and days, OR
+    // 2. Destination and planning keywords (user wants trip planning)
+    const shouldTriggerPlanning = extraction.hasDestination && 
+      (extraction.destination || (extraction.destinations && extraction.destinations.length > 0)) &&
+      (extraction.days || messageContainsPlanningKeywords);
+    
+    if (shouldTriggerPlanning) {
+      console.log(`[destination_search] Triggering itinerary planning - days: ${extraction.days}, planning keywords: ${messageContainsPlanningKeywords}`);
       
       // Create trip context for planner agent
       const planningTrip = {
         ...trip,
         destination: extraction.destination || (extraction.destinations ? extraction.destinations[0] : trip.destination),
         destinations: extraction.destinations || (extraction.destination ? [extraction.destination] : trip.destinations),
-        days: extraction.days,
+        days: extraction.days || trip.days || 3, // Default to 3 days if not specified
         origin: extraction.origin || trip.origin,
       };
       

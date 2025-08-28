@@ -2,22 +2,31 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { supabase } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { listTrips } from "@/lib/api"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import Image from "next/image"
-import { MapPin, Users, Send, LogOut, Plus, Mic, Clock, ArrowRight, Plane, Camera, Compass, Palmtree, Globe, Map } from "lucide-react"
-import DestinationCardArt from "@/components/DestinationCardArt"
+import { Card, CardContent } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { ArrowRight, User, LogOut } from "lucide-react"
 
 export default function Dashboard() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
-  const [message, setMessage] = useState("")
   const [loading, setLoading] = useState(true)
   const [trips, setTrips] = useState<Array<any>>([])
+  const [planningForm, setPlanningForm] = useState({
+    destination: '',
+    days: '',
+    budget: '',
+    travellers: 'nature' // Set Nature as default
+  })
+  const [quickMessage, setQuickMessage] = useState('')
+  const [activeInput, setActiveInput] = useState('none') // 'form', 'chat', or 'none'
+
+
 
   // Load trips from backend with proper authentication
   useEffect(() => {
@@ -25,15 +34,29 @@ export default function Dashboard() {
     let isLoading = false
     
     const load = async () => {
-      if (isLoading || !user) return
+      if (isLoading || !user) {
+        console.log('Skipping load:', { isLoading, hasUser: !!user })
+        return
+      }
       isLoading = true
+      console.log('Loading trips for user:', user?.email)
       
       try {
         const { trips } = await listTrips()
-        if (mounted) setTrips(trips)
+        console.log('API response received:', { trips: trips, tripsLength: trips?.length })
+        if (mounted) {
+          // Always use real data from backend, even if empty
+          setTrips(trips || [])
+          console.log('Set trips state:', trips?.length || 0, 'trips')
+          console.log('First trip example:', trips?.[0])
+        }
       } catch (error) {
         console.error('Failed to load trips:', error)
-        if (mounted) setTrips([])
+        if (mounted) {
+          // Show empty state when there's an error
+          console.log('Setting empty trips array due to API error')
+          setTrips([])
+        }
       } finally {
         isLoading = false
       }
@@ -76,285 +99,480 @@ export default function Dashboard() {
     return () => subscription.unsubscribe()
   }, [router])
 
+  const handlePlanTrip = () => {
+    // Validate required fields
+    if (!planningForm.destination.trim()) {
+      alert('Please enter a destination')
+      return
+    }
+    if (!planningForm.days.trim()) {
+      alert('Please enter number of days')
+      return
+    }
+    
+    // Create a dynamic prompt based on available inputs
+    const tripType = planningForm.travellers || 'nature'
+    const destination = planningForm.destination.trim()
+    const days = planningForm.days.trim()
+    const budget = planningForm.budget.trim()
+    
+    let prompt = `Plan a ${tripType} trip to ${destination} for ${days} days`
+    
+    // Add budget information if provided
+    if (budget) {
+      prompt += ` with a budget of INR ${budget}`
+    }
+    
+    // Add specific requirements based on trip type
+    if (tripType === 'luxury') {
+      prompt += `. Focus on premium accommodations, fine dining, and exclusive experiences`
+    } else if (tripType === 'budget') {
+      prompt += `. Focus on affordable accommodations, local transportation, and budget-friendly activities`
+    } else if (tripType === 'adventure') {
+      prompt += `. Include thrilling activities, outdoor adventures, and adrenaline-pumping experiences`
+    } else if (tripType === 'family') {
+      prompt += `. Include family-friendly activities, suitable accommodations, and child-safe attractions`
+    } else if (tripType === 'romantic') {
+      prompt += `. Focus on romantic experiences, intimate settings, and couple-friendly activities`
+    } else if (tripType === 'cultural') {
+      prompt += `. Emphasize cultural sites, historical landmarks, local traditions, and authentic experiences`
+    } else if (tripType === 'nature') {
+      prompt += `. Focus on natural attractions, wildlife, scenic landscapes, and eco-friendly activities`
+    } else if (tripType === 'business') {
+      prompt += `. Include business-friendly accommodations, meeting facilities, and professional services`
+    }
+    
+    // Add general requirements
+    prompt += `. Please provide a detailed itinerary with:`
+    prompt += `\n- Day-by-day schedule with specific activities`
+    prompt += `\n- Recommended places to visit with brief descriptions`
+    prompt += `\n- Accommodation suggestions${budget ? ' within the specified budget' : ''}`
+    prompt += `\n- Transportation options and travel tips`
+    prompt += `\n- Local cuisine recommendations`
+    prompt += `\n- Important travel information and safety tips`
+    
+    if (!budget) {
+      prompt += `\n- Budget estimates for different expense categories`
+    }
+    
+    // Navigate to chat with the generated prompt
+    const queryParams = new URLSearchParams()
+    queryParams.set('message', prompt)
+    
+    const url = `/chat?${queryParams.toString()}`
+    router.push(url)
+  }
+
+  const handleInputChange = (field: string, value: string) => {
+    // For integer fields, only allow numbers
+    if (field === 'days' || field === 'budget' || field === 'travellers') {
+      const numericValue = value.replace(/[^0-9]/g, '')
+      setPlanningForm(prev => ({...prev, [field]: numericValue}))
+    } else {
+      setPlanningForm(prev => ({...prev, [field]: value}))
+    }
+  }
+
+  const handleQuickMessage = () => {
+    if (quickMessage.trim()) {
+      router.push(`/chat?message=${encodeURIComponent(quickMessage.trim())}`)
+    }
+  }
+
+  const getUserDisplayName = () => {
+    if (user?.user_metadata?.first_name && user?.user_metadata?.last_name) {
+      return `${user.user_metadata.first_name} ${user.user_metadata.last_name}`
+    }
+    return user?.user_metadata?.username || user?.user_metadata?.first_name || user?.email?.split('@')[0] || 'User'
+  }
+
   const handleSignOut = async () => {
     try {
-      // Sign out first, then navigate
       await supabase.auth.signOut()
       router.push("/auth/login")
     } catch (error) {
       console.error('Sign out error:', error)
-      // Navigate anyway if sign out fails
       router.push("/auth/login")
     }
   }
 
-  const handleSendMessage = () => {
-    const text = message.trim()
-    if (!text) return
-    // Navigate to chat with initial message; chat page will send it and remove from URL
-    router.push(`/chat?message=${encodeURIComponent(text)}`)
-    setMessage("")
-  }
-
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 via-white to-indigo-50">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading your dashboard...</p>
+          {/* Roameo Logo Animation */}
+          <div className="mb-8 relative">
+            <div className="w-20 h-20 bg-black rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+              <div className="w-8 h-8 bg-white rounded-full animate-ping"></div>
+            </div>
+            <div className="absolute inset-0 w-20 h-20 bg-black rounded-full mx-auto opacity-20 animate-ping"></div>
+          </div>
+          
+          {/* Roameo Text */}
+          <h2 className="text-3xl font-bold text-gray-900 mb-2 animate-fade-in">
+            roameo
+          </h2>
+          <p className="text-gray-600 mb-6 animate-fade-in-delay">
+            Your Intelligent Travel CoPilot
+          </p>
+          
+          {/* Loading Animation */}
+          <div className="flex justify-center items-center space-x-2 mb-4">
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+          </div>
+          
+          <p className="text-gray-500 text-sm animate-pulse">Loading your personalized travel dashboard...</p>
         </div>
+        
+        <style jsx>{`
+          @keyframes fade-in {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+          .animate-fade-in {
+            animation: fade-in 1s ease-out;
+          }
+          .animate-fade-in-delay {
+            animation: fade-in 1s ease-out 0.5s both;
+          }
+        `}</style>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen w-full bg-[#f8fafc] relative scroll-smooth">
-      {/* Bottom Fade Grid Background */}
-      <div
-        className="absolute inset-0 z-0"
-        style={{
-          backgroundImage: `
-            linear-gradient(to right, #e2e8f0 1px, transparent 1px),
-            linear-gradient(to bottom, #e2e8f0 1px, transparent 1px)
-          `,
-          backgroundSize: "20px 30px",
-          WebkitMaskImage: "radial-gradient(ellipse 70% 60% at 50% 100%, #000 60%, transparent 100%)",
-          maskImage: "radial-gradient(ellipse 70% 60% at 50% 100%, #000 60%, transparent 100%)",
-        }}
-      />
-
-      <div className="fixed inset-0 pointer-events-none z-0">
-        <div
-          className="absolute top-20 left-10 text-orange-600/60 animate-bounce"
-          style={{ animationDelay: "0s", animationDuration: "3s" }}
-        >
-          <Plane className="w-10 h-10 rotate-45 drop-shadow-md" />
-        </div>
-        <div
-          className="absolute top-32 right-16 text-amber-600/60 animate-bounce"
-          style={{ animationDelay: "1s", animationDuration: "4s" }}
-        >
-          <Camera className="w-8 h-8 drop-shadow-md" />
-        </div>
-        <div
-          className="absolute top-1/4 left-20 text-emerald-600/60 animate-bounce"
-          style={{ animationDelay: "2s", animationDuration: "3.5s" }}
-        >
-          <Compass className="w-9 h-9 drop-shadow-md" />
-        </div>
-        <div
-          className="absolute top-1/3 right-10 text-green-600/60 animate-bounce"
-          style={{ animationDelay: "0.5s", animationDuration: "4.5s" }}
-        >
-          <Palmtree className="w-10 h-10 drop-shadow-md" />
-        </div>
-        <div
-          className="absolute bottom-1/3 left-16 text-teal-600/60 animate-bounce"
-          style={{ animationDelay: "1.5s", animationDuration: "3.8s" }}
-        >
-          <Globe className="w-8 h-8 drop-shadow-md" />
-        </div>
-        <div
-          className="absolute bottom-1/4 right-20 text-red-600/60 animate-bounce"
-          style={{ animationDelay: "2.5s", animationDuration: "4.2s" }}
-        >
-          <Map className="w-9 h-9 drop-shadow-md" />
-        </div>
-        <div
-          className="absolute top-1/2 left-8 text-yellow-600/60 animate-bounce"
-          style={{ animationDelay: "3s", animationDuration: "3.3s" }}
-        >
-          <Plane className="w-7 h-7 rotate-12 drop-shadow-md" />
-        </div>
-        <div
-          className="absolute bottom-20 right-8 text-orange-500/60 animate-bounce"
-          style={{ animationDelay: "1.8s", animationDuration: "4.8s" }}
-        >
-          <Camera className="w-8 h-8 rotate-45 drop-shadow-md" />
-        </div>
-      </div>
-
-      <header className="flex items-center justify-between px-6 py-3 border-0 bg-white/80 backdrop-blur-md shadow-lg">
+    <div className="min-h-screen bg-white">
+      {/* Header */}
+      <header className="bg-white px-6 py-3 flex items-center justify-between border-b border-gray-100">
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-black rounded-full flex items-center justify-center shadow-md">
-                <div className="w-2 h-2 bg-white rounded-full"></div>
-              </div>
-              <span className="text-xl font-bold text-gray-900">roameo</span>
-            </div>
+          <div className="w-8 h-8 bg-black rounded-full flex items-center justify-center relative overflow-hidden">
+            <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-20 animate-sweep"></div>
           </div>
+          <span className="text-xl font-bold text-gray-900 tracking-tight">roameo</span>
         </div>
-        <div className="flex items-center space-x-4">
-          <span className="text-sm text-muted-foreground">
-            Welcome, {user?.user_metadata?.username || user?.user_metadata?.first_name || user?.email?.split("@")[0]}
+        
+        <div className="flex items-center gap-4">
+          <span className="font-prompt text-l font-small text-gray-900">
+            Welcome, {getUserDisplayName()}
           </span>
-          <Button
-            onClick={() => router.push("/profile")}
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground hover:text-foreground rounded-full bg-white/80 backdrop-blur-sm border-0 shadow-md hover:shadow-lg transition-shadow"
-          >
-            Profile
-          </Button>
-          <Button
-            onClick={handleSignOut}
-            variant="outline"
-            size="sm"
-            className="flex items-center space-x-2 rounded-full bg-white/80 backdrop-blur-sm border-0 shadow-md hover:shadow-lg transition-shadow"
-          >
-            <LogOut className="h-4 w-4" />
-            <span>Sign Out</span>
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-gray-300 bg-white hover:bg-gray-50 w-8 h-8 p-0 rounded-full"
+              >
+                <User className="w-4 h-4 text-gray-700" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52 bg-white border border-gray-200 shadow-xl rounded-lg p-2 z-[10001]">
+              <DropdownMenuItem asChild>
+                <Link href="/profile" className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 rounded-lg p-3 transition-all">
+                  <User className="w-4 h-4 text-blue-600" />
+                  <span className="font-medium">Profile</span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="my-2 bg-gray-100" />
+              <DropdownMenuItem 
+                className="flex items-center gap-3 cursor-pointer text-red-600 hover:bg-red-50 rounded-lg p-3 transition-all"
+                onClick={handleSignOut}
+              >
+                <LogOut className="w-4 h-4 text-red-600" />
+                <span className="font-medium">Sign Out</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 
-      <div className="relative overflow-hidden z-10 min-h-screen flex items-center justify-center">
-        <div className="relative max-w-4xl mx-auto px-6 text-center">
-          <div className="space-y-6">
-            <p className="text-sm text-slate-600 font-medium tracking-wide uppercase opacity-0 animate-fade-in-up">
+      {/* Hero Section with Trip Planning */}
+      <section className="relative px-6 pt-6">
+        {/* Background Image */}
+        <div 
+          className="relative h-[400px] bg-cover bg-center overflow-hidden"
+          style={{
+            backgroundImage: `url('/hero-palm-background.jpg')`,
+            backgroundPosition: 'center center',
+            borderRadius: '16px'
+          }}
+        >
+          {/* Overlay for text visibility */}
+          <div className="absolute inset-0 bg-black/40" />
+          
+          {/* Hero Text - Centered */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
+            <span className="font-roboto-mono text-white text-sm font-medium mb-1">
               I'm
+            </span>
+            <h1 className="text-6xl font-extrabold text-white leading-tight drop-shadow-sm mb-2">roameo</h1>
+            <p className="font-pacifico text-white text-xl font-normal">
+              Here to add memories to your life
             </p>
-            <h1 className="text-7xl md:text-8xl font-bold tracking-tight opacity-0 animate-fade-in-scale animation-delay-200">
-              roameo
-            </h1>
-            <p className="text-xl md:text-2xl text-slate-600 max-w-2xl mx-auto leading-relaxed opacity-0 animate-fade-in-up animation-delay-400">
-              Here to create a master plan for your dream trip loaded with memories.
-            </p>
-          </div>
-
-          <div className="mt-12 opacity-0 animate-fade-in-up animation-delay-600">
-            <form
-              onSubmit={(e) => {
-                e.preventDefault()
-                handleSendMessage()
-              }}
-              className="relative"
-            >
-              <div className="bg-white/80 backdrop-blur-md border rounded-3xl shadow-lg p-4 border-zinc-300">
-                <div className="flex items-center gap-3 flex-row">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="flex-shrink-0 w-10 h-10 rounded-full hover:bg-white/80"
-                  >
-                    <Plus className="w-5 h-5" />
-                  </Button>
-
-                  <Input
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    placeholder="Where would you like to go? What kind of experience are you looking for?"
-                    className="flex-1 border-0 bg-transparent text-lg placeholder:text-gray-500 focus-visible:ring-0 focus-visible:ring-offset-0 px-0 shadow-none"
-                  />
-
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="w-10 h-10 rounded-full hover:bg-white/80"
-                    >
-                      <Mic className="w-5 h-5" />
-                    </Button>
-                    <Button
-                      type="submit"
-                      variant="ghost"
-                      size="sm"
-                      className="w-10 h-10 rounded-full hover:bg-white/80"
-                      disabled={!message.trim()}
-                    >
-                      <Send className="w-5 h-5" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </form>
-
-            <p className="text-xs text-gray-500 text-center mt-3">Roameo can make mistakes. Check important info.</p>
           </div>
         </div>
-      </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 relative z-10">
-        <div>
-          <div className="flex items-center justify-between mb-8">
-            <div className="opacity-0 animate-slide-in-left animation-delay-800">
-              <h2 className="text-3xl font-bold text-slate-900 mb-2">Your Trips</h2>
-              <p className="text-slate-600">Manage and explore your planned adventures</p>
+        {/* Trip Planning Form - Dynamic Position */}
+        <div className="absolute left-1/2 transform -translate-x-1/2 transition-all duration-500" style={{
+          top: activeInput === 'form' ? 'calc(400px + 24px - 40px)' : activeInput === 'none' ? 'calc(400px + 24px - 40px)' : 'calc(400px + 80px)',
+          width: activeInput === 'form' ? '844px' : activeInput === 'none' ? '844px' : '600px',
+          zIndex: activeInput === 'form' ? 20 : activeInput === 'none' ? 10 : 10
+        }}>
+          <div className="relative">
+            {/* Form Pill */}
+            <div 
+              className="flex items-center gap-6 bg-white backdrop-blur border border-black/5 px-8 py-5 transition-all duration-500 cursor-pointer" 
+              style={{
+                borderRadius: '100px',
+                height: activeInput === 'form' ? '80px' : activeInput === 'none' ? '80px' : '60px',
+                boxShadow: '0px 1px 12px rgba(3,3,3,0.1)',
+                transform: activeInput === 'form' ? 'scale(1)' : activeInput === 'none' ? 'scale(1)' : 'scale(0.85)'
+              }}
+              onClick={() => setActiveInput('form')}
+              onFocus={() => setActiveInput('form')}
+            >
+                {/* Destination */}
+                <div className="flex-1">
+                  <div className="text-sm font-semibold text-gray-900 mb-1">Destination</div>
+                  <Input 
+                    placeholder="Where are you going?"
+                    value={planningForm.destination}
+                    onChange={(e) => handleInputChange('destination', e.target.value)}
+                    onFocus={() => setActiveInput('form')}
+                    className="w-full bg-transparent border-0 outline-none placeholder:text-gray-400 text-gray-900 h-6 p-0 focus-visible:ring-0 shadow-none"
+                    required
+                  />
+                </div>
+
+                {/* Divider */}
+                <div className="h-10 w-px bg-gray-200" />
+
+                {/* Days */}
+                <div className="flex-1">
+                  <div className="text-sm font-semibold text-gray-900 mb-1">Days</div>
+                  <Input 
+                    placeholder="No. of days"
+                    value={planningForm.days}
+                    onChange={(e) => handleInputChange('days', e.target.value)}
+                    onFocus={() => setActiveInput('form')}
+                    className="w-full bg-transparent border-0 outline-none placeholder:text-gray-400 text-gray-900 h-6 p-0 focus-visible:ring-0 shadow-none"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    required
+                  />
+                </div>
+
+                {/* Divider */}
+                <div className="h-10 w-px bg-gray-200" />
+
+                {/* Budget */}
+                <div className="flex-1">
+                  <div className="text-sm font-semibold text-gray-900 mb-1">Budget</div>
+                  <Input 
+                    placeholder="INR (Optional)"
+                    value={planningForm.budget}
+                    onChange={(e) => handleInputChange('budget', e.target.value)}
+                    onFocus={() => setActiveInput('form')}
+                    className="w-full bg-transparent border-0 outline-none placeholder:text-gray-400 text-gray-900 h-6 p-0 focus-visible:ring-0 shadow-none"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                  />
+                </div>
+
+                {/* Divider */}
+                <div className="h-10 w-px bg-gray-200" />
+
+                {/* Trip Type */}
+                <div className="flex-1">
+                  <div className="text-sm font-semibold text-gray-900 mb-1">Trip Type</div>
+                  <Select 
+                    value={planningForm.travellers} 
+                    onValueChange={(value) => handleInputChange('travellers', value)}
+                    onOpenChange={() => setActiveInput('form')}
+                  >
+                    <SelectTrigger 
+                      className="w-full bg-transparent border-0 outline-none h-6 p-0 focus:ring-0 shadow-none"
+                      onFocus={() => setActiveInput('form')}
+                    >
+                      <SelectValue placeholder="Nature" className="text-gray-400" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white border-0 shadow-lg rounded-lg">
+                      <SelectItem value="adventure">Adventure</SelectItem>
+                      <SelectItem value="luxury">Luxury</SelectItem>
+                      <SelectItem value="budget">Budget</SelectItem>
+                      <SelectItem value="family">Family</SelectItem>
+                      <SelectItem value="romantic">Romantic</SelectItem>
+                      <SelectItem value="cultural">Cultural</SelectItem>
+                      <SelectItem value="nature">Nature</SelectItem>
+                      <SelectItem value="business">Business</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Black Round Send Button */}
+                <Button 
+                  onClick={handlePlanTrip}
+              className="ml-4 h-12 w-12 flex items-center justify-center rounded-full bg-black text-white p-0 shadow-none hover:bg-gray-800"
+            >
+              <ArrowRight className="w-5 h-5 text-white" />
+            </Button>
+              </div>
+
+
             </div>
-            <Button className="bg-white/80 backdrop-blur-md hover:bg-white/90 text-slate-900 rounded-full px-6 opacity-0 animate-fade-in-up animation-delay-800 border border-slate-200/50 shadow-lg" onClick={() => router.push("/chat")}>
-              <Plus className="w-4 h-4 mr-2" />
-              Plan New Trip
+          </div>
+        
+        {/* Caption between form and chat when activeInput is 'none' */}
+        {activeInput === 'none' && (
+          <div className="absolute left-1/2 transform -translate-x-1/2" style={{
+            top: 'calc(400px + 67px)',
+            zIndex: 15
+          }}>
+            <div className="bg-black text-white px-4 py-1 text-sm font-medium text-center" style={{
+              borderRadius: '20px',
+              fontSize: '12px'
+            }}>
+              Fill form or Chat with roameo
+            </div>
+          </div>
+        )}
+
+        {/* Chat Input - Dynamic Position */}
+        <div className="absolute left-1/2 transform -translate-x-1/2 transition-all duration-500" style={{
+          top: activeInput === 'chat' ? 'calc(400px + 24px - 40px)' : activeInput === 'none' ? 'calc(400px + 100px)' : 'calc(400px + 80px)',
+          width: activeInput === 'chat' ? '844px' : activeInput === 'none' ? '844px' : '600px',
+          zIndex: activeInput === 'chat' ? 20 : activeInput === 'none' ? 10 : 10
+        }}>
+          <div 
+            className="flex items-center bg-white border border-black/5 px-8 py-6 transition-all duration-500 cursor-pointer" 
+            style={{
+              borderRadius: '100px',
+              height: activeInput === 'chat' ? '83px' : activeInput === 'none' ? '83px' : '60px',
+              boxShadow: '0px 1px 12px rgba(3,3,3,0.1)',
+              transform: activeInput === 'chat' ? 'scale(1)' : activeInput === 'none' ? 'scale(1)' : 'scale(0.85)'
+            }}
+            onClick={() => setActiveInput('chat')}
+            onFocus={() => setActiveInput('chat')}
+          >
+            <Input 
+              placeholder="Where would you like to go?"
+              value={quickMessage}
+              onChange={(e) => setQuickMessage(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleQuickMessage()}
+              onFocus={() => setActiveInput('chat')}
+              className="flex-1 bg-transparent border-0 outline-none placeholder:text-gray-400 text-gray-900 h-6 p-0 focus-visible:ring-0 shadow-none"
+            />
+            <Button 
+              onClick={handleQuickMessage}
+              className="ml-4 h-12 w-12 flex items-center justify-center rounded-full bg-black text-white p-0 shadow-none hover:bg-gray-800"
+            >
+              <ArrowRight className="w-5 h-5 text-white" />
             </Button>
           </div>
-
-          {trips.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {trips.map((trip: any, index: number) => {
-                // Color palette for the dots
-                const colors = [
-                  'bg-blue-500',
-                  'bg-red-500', 
-                  'bg-green-500',
-                  'bg-gray-500',
-                  'bg-orange-500',
-                  'bg-purple-500',
-                  'bg-yellow-500',
-                  'bg-pink-500'
-                ]
-                const colorClass = colors[index % colors.length]
-                
-                return (
-                  <Card 
-                    key={trip.id} 
-                    className="group hover:shadow-xl transition-all duration-300 overflow-hidden bg-white/80 backdrop-blur-md rounded-3xl hover:-translate-y-1 cursor-pointer border border-slate-200/50"
-                    onClick={() => router.push(`/chat?sessionId=${encodeURIComponent(trip.id)}`)}
-                  >
-                    <div className="p-6">
-                      {/* Destination card art */}
-                      <div className="relative h-48 bg-gray-100 rounded-2xl mb-4 overflow-hidden">
-                        <DestinationCardArt
-                          destination={trip.destination || trip.title}
-                          variant="stamp"
-                          className="rounded-2xl"
-                        />
-                      </div>
-                      
-                      {/* Content */}
-                      <div className="space-y-3">
-                        {/* Title with colored dot */}
-                        <div className="flex items-center gap-3">
-                          <div className={`w-3 h-3 rounded-full ${colorClass} flex-shrink-0`}></div>
-                          <h3 className="font-semibold text-gray-900 text-lg truncate">{trip.title}</h3>
-                        </div>
-                        
-                        {/* Destination with subtle styling */}
-                        <div className="flex items-center gap-2 text-gray-500 text-sm">
-                          <MapPin className="w-4 h-4" />
-                          <span>{trip.destination}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="text-center py-16 rounded-2xl bg-white/80 backdrop-blur-md border border-slate-200/50">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 flex items-center justify-center">
-                <MapPin className="w-8 h-8 text-gray-500" />
-              </div>
-              <h3 className="text-lg font-semibold text-slate-900 mb-2">No trips yet</h3>
-              <p className="text-slate-600 mb-6">Start planning your first adventure with Roameo</p>
-              <Button className="bg-white/80 backdrop-blur-md hover:bg-white/90 text-slate-900 rounded-full px-6 border border-slate-200/50 shadow-lg" onClick={() => router.push("/chat") }>
-                <Plus className="w-4 h-4 mr-2" /> Plan New Trip
-              </Button>
-            </div>
-          )}
         </div>
-      </div>
+      </section>
+
+      {/* Your Trips Section */}
+      <section className="px-6 py-12" style={{ marginTop: 'calc(150px )' }}>
+        <h2 className="font-prompt text-xl font-medium text-gray-900 mb-8">
+          Your Trips
+        </h2>
+        
+        {trips.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {trips.map((trip, index) => {
+              const gradients = [
+                'from-pink-400 to-red-500',
+                'from-blue-400 to-indigo-500', 
+                'from-yellow-400 to-orange-500',
+                'from-green-400 to-emerald-500',
+                'from-purple-400 to-pink-500',
+                'from-indigo-400 to-purple-500',
+                'from-gray-400 to-gray-600',
+                'from-orange-400 to-red-500'
+              ]
+              const gradientClass = gradients[index % gradients.length]
+              
+              return (
+                <Card 
+                  key={trip.id}
+                  className="group hover:shadow-lg transition-all duration-300 cursor-pointer bg-white rounded-3xl border border-gray-200 overflow-hidden"
+                  onClick={() => router.push(`/chat?sessionId=${encodeURIComponent(trip.id)}`)}
+                >
+                  <CardContent className="p-6">
+                    <div className={`aspect-square rounded-2xl bg-gradient-to-br ${gradientClass} mb-4 overflow-hidden flex items-center justify-center`}>
+                      <span className="text-white text-2xl font-bold">
+                        {trip.title?.charAt(0) || '?'}
+                      </span>
+                    </div>
+                    
+                    <h3 className="font-semibold text-gray-900 text-lg mb-2">{trip.title || 'Untitled Trip'}</h3>
+                    <p className="text-gray-600 text-sm mb-1">Destination: {trip.destination || 'Not specified'}</p>
+                    <p className="text-gray-600 text-sm">Days: {trip.days || 'Not specified'}</p>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <div className="w-8 h-8 bg-gray-300 rounded-full"></div>
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">No trips yet</h3>
+            <p className="text-gray-600 mb-6">Start planning your first adventure using the form above!</p>
+            <Button 
+              onClick={handlePlanTrip}
+              className="bg-black hover:bg-gray-800 text-white px-6 py-2 rounded-full"
+            >
+              Plan Your First Trip
+            </Button>
+          </div>
+        )}
+      </section>
+
+      {/* Footer */}
+      <footer className="px-6 py-8 border-t border-gray-200 bg-white">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-6 h-6 bg-black rounded-full flex items-center justify-center">
+                <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+              </div>
+              <span className="text-lg font-bold text-gray-900">roameo</span>
+            </div>
+            <p className="text-sm text-gray-600">Your Intelligent Travel CoPilot</p>
+            <p className="text-xs text-gray-400 mt-2">roameo © 2023</p>
+          </div>
+          
+          <div className="text-right">
+            <p className="text-sm text-gray-600">Contact us</p>
+          </div>
+        </div>
+      </footer>
+      
+      {/* Font imports and custom CSS for animations */}
+      <style jsx>{`
+        @keyframes sweep {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
+        .animate-sweep {
+          animation: sweep 2s ease-in-out infinite;
+        }
+        @keyframes fade-in {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+          animation: fade-in 1s ease-out;
+        }
+        .animate-fade-in-delay {
+          animation: fade-in 1s ease-out 0.5s both;
+        }
+      `}</style>
     </div>
   )
 }

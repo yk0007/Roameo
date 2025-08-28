@@ -1,7 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { imageCache } from "@/lib/image-cache"
+import { useState } from "react"
 
 interface CachedImageProps {
   src?: string
@@ -11,31 +10,7 @@ interface CachedImageProps {
 }
 
 export function CachedImage({ src, alt, className, onError }: CachedImageProps) {
-  const [imageSrc, setImageSrc] = useState<string>("/placeholder.svg")
-  const [isLoading, setIsLoading] = useState(false)
-
-  useEffect(() => {
-    if (!src) {
-      setImageSrc("/placeholder.svg")
-      return
-    }
-
-    // Check if image is already cached
-    if (imageCache.isCached(src)) {
-      setImageSrc(imageCache.getCachedImage(src))
-      return
-    }
-
-    // Load and cache the image
-    setIsLoading(true)
-    imageCache.getImage(src).then((cachedSrc) => {
-      setImageSrc(cachedSrc)
-      setIsLoading(false)
-    }).catch(() => {
-      setImageSrc("/placeholder.svg")
-      setIsLoading(false)
-    })
-  }, [src])
+  const [imageSrc, setImageSrc] = useState<string>(src || "/placeholder.svg")
 
   const handleError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
     const target = e.currentTarget as HTMLImageElement
@@ -55,10 +30,8 @@ export function CachedImage({ src, alt, className, onError }: CachedImageProps) 
       alt={alt}
       className={className}
       onError={handleError}
-      style={{ 
-        opacity: isLoading ? 0.7 : 1,
-        transition: 'opacity 0.2s ease-in-out'
-      }}
+      loading="eager"
+      decoding="sync"
     />
   )
 }

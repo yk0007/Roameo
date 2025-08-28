@@ -88,11 +88,54 @@ export default function Profile() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 via-white to-indigo-50">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading your profile...</p>
+          {/* Roameo Logo Animation */}
+          <div className="mb-8 relative">
+            <div className="w-20 h-20 bg-black rounded-full flex items-center justify-center mx-auto mb-4 relative overflow-hidden">
+              <div className="w-8 h-8 bg-white rounded-full animate-pulse"></div>
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-20 animate-sweep"></div>
+            </div>
+            <div className="absolute inset-0 w-20 h-20 bg-black rounded-full mx-auto opacity-20 animate-ping"></div>
+          </div>
+          
+          {/* Roameo Text */}
+          <h2 className="text-3xl font-bold text-gray-900 mb-2 animate-fade-in">
+            roameo
+          </h2>
+          <p className="text-gray-600 mb-6 animate-fade-in-delay">
+            Loading your profile...
+          </p>
+          
+          {/* Loading Animation */}
+          <div className="flex justify-center items-center space-x-2 mb-4">
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+          </div>
+          
+          <p className="text-gray-500 text-sm animate-pulse">👤 Preparing your account information...</p>
         </div>
+        
+        <style jsx>{`
+          @keyframes sweep {
+            from { transform: translateX(-100%); }
+            to { transform: translateX(100%); }
+          }
+          .animate-sweep {
+            animation: sweep 2s ease-in-out infinite;
+          }
+          @keyframes fade-in {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+          .animate-fade-in {
+            animation: fade-in 1s ease-out;
+          }
+          .animate-fade-in-delay {
+            animation: fade-in 1s ease-out 0.5s both;
+          }
+        `}</style>
       </div>
     )
   }

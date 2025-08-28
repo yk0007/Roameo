@@ -26,6 +26,7 @@ interface ChatInterfaceProps {
   setIsRightPanelVisible?: (visible: boolean) => void
   pois?: POI[]
   isTyping?: boolean
+  detectedIntent?: "PLAN_TRIP" | "DESTINATION_SEARCH" | "CHAT" | null
   savedIds?: Set<string>
   onToggleSave?: (poi: POI, nextSaved: boolean) => void
   onAddPoi?: (poi: POI) => void
@@ -47,6 +48,7 @@ export function ChatInterface({
   setIsRightPanelVisible,
   pois,
   isTyping,
+  detectedIntent,
   savedIds,
   onToggleSave,
   onAddPoi,
@@ -121,6 +123,17 @@ export function ChatInterface({
     }
   }, [isTyping])
 
+  // Update response type based on server-detected intent
+  useEffect(() => {
+    if (detectedIntent && isTyping) {
+      if (detectedIntent === "PLAN_TRIP" || detectedIntent === "DESTINATION_SEARCH") {
+        setResponseType('planning')
+      } else {
+        setResponseType('general')
+      }
+    }
+  }, [detectedIntent, isTyping])
+
   const handleScroll = () => {
     const container = scrollContainerRef.current
     if (container) {
@@ -146,7 +159,12 @@ export function ChatInterface({
       return (
         <HoverCard>
           <HoverCardTrigger asChild>
-            <strong className="font-semibold text-gray-900 cursor-default">
+            <strong className="font-semibold text-gray-900 cursor-pointer hover:underline" onClick={() => {
+              const loc = matchingPoi.address ? ` at ${matchingPoi.address}` : ""
+              const coord = matchingPoi.lat && matchingPoi.lng ? ` (coords: ${matchingPoi.lat}, ${matchingPoi.lng})` : ""
+              const msg = `Please add ${matchingPoi.name}${loc}${coord} to my itinerary in an appropriate slot. If needed, adjust nearby activities accordingly.`
+              onPopulateInput(msg)
+            }}>
               {children}
             </strong>
           </HoverCardTrigger>
@@ -157,8 +175,10 @@ export function ChatInterface({
               isItineraryItem={false}
               onToggleSave={(poi, next) => onToggleSave?.(poi, next)}
               onAddPoi={(poi) => {
-                // Only call onAddPoi without populating input to prevent chat spam
-                onAddPoi?.(poi)
+                const loc = poi.address ? ` at ${poi.address}` : ""
+                const coord = poi.lat && poi.lng ? ` (coords: ${poi.lat}, ${poi.lng})` : ""
+                const msg = `Please add ${poi.name}${loc}${coord} to my itinerary in an appropriate slot. If needed, adjust nearby activities accordingly.`
+                onPopulateInput?.(msg)
               }}
               onReplan={(poi) => onReplan?.(poi)}
             />
@@ -191,8 +211,14 @@ export function ChatInterface({
                 <HoverCard key={`${poiName}-${index}`}>
                   <HoverCardTrigger asChild>
                     <span
-                      className="cursor-default text-blue-600 font-semibold"
-                      title={`Information about ${matchingPoi.name}`}
+                      className="cursor-pointer text-blue-600 hover:text-blue-800 hover:underline font-semibold"
+                      onClick={() => {
+                        const loc = matchingPoi.address ? ` at ${matchingPoi.address}` : ""
+                        const coord = matchingPoi.lat && matchingPoi.lng ? ` (coords: ${matchingPoi.lat}, ${matchingPoi.lng})` : ""
+                        const msg = `Please add ${matchingPoi.name}${loc}${coord} to my itinerary in an appropriate slot. If needed, adjust nearby activities accordingly.`
+                        onPopulateInput(msg)
+                      }}
+                      title={`Click to add ${matchingPoi.name} to trip`}
                     >
                       {pin} {poiName}
                     </span>
@@ -466,14 +492,7 @@ const handleSubmit = (e: React.FormEvent) => {
     setUserJustSent(true) // Hide suggestions when user sends a message
     setShowSuggestion(false)
     
-    // Determine response type based on message content
-    const message = inputValue.trim().toLowerCase()
-    const isPlanningMessage = message.includes('plan') || message.includes('itinerary') || 
-                             message.includes('trip') || message.includes('travel') ||
-                             message.includes('visit') || message.includes('go to') ||
-                             message.includes('destination') || message.includes('days')
-    
-    setResponseType(isPlanningMessage ? 'planning' : 'general')
+    // Response type will be set by server-detected intent
     onSendMessage(inputValue.trim())
     handleInputChange("") // Clear both internal and external input
   }
