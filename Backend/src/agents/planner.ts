@@ -131,30 +131,39 @@ Make the itinerary **engaging, structured, and easy to follow** with ample spaci
       };
     }
 
-    // --- Step 2: Fetch real POIs for all destinations --- //
+    // --- Step 2: Fetch real POIs for all destinations (optimized) --- //
     const allDestinations = destinations || (destination ? [destination] : []);
     const poiPromises = [];
     
-    for (const dest of allDestinations) {
+    // Limit to first 3 destinations to prevent timeout
+    const limitedDestinations = allDestinations.slice(0, 3);
+    console.log(`[planner] Fetching POIs for ${limitedDestinations.length} destinations:`, limitedDestinations);
+    
+    for (const dest of limitedDestinations) {
       poiPromises.push(
-        maps.searchPlaces({ q: `tourist attractions in ${dest}` }, "attraction").catch(() => []),
-        maps.searchPlaces({ q: `restaurants in ${dest}` }, "restaurant").catch(() => []),
-        maps.searchPlaces({ q: `hotels in ${dest}` }, "stay").catch(() => [])
+        maps.searchPlaces({ q: `tourist attractions in ${dest}` }, "attraction")
+          .catch((e) => { console.warn(`[planner] Attractions search failed for ${dest}:`, e.message); return []; }),
+        maps.searchPlaces({ q: `restaurants in ${dest}` }, "restaurant")
+          .catch((e) => { console.warn(`[planner] Restaurants search failed for ${dest}:`, e.message); return []; }),
+        maps.searchPlaces({ q: `hotels in ${dest}` }, "stay")
+          .catch((e) => { console.warn(`[planner] Hotels search failed for ${dest}:`, e.message); return []; })
       );
     }
     
     const poiResults = await Promise.all(poiPromises);
     
-    // Combine all POIs from all destinations
+    // Combine all POIs from all destinations (limit to prevent huge payloads)
     const attractions: POI[] = [];
     const restaurants: POI[] = [];
     const stays: POI[] = [];
     
     for (let i = 0; i < poiResults.length; i += 3) {
-      attractions.push(...(poiResults[i] || []));
-      restaurants.push(...(poiResults[i + 1] || []));
-      stays.push(...(poiResults[i + 2] || []));
+      attractions.push(...(poiResults[i] || []).slice(0, 10)); // Limit to 10 per destination
+      restaurants.push(...(poiResults[i + 1] || []).slice(0, 10));
+      stays.push(...(poiResults[i + 2] || []).slice(0, 10));
     }
+    
+    console.log(`[planner] Found ${attractions.length} attractions, ${restaurants.length} restaurants, ${stays.length} stays`);
 
     const itinerary = await createStructuredItinerary(chatResponse, { ..._ctx, destination, days }, { attractions, restaurants, stays });
 
@@ -162,6 +171,8 @@ Make the itinerary **engaging, structured, and easy to follow** with ample spaci
 
   } catch (e: any) {
     console.warn("[planner] Gemini or Maps failed:", e);
+    
+    // Handle specific error types
     if (e.message && e.message.includes("429")) {
       return {
         chatResponse: "It looks like I'm very popular right now! I've hit my request limit. Please try again in a little while.",
@@ -171,10 +182,19 @@ Make the itinerary **engaging, structured, and easy to follow** with ample spaci
       };
     }
     
+    if (e.message && e.message.includes("timeout")) {
+      return {
+        chatResponse: `I'm taking a bit longer to plan your ${destination || 'trip'}. Let me give you a quick overview while I work on the details!`,
+        itinerary: createDummyItinerary({ ..._ctx, destination, days }),
+        destination: destination || "",
+        days: days || 0,
+      };
+    }
+    
     // Return fallback itinerary instead of null
-    console.log("[planner] Using fallback itinerary due to error.");
+    console.log("[planner] Using fallback itinerary due to error:", e.message);
     return {
-      chatResponse: "I ran into a little trouble creating your itinerary, but here's a sample to get you started!",
+      chatResponse: `I ran into a little trouble creating your detailed ${destination || 'itinerary'}, but here's a sample to get you started!`,
       itinerary: createDummyItinerary({ ..._ctx, destination, days }),
       destination: destination || "",
       days: days || 0,
@@ -190,45 +210,72 @@ async function createStructuredItinerary(
   pois: { attractions: POI[]; restaurants: POI[]; stays: POI[] },
 ): Promise<Itinerary> {
   const gemini = new GeminiClient({ model: "flash" });
-  const jsonPrompt = `Based on the following itinerary description, and a list of available POIs, create a structured JSON object representing the plan. Pick the most relevant POIs for each activity.
+  const jsonPrompt = `Create a structured JSON itinerary based on the description and available POIs. Follow this EXACT format:
 
-Description:
-${description}
+Description: ${description}
 
-Available POIs:
-- Attractions: ${JSON.stringify(pois.attractions, null, 2)}
-- Restaurants: ${JSON.stringify(pois.restaurants, null, 2)}
-- Stays: ${JSON.stringify(pois.stays, null, 2)}
+Available POIs (use these IDs in your response):
+Attractions: ${JSON.stringify(pois.attractions.slice(0, 15).map(p => ({id: p.id, name: p.name, address: p.address})), null, 2)}
+Restaurants: ${JSON.stringify(pois.restaurants.slice(0, 10).map(p => ({id: p.id, name: p.name, address: p.address})), null, 2)}
+Stays: ${JSON.stringify(pois.stays.slice(0, 5).map(p => ({id: p.id, name: p.name, address: p.address})), null, 2)}
 
-JSON Structure:
+IMPORTANT CONSTRAINTS:
+- Use ONLY POI IDs from the lists above
+- Maximum ${ctx.days || 3} days
+- Each day should have 3-5 activities
+- Use realistic time slots (09:00-21:00)
+- Include accommodation for multi-day trips
+
+Respond with ONLY this JSON structure (no additional text):
 {
   "origin": "${ctx.origin || 'Current location'}",
   "destination": "${ctx.destination}",
-  "days": ${ctx.days},
+  "days": ${ctx.days || 3},
   "daysPlan": [
     {
       "day": 1,
-      "date": "YYYY-MM-DD",
-      "title": "Title for Day 1",
+      "date": "2024-01-01",
+      "title": "Day title",
       "activities": [
-        {"name": "Activity name", "start": "HH:MM", "end": "HH:MM", "location": "Address or area", "poiId": "poi_id_from_list"}
+        {"name": "Activity", "start": "09:00", "end": "11:00", "location": "Address", "poiId": "poi_id_from_above"}
       ],
-      "accommodation": {"name": "Hotel name", "checkIn": "HH:MM", "poiId": "poi_id_from_list"}
+      "accommodation": {"name": "Hotel", "checkIn": "15:00", "poiId": "stay_poi_id"}
     }
   ]
-}
-
-Respond with ONLY the JSON object.`;
+}`;
 
   try {
     const jsonResponse = await gemini.chat(jsonPrompt);
-    const cleanedJson = jsonResponse.replace(/^```json\s*/i, "").replace(/\s*```\s*$/i, "").trim();
-    const jsonMatch = cleanedJson.match(/\{[\s\S]*\}/);
-
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]) as Itinerary;
-      // Enrich activities with full POI data
-      parsed.daysPlan.forEach((day) => {
+    console.log("[planner] Raw JSON response length:", jsonResponse.length);
+    
+    // Better JSON extraction and cleaning
+    let cleanedJson = jsonResponse.replace(/^```json\s*/i, "").replace(/\s*```\s*$/i, "").trim();
+    
+    // Remove any trailing content after the JSON object
+    const jsonStart = cleanedJson.indexOf('{');
+    const jsonEnd = cleanedJson.lastIndexOf('}');
+    
+    if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+      cleanedJson = cleanedJson.substring(jsonStart, jsonEnd + 1);
+    }
+    
+    console.log("[planner] Cleaned JSON length:", cleanedJson.length);
+    
+    // Validate JSON structure before parsing
+    if (!cleanedJson.startsWith('{') || !cleanedJson.endsWith('}')) {
+      throw new Error('Invalid JSON structure: missing braces');
+    }
+    
+    const parsed = JSON.parse(cleanedJson) as Itinerary;
+    
+    // Validate required fields
+    if (!parsed.daysPlan || !Array.isArray(parsed.daysPlan)) {
+      throw new Error('Invalid itinerary structure: missing or invalid daysPlan');
+    }
+    
+    // Enrich activities with full POI data
+    parsed.daysPlan.forEach((day) => {
+      if (day.activities && Array.isArray(day.activities)) {
         day.activities.forEach((act) => {
           const allPois = [...pois.attractions, ...pois.restaurants, ...pois.stays];
           const poi = allPois.find((p) => p.id === act.poiId);
@@ -241,11 +288,13 @@ Respond with ONLY the JSON object.`;
             act.lng = poi.lng;
           }
         });
-      });
-      return parsed;
-    }
+      }
+    });
+    
+    console.log("[planner] Successfully created structured itinerary with", parsed.daysPlan.length, "days");
+    return parsed;
   } catch (e) {
-    console.warn("[planner] Failed to create structured itinerary, using fallback.", e);
+    console.log("[planner] Failed to create structured itinerary, using fallback.", e);
   }
   return createDummyItinerary(ctx);
 }

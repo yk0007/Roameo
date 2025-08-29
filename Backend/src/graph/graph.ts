@@ -365,9 +365,9 @@ const app = graph.compile();
 
 export async function runRouter(input: GraphInput, history: Message[]): Promise<WsEvent[]> {
   try {
-    // Set up timeout for AI processing
+    // Set up timeout for AI processing - increased for complex planning
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('AI processing timeout')), 60000); // 60 second timeout
+      setTimeout(() => reject(new Error('AI processing timeout')), 90000); // 90 second timeout
     });
     
     const processingPromise = app.invoke({ input: input, messages: history });
