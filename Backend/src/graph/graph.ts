@@ -105,7 +105,8 @@ const graph = new StateGraph<State>({ channels: graphState })
       ...trip, 
       destination: res.destination, 
       destinations: res.destinations,
-      days: res.days 
+      days: res.days,
+      destinationImageUrl: res.destinationImageUrl
     };
     const title = await generateSessionTitle({
       message,
@@ -133,6 +134,7 @@ const graph = new StateGraph<State>({ channels: graphState })
           destinations: res.destinations,
           days: res.days,
           title,
+          destinationImageUrl: res.destinationImageUrl,
         },
       },
     );
@@ -229,7 +231,8 @@ const graph = new StateGraph<State>({ channels: graphState })
           ...planningTrip, 
           destination: res.destination, 
           destinations: res.destinations,
-          days: res.days 
+          days: res.days,
+          destinationImageUrl: res.destinationImageUrl
         };
         
         const title = await generateSessionTitle({
@@ -257,6 +260,7 @@ const graph = new StateGraph<State>({ channels: graphState })
             destinations: res.destinations,
             days: res.days,
             title,
+            destinationImageUrl: res.destinationImageUrl,
           },
         });
 

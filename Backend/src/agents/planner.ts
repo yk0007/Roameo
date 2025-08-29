@@ -1,11 +1,12 @@
 import type { Itinerary, WsEvent, POI, Activity } from "../types/schemas.js";
 import { GeminiClient } from "../tools/gemini.js";
 import { GoogleMapsClient } from "../tools/maps.js";
+import { DestinationImageService } from "../tools/destination-images.js";
 
 export async function plannerAgent(
   _ctx: { origin?: string; destination?: string; destinations?: string[]; days?: number },
   message: string
-): Promise<{ chatResponse: string; itinerary: Itinerary; destination: string; destinations?: string[]; days: number } | null> {
+): Promise<{ chatResponse: string; itinerary: Itinerary; destination: string; destinations?: string[]; days: number; destinationImageUrl?: string } | null> {
     const extractedDetails = await extractTripDetails(message);
   const destination = extractedDetails.destination || _ctx.destination;
   const destinations = extractedDetails.destinations || _ctx.destinations;
@@ -167,7 +168,21 @@ Make the itinerary **engaging, structured, and easy to follow** with ample spaci
 
     const itinerary = await createStructuredItinerary(chatResponse, { ..._ctx, destination, days }, { attractions, restaurants, stays });
 
-    return { chatResponse, itinerary, destination: destination || allDestinations[0], destinations, days };
+    // --- Step 3: Fetch destination image for trip card --- //
+    let destinationImageUrl: string | undefined;
+    try {
+      const imageService = new DestinationImageService();
+      const allDestinations = destinations || (destination ? [destination] : []);
+      if (allDestinations.length > 0) {
+        const imageResult = await imageService.getDestinationImageForTrip(allDestinations);
+        destinationImageUrl = imageResult.imageUrl;
+        console.log(`[planner] Destination image ${destinationImageUrl ? 'found' : 'not found'} for ${allDestinations[0]}`);
+      }
+    } catch (error) {
+      console.warn(`[planner] Failed to fetch destination image:`, error);
+    }
+
+    return { chatResponse, itinerary, destination: destination || allDestinations[0], destinations, days, destinationImageUrl };
 
   } catch (e: any) {
     console.warn("[planner] Gemini or Maps failed:", e);

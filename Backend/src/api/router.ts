@@ -272,6 +272,7 @@ export function buildApiRouter(
           duration,
           createdAt: s.created_at,
           updatedAt: s.updated_at,
+          destinationImageUrl: trip.destinationImageUrl || null,
         };
       });
       

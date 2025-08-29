@@ -11,6 +11,7 @@ export interface TripContext {
   days?: number
   travelers?: number
   budget?: string
+  destinationImageUrl?: string // Add destination image URL
 }
 
 export interface ChatMessage {

@@ -140,17 +140,31 @@ export function Dashboard() {
                   onClick={() => window.location.href = `/chat?sessionId=${trip.sessionId}`}
                 >
                   <div className="relative bg-gradient-to-br from-blue-500 to-purple-600">
-                    {trip.image ? (
+                    {trip.destinationImageUrl ? (
+                      <CachedImage 
+                        src={trip.destinationImageUrl} 
+                        alt={trip.destination || trip.title}
+                        className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300" 
+                      />
+                    ) : trip.image ? (
                       <CachedImage 
                         src={trip.image} 
                         alt={trip.title} 
                         className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300" 
                       />
                     ) : (
-                      <div className="w-full h-48 flex items-center justify-center text-white">
-                        <div className="text-center">
-                          <MapPin className="w-12 h-12 mx-auto mb-2 opacity-80" />
-                          <p className="text-sm font-medium">{trip.destination || trip.title}</p>
+                      <div className="w-full h-48 flex items-center justify-center text-white relative overflow-hidden">
+                        {/* Colorful gradient background with destination initial */}
+                        <div className="absolute inset-0 bg-gradient-to-br from-pink-500 via-purple-500 to-indigo-600"></div>
+                        <div className="relative z-10 text-center">
+                          <div className="text-6xl font-bold mb-2 opacity-90">
+                            {(trip.destination || trip.title || 'T').charAt(0).toUpperCase()}
+                          </div>
+                          <p className="text-sm font-medium opacity-80">{trip.destination || trip.title}</p>
+                        </div>
+                        {/* Decorative elements */}
+                        <div className="absolute top-4 right-4 opacity-20">
+                          <MapPin className="w-8 h-8" />
                         </div>
                       </div>
                     )}

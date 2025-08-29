@@ -11,6 +11,7 @@ export const TripContextSchema = z.object({
   days: z.number().optional(),
   travelers: z.number().optional(),
   budget: z.string().optional(),
+  destinationImageUrl: z.string().optional(), // Add destination image URL
 });
 export type TripContext = z.infer<typeof TripContextSchema>;
 
