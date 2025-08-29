@@ -56,7 +56,7 @@ const graphState: StateGraphArgs<State>["channels"] = {
 const graph = new StateGraph<State>({ channels: graphState })
   .addNode("router", async (state: State) => {
     const { message } = state.input;
-    const intent = await intentAgent(message);
+    const intent = await intentAgent(message, state.messages);
     console.log(`[router] Intent detected: ${intent} for message: "${message}"`);
     
     // Emit intent detection event for planning and destination search intents
@@ -84,7 +84,7 @@ const graph = new StateGraph<State>({ channels: graphState })
       data: { status: "Analyzing your request..." }
     }];
     
-    const res = await plannerAgent(trip, message);
+    const res = await plannerAgent(trip, message, state.messages);
     if (!res) {
       return {
         events: [
@@ -176,22 +176,34 @@ const graph = new StateGraph<State>({ channels: graphState })
     
     const events: WsEvent[] = [];
     
-    // PRIORITY: Generate immediate AI response first for quick user feedback
-    const quickResponse = await chatAgent(message, state.messages);
-    events.push({
-      type: "chat.append",
-      data: {
-        id: randomUUID(),
-        role: "assistant",
-        content: quickResponse,
-        createdAt: new Date().toISOString(),
-      },
-    });
-    
-    // Extract destination information after sending immediate response
-    const extraction = await destinationExtractionAgent(message);
+    // Step 1: Extract destination information to determine if this is actually destination-related
+    const extraction = await destinationExtractionAgent(message, state.messages);
     console.log(`[destination_search] Extracted destinations:`, extraction);
-
+    
+    // Step 2: Determine if this is actually a destination search or should be treated as general chat
+    const isActualDestinationSearch = extraction.hasDestination && 
+      (extraction.destination || (extraction.destinations && extraction.destinations.length > 0));
+    
+    if (!isActualDestinationSearch) {
+      // This should be treated as general chat - provide immediate response and exit
+      console.log(`[destination_search] No valid destination found, treating as general chat`);
+      const chatResponse = await chatAgent(message, state.messages);
+      events.push({
+        type: "chat.append",
+        data: {
+          id: randomUUID(),
+          role: "assistant",
+          content: chatResponse,
+          createdAt: new Date().toISOString(),
+        },
+      });
+      
+      return { events, extractedDestination: extraction };
+    }
+    
+    // Step 3: This is a valid destination search - proceed with intelligent response
+    console.log(`[destination_search] Valid destination search for: ${extraction.destination || extraction.destinations?.[0]}`);
+    
     // Check if user is asking for trip planning (even without explicit days)
     const planningKeywords = ["plan", "trip", "itinerary", "travel", "visit"];
     const messageContainsPlanningKeywords = planningKeywords.some(keyword => 
@@ -206,7 +218,20 @@ const graph = new StateGraph<State>({ channels: graphState })
       (extraction.days || messageContainsPlanningKeywords);
     
     if (shouldTriggerPlanning) {
+      // This is trip planning - provide immediate acknowledgment and trigger planning
       console.log(`[destination_search] Triggering itinerary planning - days: ${extraction.days}, planning keywords: ${messageContainsPlanningKeywords}`);
+      
+      // PRIORITY: Give immediate acknowledgment for trip planning
+      const quickResponse = await chatAgent(message, state.messages);
+      events.push({
+        type: "chat.append",
+        data: {
+          id: randomUUID(),
+          role: "assistant",
+          content: quickResponse,
+          createdAt: new Date().toISOString(),
+        },
+      });
       
       // Emit planning status
       events.push({
@@ -289,7 +314,22 @@ const graph = new StateGraph<State>({ channels: graphState })
       }
     }
     
-    // Otherwise, proceed with immediate POI search and ask for remaining details
+    // Step 4: This is destination search (not planning) - provide immediate response and then search
+    console.log(`[destination_search] Proceeding with destination search for: ${extraction.destination || extraction.destinations?.[0]}`);
+    
+    // PRIORITY: Generate immediate response for better UX
+    const quickResponse = await chatAgent(message, state.messages);
+    events.push({
+      type: "chat.append",
+      data: {
+        id: randomUUID(),
+        role: "assistant",
+        content: quickResponse,
+        createdAt: new Date().toISOString(),
+      },
+    });
+    
+    // Then proceed with destination search in background
     events.push({
       type: "search.status",
       data: { status: `Searching for places in ${extraction.destination || extraction.destinations?.[0] || 'your destination'}...` }

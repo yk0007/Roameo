@@ -1,17 +1,22 @@
 import type { Itinerary, WsEvent, POI, Activity } from "../types/schemas.js";
+import type { Message } from "../db/types.js";
 import { GeminiClient } from "../tools/gemini.js";
 import { GoogleMapsClient } from "../tools/maps.js";
 import { DestinationImageService } from "../tools/destination-images.js";
 
 export async function plannerAgent(
   _ctx: { origin?: string; destination?: string; destinations?: string[]; days?: number },
-  message: string
+  message: string,
+  history: Message[] = []
 ): Promise<{ chatResponse: string; itinerary: Itinerary; destination: string; destinations?: string[]; days: number; destinationImageUrl?: string } | null> {
-    const extractedDetails = await extractTripDetails(message);
+  // Extract conversation context for personalized planning
+  const conversationContext = extractConversationContext(history);
+  
+  const extractedDetails = await extractTripDetails(message, conversationContext);
   const destination = extractedDetails.destination || _ctx.destination;
   const destinations = extractedDetails.destinations || _ctx.destinations;
   const days = extractedDetails.days || _ctx.days;
-  const origin = _ctx.origin || "Current location";
+  const origin = _ctx.origin || conversationContext.preferredOrigin || "Current location";
   const maps = new GoogleMapsClient();
 
   try {
@@ -25,11 +30,41 @@ export async function plannerAgent(
       : (destination || finalDestinations[0] || "your destination");
 
     if (!days) {
-      chatPrompt = `You are a friendly travel planning assistant. The user wants to plan a trip to ${destinationText}. Ask them for the number of days they want to stay. Be enthusiastic and suggest some popular attraction types like coffee plantations, waterfalls, and viewpoints.`;
+      // Build context-aware prompt for missing information
+      let contextInfo = "";
+      if (conversationContext.previousDestinations.length > 0) {
+        contextInfo += `The user has previously discussed trips to: ${conversationContext.previousDestinations.join(", ")}. `;
+      }
+      if (conversationContext.travelPreferences.length > 0) {
+        contextInfo += `Their travel preferences include: ${conversationContext.travelPreferences.join(", ")}. `;
+      }
+      if (conversationContext.previousDurations.length > 0) {
+        contextInfo += `They have previously planned trips of ${conversationContext.previousDurations.join(", ")} days. `;
+      }
+      
+      chatPrompt = `You are a friendly travel planning assistant with conversation memory. ${contextInfo}The user wants to plan a trip to ${destinationText}. Ask them for the number of days they want to stay. Be enthusiastic and suggest some popular attraction types like coffee plantations, waterfalls, and viewpoints. Reference their previous conversations when relevant.`;
     } else {
-    chatPrompt = `You are an expert travel planning assistant. Your goal is to create a beautifully formatted travel itinerary in **Markdown** for a ${days}-day trip to ${destinationText} from ${origin}.
+    // Build comprehensive context-aware planning prompt
+    let contextualInfo = "";
+    if (conversationContext.previousDestinations.length > 0) {
+      contextualInfo += `**CONVERSATION CONTEXT**: The user has previously discussed trips to: ${conversationContext.previousDestinations.join(", ")}. `;
+    }
+    if (conversationContext.travelPreferences.length > 0) {
+      contextualInfo += `Their stated preferences include: ${conversationContext.travelPreferences.join(", ")}. `;
+    }
+    if (conversationContext.budgetPreferences.length > 0) {
+      contextualInfo += `Budget considerations mentioned: ${conversationContext.budgetPreferences.join(", ")}. `;
+    }
+    if (conversationContext.groupType) {
+      contextualInfo += `This appears to be a ${conversationContext.groupType} trip. `;
+    }
+    if (contextualInfo) {
+      contextualInfo += "Incorporate these insights into your planning.\n\n";
+    }
+    
+    chatPrompt = `You are an expert travel planning assistant with conversation memory. Your goal is to create a beautifully formatted travel itinerary in **Markdown** for a ${days}-day trip to ${destinationText} from ${origin}.
 
-**CRITICAL**: You MUST create the itinerary for "${destinationText}" ONLY. Do NOT substitute with any other destination like Goa, Mumbai, or Delhi. The user specifically requested "${destinationText}".
+${contextualInfo}**CRITICAL**: You MUST create the itinerary for "${destinationText}" ONLY. Do NOT substitute with any other destination like Goa, Mumbai, or Delhi. The user specifically requested "${destinationText}".
 
 ${finalDestinations.length > 1 ? `**MULTI-DESTINATION TRIP**: This is a multi-destination trip covering ${finalDestinations.join(", ")}. Allocate days appropriately across destinations and include travel time between locations.` : ''}
 
@@ -335,9 +370,16 @@ function createDummyItinerary(ctx: { origin?: string; destination?: string; days
   return { origin: ctx.origin || "", destination: ctx.destination!, days: ctx.days!, daysPlan };
 }
 
-async function extractTripDetails(message: string): Promise<{ destination?: string; destinations?: string[]; days?: number }> {
+async function extractTripDetails(message: string, context?: any): Promise<{ destination?: string; destinations?: string[]; days?: number }> {
   const gemini = new GeminiClient({ model: "flash" });
-  const prompt = `Extract the destination(s) and number of days from the user's message. Be very precise with destination names.
+  
+  // Include context in extraction prompt if available
+  let contextPrompt = "";
+  if (context && context.previousDestinations && context.previousDestinations.length > 0) {
+    contextPrompt = `\n\nCONVERSATION CONTEXT: The user has previously mentioned these destinations: ${context.previousDestinations.join(', ')}. Use this context to better understand location references.`;
+  }
+  
+  const prompt = `Extract the destination(s) and number of days from the user's message. Be very precise with destination names.${contextPrompt}
 
 User message: "${message}"
 
@@ -377,4 +419,124 @@ Multiple with days per location: {"destinations": ["Ooty", "Coonoor"], "days": 5
 
 export function emitItineraryUpdate(it: Itinerary): WsEvent {
   return { type: "itinerary.update", data: it };
+}
+
+// Helper function to extract conversation context
+function extractConversationContext(history: Message[]) {
+  const context = {
+    previousDestinations: new Set<string>(),
+    travelPreferences: new Set<string>(),
+    budgetPreferences: new Set<string>(),
+    previousDurations: new Set<number>(),
+    groupType: undefined as string | undefined,
+    preferredOrigin: undefined as string | undefined
+  };
+  
+  if (!history || history.length === 0) {
+    return {
+      previousDestinations: [],
+      travelPreferences: [],
+      budgetPreferences: [],
+      previousDurations: [],
+      groupType: undefined,
+      preferredOrigin: undefined
+    };
+  }
+  
+  // Analyze recent conversation history (last 15 messages)
+  const recentHistory = history.slice(-15);
+  
+  recentHistory.forEach(msg => {
+    const content = msg.content.toLowerCase();
+    
+    // Extract destinations mentioned
+    const destPatterns = [
+      /(?:to|visit|visiting|in|plan.*trip.*to)\s+([A-Za-z][A-Za-z\s]{2,20}?)(?:\s|$|[,.!?])/g,
+      /([A-Za-z][A-Za-z\s]{2,20}?)\s+(?:trip|travel|vacation|itinerary)/g
+    ];
+    
+    destPatterns.forEach(pattern => {
+      let match;
+      while ((match = pattern.exec(content)) !== null) {
+        const dest = match[1].trim();
+        if (dest.length > 2 && dest.length < 20 && !isCommonWord(dest)) {
+          context.previousDestinations.add(dest.charAt(0).toUpperCase() + dest.slice(1));
+        }
+      }
+    });
+    
+    // Extract duration preferences
+    const dayMatches = content.match(/(\d+)\s*days?/g);
+    if (dayMatches) {
+      dayMatches.forEach(match => {
+        const days = parseInt(match.match(/\d+/)?.[0] || '0');
+        if (days > 0 && days <= 30) {
+          context.previousDurations.add(days);
+        }
+      });
+    }
+    
+    // Extract travel preferences
+    const preferenceKeywords = [
+      'adventure', 'relaxing', 'cultural', 'historical', 'nature', 'beach', 'mountain',
+      'food', 'shopping', 'photography', 'trekking', 'family', 'romantic', 'budget',
+      'luxury', 'backpacking', 'local experience', 'nightlife', 'wellness', 'spiritual'
+    ];
+    
+    preferenceKeywords.forEach(keyword => {
+      if (content.includes(keyword)) {
+        context.travelPreferences.add(keyword);
+      }
+    });
+    
+    // Extract budget preferences
+    const budgetKeywords = ['budget', 'cheap', 'affordable', 'luxury', 'expensive', 'mid-range', 'premium'];
+    budgetKeywords.forEach(keyword => {
+      if (content.includes(keyword)) {
+        context.budgetPreferences.add(keyword);
+      }
+    });
+    
+    // Detect group type
+    if (content.includes('family') || content.includes('kids') || content.includes('children')) {
+      context.groupType = 'family';
+    } else if (content.includes('couple') || content.includes('romantic') || content.includes('honeymoon')) {
+      context.groupType = 'couple';
+    } else if (content.includes('friends') || content.includes('group')) {
+      context.groupType = 'friends';
+    } else if (content.includes('solo') || content.includes('alone')) {
+      context.groupType = 'solo';
+    }
+    
+    // Extract origin preferences
+    const originPattern = /(?:from|coming from|starting from|live in|based in)\s+([A-Za-z][A-Za-z\s]{2,20}?)(?:\s|$|[,.!?])/g;
+    let originMatch;
+    while ((originMatch = originPattern.exec(content)) !== null) {
+      const origin = originMatch[1].trim();
+      if (origin.length > 2 && origin.length < 20) {
+        context.preferredOrigin = origin.charAt(0).toUpperCase() + origin.slice(1);
+      }
+    }
+  });
+  
+  return {
+    previousDestinations: Array.from(context.previousDestinations),
+    travelPreferences: Array.from(context.travelPreferences),
+    budgetPreferences: Array.from(context.budgetPreferences),
+    previousDurations: Array.from(context.previousDurations),
+    groupType: context.groupType,
+    preferredOrigin: context.preferredOrigin
+  };
+}
+
+// Helper function to filter out common words that aren't destinations
+function isCommonWord(word: string): boolean {
+  const commonWords = [
+    'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'had', 'her', 'was', 'one',
+    'our', 'out', 'day', 'get', 'has', 'him', 'his', 'how', 'man', 'new', 'now', 'old', 'see',
+    'two', 'way', 'who', 'boy', 'did', 'its', 'let', 'put', 'say', 'she', 'too', 'use',
+    'trip', 'plan', 'visit', 'travel', 'vacation', 'holiday', 'days', 'time', 'place', 'good',
+    'great', 'nice', 'best', 'love', 'like', 'want', 'need', 'help', 'please', 'thank'
+  ];
+  return commonWords.includes(word.toLowerCase());
 }

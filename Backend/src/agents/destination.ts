@@ -1,10 +1,11 @@
 import type { WsEvent } from "../types/schemas.js";
+import type { Message } from "../db/types.js";
 import { GeminiClient } from "../tools/gemini.js";
 import { poiAgent } from "./poi.js";
 import { mapAgent } from "./map.js";
 
 /**
- * Destination Extraction Agent
+ * Destination Extraction Agent with Conversation Memory
  * Immediately extracts destination(s) from user messages and triggers POI search
  * This allows for instant POI results without waiting for full itinerary generation
  */
@@ -17,29 +18,53 @@ export interface DestinationExtractionResult {
   hasDestination: boolean;
 }
 
-export async function destinationExtractionAgent(message: string): Promise<DestinationExtractionResult> {
+export async function destinationExtractionAgent(message: string, history: Message[] = []): Promise<DestinationExtractionResult> {
   const gemini = new GeminiClient({ model: "flash" });
   
-  const prompt = `You are a destination extraction agent. Extract travel destinations and trip duration from user messages.
+  // Extract conversation context for better destination identification
+  const conversationContext = extractDestinationContext(history);
+  
+  // Build context-aware prompt
+  let contextPrompt = "";
+  if (conversationContext.previousDestinations.length > 0) {
+    contextPrompt = `\n\nCONVERSATION CONTEXT: User has previously mentioned these destinations: ${conversationContext.previousDestinations.join(', ')}. Use this to resolve ambiguous references like "there", "that place", or partial names.`;
+  }
+  if (conversationContext.currentTripContext) {
+    contextPrompt += `\nCurrent trip context: ${conversationContext.currentTripContext}.`;
+  }
+  
+  const prompt = `You are a destination extraction agent with conversation memory. Extract travel destinations and trip duration from user messages.${contextPrompt}
 
 User message: "${message}"
 
 CRITICAL RULES:
-1. Extract EXACT destination names as mentioned by the user
-2. If user says "ooty", extract "Ooty" (capitalize properly)
-3. If user says "coonoor", extract "Coonoor"
-4. Do NOT substitute with other destinations
-5. For multiple destinations, use "destinations" array
-6. For single destination, use "destination" field
-7. Extract days if mentioned (e.g., "3 days", "for a week" = 7 days)
-8. Extract origin if mentioned (e.g., "from Mumbai")
+1. Only set hasDestination=true if the message CLEARLY mentions a specific travel destination
+2. Extract EXACT destination names as mentioned by the user
+3. Use conversation context to resolve ambiguous references like "there", "that place", "same place"
+4. If user says "ooty", extract "Ooty" (capitalize properly)
+5. If user says "coonoor", extract "Coonoor"
+6. Do NOT substitute with other destinations
+7. For multiple destinations, use "destinations" array
+8. For single destination, use "destination" field
+9. Extract days if mentioned (e.g., "3 days", "for a week" = 7 days)
+10. Extract origin if mentioned (e.g., "from Mumbai")
+11. Be CONSERVATIVE: If the message is vague, conversational, or doesn't clearly reference a destination, set hasDestination=false
+12. Use context to understand references: if user says "go there" and previously mentioned "Goa", extract "Goa"
 
 Examples:
 - "plan a trip to ooty" → {"destination": "Ooty", "hasDestination": true}
 - "3 day trip to ooty and coonoor" → {"destinations": ["Ooty", "Coonoor"], "days": 3, "hasDestination": true}
 - "kerala, goa and rajasthan for 10 days" → {"destinations": ["Kerala", "Goa", "Rajasthan"], "days": 10, "hasDestination": true}
 - "from mumbai to goa" → {"origin": "Mumbai", "destination": "Goa", "hasDestination": true}
+- "go there for 3 days" (with Goa in context) → {"destination": "Goa", "days": 3, "hasDestination": true}
+- "let's visit that place" (with Ooty in context) → {"destination": "Ooty", "hasDestination": true}
 - "what's the weather like?" → {"hasDestination": false}
+- "that sounds great" → {"hasDestination": false}
+- "thank you" → {"hasDestination": false}
+- "yes" → {"hasDestination": false}
+- "tell me more" → {"hasDestination": false}
+- "how does this work?" → {"hasDestination": false}
+- "what do you recommend?" → {"hasDestination": false}
 
 Respond with ONLY a JSON object with "destination", "destinations", "days", "origin", and "hasDestination" keys.
 If a field is not present, omit it (except hasDestination which is always required).`;
@@ -59,7 +84,72 @@ If a field is not present, omit it (except hasDestination which is always requir
   }
 
   // Fallback to simple heuristic extraction
-  return heuristicDestinationExtraction(message);
+  return heuristicDestinationExtraction(message, conversationContext);
+}
+
+/**
+ * Extract destination context from conversation history
+ */
+function extractDestinationContext(history: Message[]) {
+  const context = {
+    previousDestinations: new Set<string>(),
+    currentTripContext: undefined as string | undefined
+  };
+  
+  if (!history || history.length === 0) {
+    return {
+      previousDestinations: [],
+      currentTripContext: undefined
+    };
+  }
+  
+  // Analyze recent conversation history (last 10 messages)
+  const recentHistory = history.slice(-10);
+  
+  recentHistory.forEach(msg => {
+    const content = msg.content.toLowerCase();
+    
+    // Extract destinations mentioned
+    const destPatterns = [
+      /(?:to|visit|visiting|in|plan.*trip.*to)\s+([A-Za-z][A-Za-z\s]{2,20}?)(?:\s|$|[,.!?])/g,
+      /([A-Za-z][A-Za-z\s]{2,20}?)\s+(?:trip|travel|vacation|itinerary)/g
+    ];
+    
+    destPatterns.forEach(pattern => {
+      let match;
+      while ((match = pattern.exec(content)) !== null) {
+        const dest = match[1].trim();
+        if (dest.length > 2 && dest.length < 20 && !isCommonWord(dest)) {
+          context.previousDestinations.add(dest.charAt(0).toUpperCase() + dest.slice(1));
+        }
+      }
+    });
+    
+    // Extract current trip context
+    if (content.includes('current trip') || content.includes('this trip')) {
+      const tripMatch = content.match(/(?:current trip|this trip).*?(?:to|in)\s+([A-Za-z][A-Za-z\s]{2,20}?)(?:\s|$|[,.!?])/i);
+      if (tripMatch) {
+        context.currentTripContext = tripMatch[1].trim();
+      }
+    }
+  });
+  
+  return {
+    previousDestinations: Array.from(context.previousDestinations),
+    currentTripContext: context.currentTripContext
+  };
+}
+
+// Helper function to filter out common words that aren't destinations
+function isCommonWord(word: string): boolean {
+  const commonWords = [
+    'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'had', 'her', 'was', 'one',
+    'our', 'out', 'day', 'get', 'has', 'him', 'his', 'how', 'man', 'new', 'now', 'old', 'see',
+    'two', 'way', 'who', 'boy', 'did', 'its', 'let', 'put', 'say', 'she', 'too', 'use',
+    'trip', 'plan', 'visit', 'travel', 'vacation', 'holiday', 'days', 'time', 'place', 'good',
+    'great', 'nice', 'best', 'love', 'like', 'want', 'need', 'help', 'please', 'thank'
+  ];
+  return commonWords.includes(word.toLowerCase());
 }
 
 /**
@@ -188,34 +278,16 @@ export async function immediatePoiSearchAgent(
 /**
  * Fallback heuristic extraction when AI parsing fails
  */
-function heuristicDestinationExtraction(message: string): DestinationExtractionResult {
+function heuristicDestinationExtraction(message: string, context?: any): DestinationExtractionResult {
   const text = message.toLowerCase().trim();
   
-  // Check for common destination patterns
-  const toPattern = /(?:trip\s+)?to\s+([a-zA-Z][\w\s,.-]{2,})/i;
-  const fromToPattern = /from\s+([a-zA-Z][\w\s,.-]{2,})\s+to\s+([a-zA-Z][\w\s,.-]{2,})/i;
-  const visitPattern = /(?:visit|explore|go\s+to)\s+([a-zA-Z][\w\s,.-]{2,})/i;
-  
-  // Extract days
+  // Extract days first
   const daysPattern = /(?:for\s+)?(\d{1,2})\s+days?/i;
   const weekPattern = /(?:for\s+)?(?:a\s+)?week/i;
   
   let destination: string | undefined;
   let origin: string | undefined;
   let days: number | undefined;
-  
-  // Check for from-to pattern
-  const fromToMatch = text.match(fromToPattern);
-  if (fromToMatch) {
-    origin = fromToMatch[1].trim();
-    destination = fromToMatch[2].trim();
-  } else {
-    // Check for simple "to" pattern
-    const toMatch = text.match(toPattern) || text.match(visitPattern);
-    if (toMatch) {
-      destination = toMatch[1].trim();
-    }
-  }
   
   // Extract days
   const daysMatch = text.match(daysPattern);
@@ -225,18 +297,75 @@ function heuristicDestinationExtraction(message: string): DestinationExtractionR
     days = 7;
   }
   
-  // Clean up destination name
+  // Check for context-aware references
+  if (context && context.previousDestinations && context.previousDestinations.length > 0) {
+    // Check for references like "go there", "visit that place", "plan trip there"
+    const contextualRefs = [
+      /\b(?:go|visit|trip)\s+(?:there|that\s+place)\b/i,
+      /\bthere\b/i,
+      /\bthat\s+place\b/i
+    ];
+    
+    if (contextualRefs.some(pattern => text.match(pattern))) {
+      // Use the most recent destination from context
+      const recentDestination = context.previousDestinations[context.previousDestinations.length - 1];
+      console.log(`[destination] Using contextual reference: ${recentDestination}`);
+      return {
+        hasDestination: true,
+        destination: recentDestination,
+        days: days
+      };
+    }
+  }
+  
+  // Conservative check: Skip clearly conversational messages
+  const conversationalPhrases = [
+    'that sounds great', 'sounds good', 'thank you', 'thanks', 'yes', 'no', 'ok', 'okay',
+    'tell me more', 'what do you recommend', 'how does this work', 'who are you',
+    'what is your name', 'how are you', 'hello', 'hi', 'what can you do'
+  ];
+  
+  if (conversationalPhrases.some(phrase => text.includes(phrase))) {
+    return { hasDestination: false };
+  }
+  
+  // Check for common destination patterns
+  const toPattern = /(?:trip\s+)?to\s+([a-zA-Z][\w\s,.-]{2,})/i;
+  const fromToPattern = /from\s+([a-zA-Z][\w\s,.-]{2,})\s+to\s+([a-zA-Z][\w\s,.-]{2,})/i;
+  const visitPattern = /(?:visit|explore|go\s+to)\s+([a-zA-Z][\w\s,.-]{2,})/i;
+  const placesInPattern = /(?:places|attractions|hotels|restaurants)\s+in\s+([a-zA-Z][\w\s,.-]{2,})/i;
+  
+  // Check for from-to pattern
+  const fromToMatch = text.match(fromToPattern);
+  if (fromToMatch) {
+    origin = fromToMatch[1].trim();
+    destination = fromToMatch[2].trim();
+  } else {
+    // Check for other patterns
+    const toMatch = text.match(toPattern) || text.match(visitPattern) || text.match(placesInPattern);
+    if (toMatch) {
+      destination = toMatch[1].trim();
+    }
+  }
+  
+  // Clean up destination name and validate
   if (destination) {
     destination = destination
       .replace(/\b(for|days?|people|travelers?)\b/gi, '')
       .replace(/[.,;:]+$/g, '')
       .trim();
     
-    // Capitalize first letter of each word
-    destination = destination
-      .split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
+    // Additional validation: destination should be at least 2 characters and not be common words
+    const commonWords = ['you', 'me', 'we', 'us', 'it', 'this', 'that', 'here', 'there', 'now', 'then'];
+    if (destination.length < 2 || commonWords.includes(destination.toLowerCase())) {
+      destination = undefined;
+    } else {
+      // Capitalize first letter of each word
+      destination = destination
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+    }
   }
   
   const hasDestination = Boolean(destination);
