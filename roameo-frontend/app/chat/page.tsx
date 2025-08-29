@@ -440,8 +440,18 @@ export default function ChatPage() {
           setTrip((t) => ({ ...t, ...(evt as any).data }))
         } else if (evt.type === "itinerary.update") {
           const data = (evt as any).data
-          if (data !== null && data !== undefined) {
-            setItinerary(data)
+          console.log('[client] Received itinerary update:', data)
+          // Only update if we have valid itinerary data or explicit null to clear
+          if (data !== undefined) {
+            if (data === null) {
+              console.log('[client] Clearing itinerary as requested')
+              setItinerary(undefined)
+            } else if (data && typeof data === 'object' && data.daysPlan) {
+              console.log(`[client] Setting itinerary with ${data.daysPlan.length} days`)
+              setItinerary(data)
+            } else {
+              console.warn('[client] Received invalid itinerary data, ignoring:', data)
+            }
           }
         } else if (evt.type === "search.results") {
           const data = (evt as any).data

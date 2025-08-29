@@ -61,11 +61,21 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
 
   // Send session ready to all clients in the session
   hub.emit(sessionId, { type: "session.ready", data: { sessionId, inviteId } as any });
+  
   // Send current trip navbar data
-  if (existing.trip) hub.emit(sessionId, { type: "navbar.update", data: existing.trip as any });
+  if (existing.trip) {
+    console.log(`[ws] Restoring trip data for session ${sessionId}:`, JSON.stringify(existing.trip, null, 2));
+    hub.emit(sessionId, { type: "navbar.update", data: existing.trip as any });
+  }
+  
   // If we have a persisted itinerary from prior runs, replay it so UI restores
   const maybeItin = (existing.trip as any)?.itinerary;
-  if (maybeItin) hub.emit(sessionId, { type: "itinerary.update", data: maybeItin });
+  if (maybeItin) {
+    console.log(`[ws] Restoring itinerary for session ${sessionId} with ${maybeItin.daysPlan?.length || 0} days`);
+    hub.emit(sessionId, { type: "itinerary.update", data: maybeItin });
+  } else {
+    console.log(`[ws] No itinerary found for session ${sessionId}`);
+  }
   // Replay last search results and map snapshot if present
   const maybeSearch = (existing.trip as any)?.searchResults;
   if (maybeSearch) hub.emit(sessionId, { type: "search.results", data: maybeSearch });

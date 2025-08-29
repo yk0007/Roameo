@@ -297,7 +297,15 @@ export class WriteThroughDb implements Db {
 
   patchTrip(sessionId: string, patch: Record<string, any>): void {
     this.mem.patchTrip(sessionId, patch);
-    this.flushPatchTrip(sessionId, patch).catch(() => {});
+    // For critical data like itinerary, ensure immediate persistence
+    if (patch.itinerary) {
+      console.log(`[persist] Immediate flush for itinerary update on session ${sessionId}`);
+      this.flushPatchTrip(sessionId, patch).catch((error) => {
+        console.error(`[persist] CRITICAL: Failed to persist itinerary for session ${sessionId}:`, error);
+      });
+    } else {
+      this.flushPatchTrip(sessionId, patch).catch(() => {});
+    }
   }
 
   setInvite(sessionId: string, inviteId: string): void {
@@ -388,9 +396,29 @@ export class WriteThroughDb implements Db {
   }
 
   private async flushPatchTrip(sessionId: string, patch: Record<string, any>) {
-    if (!this.client) return;
-    const cur = this.mem.getSession(sessionId)?.trip || {};
-    await this.client.from("chat_sessions").upsert({ session_id: sessionId, trip: cur }, { onConflict: "session_id" });
+    if (!this.client) {
+      console.warn(`[persist] No client available for flushing trip patch on session ${sessionId}`);
+      return;
+    }
+    
+    try {
+      const cur = this.mem.getSession(sessionId)?.trip || {};
+      console.log(`[persist] Flushing trip patch for session ${sessionId}:`, JSON.stringify(patch, null, 2));
+      
+      const { error } = await this.client
+        .from("chat_sessions")
+        .upsert({ session_id: sessionId, trip: cur }, { onConflict: "session_id" });
+      
+      if (error) {
+        console.error(`[persist] Database error flushing trip patch for session ${sessionId}:`, error);
+        throw error;
+      }
+      
+      console.log(`[persist] Successfully flushed trip patch for session ${sessionId}`);
+    } catch (error) {
+      console.error(`[persist] Exception flushing trip patch for session ${sessionId}:`, error);
+      throw error;
+    }
   }
 
   private async flushSetInvite(sessionId: string, inviteId: string) {

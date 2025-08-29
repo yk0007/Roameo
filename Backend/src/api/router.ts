@@ -144,9 +144,19 @@ export function buildApiRouter(
             };
             db.patchTrip(sid, tripUpdate);
           }
-          // Persist itinerary updates
+          // Persist itinerary updates with better error handling
           if (e.type === "itinerary.update") {
-            db.patchTrip(sid, { itinerary: e.data });
+            try {
+              // Only persist if we have valid itinerary data
+              if (e.data && typeof e.data === 'object' && e.data.daysPlan) {
+                db.patchTrip(sid, { itinerary: e.data });
+                console.log(`[router] Itinerary updated for session ${sid} with ${e.data.daysPlan?.length || 0} days`);
+              } else {
+                console.warn(`[router] Skipping invalid itinerary update for session ${sid}:`, e.data);
+              }
+            } catch (error) {
+              console.error(`[router] Failed to persist itinerary for session ${sid}:`, error);
+            }
           }
           // Persist search results
           if (e.type === "search.results") {

@@ -201,7 +201,7 @@ export class CachedDb implements Db {
   }
 
   patchTrip(sessionId: string, patch: Record<string, any>): void {
-    // Update database
+    // Update database first
     this.writeThruDb.patchTrip(sessionId, patch);
     
     // Invalidate related caches
@@ -210,6 +210,15 @@ export class CachedDb implements Db {
       this.cache.del(`trip:${sessionId}`),
       this.cache.del(`itinerary:${sessionId}`)
     ]).catch(() => {});
+    
+    // Special handling for itinerary updates
+    if (patch.itinerary) {
+      console.log(`[cached-db] Itinerary patch for session ${sessionId}`);
+      // Immediately cache the updated itinerary
+      this.setItineraryData(sessionId, patch.itinerary).catch((error) => {
+        console.warn(`[cached-db] Failed to cache updated itinerary for ${sessionId}:`, error);
+      });
+    }
   }
 
   setInvite(sessionId: string, inviteId: string): void {
