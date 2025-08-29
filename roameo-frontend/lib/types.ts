@@ -91,6 +91,9 @@ export type WsEvent =
   | { type: "session.ready"; data: { sessionId: SessionId; inviteId: InviteId } }
   | { type: "chat.history"; data: ChatMessage[] }
   | { type: "intent.detected"; data: { intent: "PLAN_TRIP" | "DESTINATION_SEARCH" | "CHAT"; message: string } }
+  | { type: "planning.status"; data: { status: string } }
+  | { type: "search.status"; data: { status: string } }
+  | { type: "map.status"; data: { status: string } }
 
 export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:4000"
 export const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:4000/ws"

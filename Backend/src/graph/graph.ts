@@ -77,6 +77,13 @@ const graph = new StateGraph<State>({ channels: graphState })
   })
   .addNode("planner", async (state: State) => {
     const { trip, message } = state.input;
+    
+    // Emit planning start event
+    const plannerEvents: WsEvent[] = [{
+      type: "planning.status",
+      data: { status: "Analyzing your request..." }
+    }];
+    
     const res = await plannerAgent(trip, message);
     if (!res) {
       return {
@@ -108,7 +115,7 @@ const graph = new StateGraph<State>({ channels: graphState })
       existingTitle: trip.title,
     });
 
-    const events: WsEvent[] = [
+    plannerEvents.push(
       {
         type: "chat.append",
         data: {
@@ -128,35 +135,61 @@ const graph = new StateGraph<State>({ channels: graphState })
           title,
         },
       },
-    ];
+    );
 
     if (res.itinerary.daysPlan.length > 0) {
-      events.push(emitItineraryUpdate(res.itinerary));
+      plannerEvents.push(emitItineraryUpdate(res.itinerary));
       // Handle POI search for multiple destinations
       const searchDestination = res.destinations && res.destinations.length > 0 
         ? res.destinations[0] // Use first destination for POI search
         : res.destination;
+      
+      // Emit search status
+      plannerEvents.push({
+        type: "search.status",
+        data: { status: `Finding places in ${searchDestination}...` }
+      });
+      
       const poiEvt = await poiAgent({ destination: searchDestination });
       if (poiEvt) {
-        events.push(poiEvt);
+        plannerEvents.push(poiEvt);
         if (poiEvt.type === "search.results") {
           const pois = [...poiEvt.data.stays, ...poiEvt.data.restaurants, ...poiEvt.data.attractions];
-          events.push(await mapAgent(pois));
+          
+          // Emit map status
+          plannerEvents.push({
+            type: "map.status",
+            data: { status: "Calculating routes and updating map..." }
+          });
+          
+          plannerEvents.push(await mapAgent(pois));
         }
       }
     }
 
-    return { events, input: { ...state.input, trip: updatedTrip } };
+    return { events: plannerEvents, input: { ...state.input, trip: updatedTrip } };
   })
   .addNode("destination_search", async (state: State) => {
     const { message, trip } = state.input;
     
-    // Extract destination information immediately
-    const extraction = await destinationExtractionAgent(message);
-    console.log(`[destination_search] Extracted destinations:`, extraction);
-    
     const events: WsEvent[] = [];
     
+    // PRIORITY: Generate immediate AI response first for quick user feedback
+    const quickResponse = await chatAgent(message, state.messages);
+    events.push({
+      type: "chat.append",
+      data: {
+        id: randomUUID(),
+        role: "assistant",
+        content: quickResponse,
+        createdAt: new Date().toISOString(),
+      },
+    });
+    
+    // Extract destination information after sending immediate response
+    const extraction = await destinationExtractionAgent(message);
+    console.log(`[destination_search] Extracted destinations:`, extraction);
+
     // Check if user is asking for trip planning (even without explicit days)
     const planningKeywords = ["plan", "trip", "itinerary", "travel", "visit"];
     const messageContainsPlanningKeywords = planningKeywords.some(keyword => 
@@ -172,6 +205,12 @@ const graph = new StateGraph<State>({ channels: graphState })
     
     if (shouldTriggerPlanning) {
       console.log(`[destination_search] Triggering itinerary planning - days: ${extraction.days}, planning keywords: ${messageContainsPlanningKeywords}`);
+      
+      // Emit planning status
+      events.push({
+        type: "planning.status",
+        data: { status: "Creating your itinerary..." }
+      });
       
       // Create trip context for planner agent
       const planningTrip = {
@@ -247,6 +286,11 @@ const graph = new StateGraph<State>({ channels: graphState })
     }
     
     // Otherwise, proceed with immediate POI search and ask for remaining details
+    events.push({
+      type: "search.status",
+      data: { status: `Searching for places in ${extraction.destination || extraction.destinations?.[0] || 'your destination'}...` }
+    });
+    
     const poiEvents = await immediatePoiSearchAgent(extraction);
     
     // Extract POI data for chat response generation
@@ -279,31 +323,14 @@ const graph = new StateGraph<State>({ channels: graphState })
       }
     }
     
-    // ALSO activate general chat agent for additional conversational context
-    const generalChatResponse = await chatAgent(message, state.messages);
-    
-    // Add destination-specific chat response first
-    events.push({
-      type: "chat.append",
-      data: {
-        id: randomUUID(),
-        role: "assistant",
-        content: destinationChatResponse + followUpResponse,
-        createdAt: new Date().toISOString(),
-      },
-    });
-    
-    // Add general chat response as a follow-up if it provides additional value
-    if (generalChatResponse && 
-        generalChatResponse.length > 20 && 
-        !generalChatResponse.toLowerCase().includes("sorry") &&
-        !generalChatResponse.toLowerCase().includes("trouble")) {
+    // Add destination-specific chat response only if we have additional info
+    if (followUpResponse || destinationChatResponse.length > 50) {
       events.push({
         type: "chat.append",
         data: {
           id: randomUUID(),
           role: "assistant",
-          content: generalChatResponse,
+          content: destinationChatResponse + followUpResponse,
           createdAt: new Date().toISOString(),
         },
       });
@@ -344,6 +371,7 @@ const graph = new StateGraph<State>({ channels: graphState })
     };
   })
   .addNode("chat", async (state: State) => {
+    // For pure chat queries, provide immediate response
     const chatResponse = await chatAgent(state.input.message, state.messages);
     const event: WsEvent = {
       type: "chat.append",

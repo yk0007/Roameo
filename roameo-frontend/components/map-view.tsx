@@ -94,6 +94,8 @@ export function MapView({
     { stay: true, restaurant: true, attraction: true }
   )
   const [savedOnly, setSavedOnly] = useState(false)
+  const [isMapLoading, setIsMapLoading] = useState(true)
+  const [mapSearchStatus, setMapSearchStatus] = useState<string | null>(null)
   const localItineraryPoiIds = useMemo(() => {
     if (!itinerary) return new Set<string>()
     const ids = new Set<string>()
@@ -254,8 +256,8 @@ export function MapView({
     const mapId = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID
     try {
       mapInstance.current = new window.google.maps.Map(mapRef.current, {
-        center: { lat: 20, lng: 0 }, // World center
-        zoom: 2, // World view
+        center: { lat: 20.5937, lng: 78.9629 }, // Center of India
+        zoom: 5, // Show India view
         styles: customStyle ? CUSTOM_MAP_STYLE : [],
         mapTypeControl: false,
         streetViewControl: false,
@@ -264,9 +266,12 @@ export function MapView({
         ...(mapId ? { mapId } : {}),
       });
       console.log('Google Maps initialized successfully');
+      setIsMapLoading(false);
+      setMapSearchStatus(null);
     } catch (error) {
       console.error('Failed to initialize Google Maps:', error);
       setApiKeyError(true);
+      setIsMapLoading(false);
       return;
     }
 
@@ -691,6 +696,18 @@ export function MapView({
 
   return (
     <div className="relative h-full overflow-hidden">
+      {/* Loading Overlay */}
+      {(isMapLoading || mapSearchStatus) && (
+        <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="flex flex-col items-center space-y-4">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <div className="text-sm font-medium text-gray-700">
+              {isMapLoading ? "Loading map..." : mapSearchStatus}
+            </div>
+          </div>
+        </div>
+      )}
+      
       <div ref={mapRef} className="w-full h-full" />
 
       {/* Map Controls - bottom right */}

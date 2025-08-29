@@ -18,9 +18,11 @@ interface SearchInterfaceProps {
   onAddPoi?: (poi: POI) => void
   onToggleSave?: (poi: POI, nextSaved: boolean) => void
   onReplan?: (poi?: POI) => void
+  isLoading?: boolean
+  searchStatus?: string
 }
 
-export const SearchInterface = memo(function SearchInterface({ activeView, onViewChange, results, savedIds, itineraryPoiIds, onAddPoi, onToggleSave, onReplan }: SearchInterfaceProps) {
+export const SearchInterface = memo(function SearchInterface({ activeView, onViewChange, results, savedIds, itineraryPoiIds, onAddPoi, onToggleSave, onReplan, isLoading = false, searchStatus }: SearchInterfaceProps) {
   const [activeTab, setActiveTab] = useState("Stays")
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedQuery, setDebouncedQuery] = useState("")
@@ -66,7 +68,19 @@ export const SearchInterface = memo(function SearchInterface({ activeView, onVie
   }, [activeTab])
 
   return (
-    <div className="flex flex-col h-full bg-white pt-20">
+    <div className="flex flex-col h-full bg-white pt-20 relative">
+      {/* Loading Overlay */}
+      {(isLoading || searchStatus) && (
+        <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="flex flex-col items-center space-y-4">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <div className="text-sm font-medium text-gray-700">
+              {searchStatus || "Searching for places..."}
+            </div>
+          </div>
+        </div>
+      )}
+      
       <div className="flex items-center justify-center gap-2 p-2 border-b border-white/20">
         {tabs.map((tab) => (
           <Button

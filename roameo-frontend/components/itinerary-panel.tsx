@@ -25,6 +25,8 @@ interface ItineraryPanelProps {
   onToggleSave?: (poi: POI, nextSaved: boolean) => void
   onAddPoi?: (poi: POI) => void
   onReplan?: (poi: POI) => void
+  isLoading?: boolean
+  planningStatus?: string
 }
 
 export function ItineraryPanel({ 
@@ -34,7 +36,9 @@ export function ItineraryPanel({
   savedIds = new Set(), 
   onToggleSave = () => {}, 
   onAddPoi = () => {}, 
-  onReplan = () => {} 
+  onReplan = () => {},
+  isLoading = false,
+  planningStatus
 }: ItineraryPanelProps) {
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null)
   const [expandedPoiCards, setExpandedPoiCards] = useState<Set<string>>(new Set())
@@ -103,7 +107,19 @@ export function ItineraryPanel({
   }, [])
   
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col relative">
+      {/* Loading Overlay */}
+      {(isLoading || planningStatus) && (
+        <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="flex flex-col items-center space-y-4">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <div className="text-sm font-medium text-gray-700">
+              {planningStatus || "Planning your itinerary..."}
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Expandable Card Overlay and Content */}
       <AnimatePresence>
         {activeCard && (
