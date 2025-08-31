@@ -8,6 +8,9 @@ import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase/client"
 import type { User } from "@supabase/supabase-js"
+import { FeaturesSectionWithHoverEffects } from "@/components/blocks/feature-section-with-hover-effects"
+import { BlurFade } from "@/components/ui/blur-fade"
+import { motion } from "framer-motion"
 
 export function LandingPage() {
   const router = useRouter()
@@ -84,6 +87,7 @@ export function LandingPage() {
           </div>
           <span className="text-xl font-bold text-gray-900">roameo</span>
         </div>
+        
         <div className="flex items-center gap-6">
           {user ? (
             <Button onClick={handleSignOut} variant="ghost" className="text-gray-600">
@@ -109,28 +113,39 @@ export function LandingPage() {
       <section className="relative overflow-hidden bg-gradient-to-br from-sky-300 via-blue-500 to-blue-800 px-6 min-h-screen flex items-center pt-20">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex-1 max-w-2xl">
-            <h1 className="text-6xl font-bold text-white mb-6 leading-tight">
-              Plan your perfect
-              <br />
-              <span className="italic">adventure.</span>
-            </h1>
-            <p className="text-xl text-white/90 mb-8 leading-relaxed">
-              Experience AI-powered travel planning that understands your preferences and creates personalized
-              itineraries in minutes, not hours.
-            </p>
-            <div className="flex items-center gap-4">
-              <Button
-                onClick={() => handleProtectedAction("start planning")}
-                size="lg"
-                className="bg-black text-white hover:bg-gray-800 rounded-full px-8 py-3 text-lg"
-              >
-                Start planning
-              </Button>
-            </div>
+            <BlurFade delay={0.25} inView>
+              <h1 className="text-6xl font-bold text-white mb-6 leading-tight">
+                Plan your perfect
+                <br />
+                <span className="italic">adventure.</span>
+              </h1>
+            </BlurFade>
+            <BlurFade delay={0.25 * 2} inView>
+              <p className="text-xl text-white/90 mb-8 leading-relaxed">
+                Experience AI-powered travel planning that understands your preferences and creates personalized
+                itineraries in minutes, not hours.
+              </p>
+            </BlurFade>
+            <BlurFade delay={0.25 * 3} inView>
+              <div className="flex items-center gap-4">
+                <Button
+                  onClick={() => handleProtectedAction("start planning")}
+                  size="lg"
+                  className="bg-black text-white hover:bg-gray-800 rounded-full px-8 py-3 text-lg"
+                >
+                  Start planning
+                </Button>
+              </div>
+            </BlurFade>
           </div>
 
           <div className="flex-1 relative">
-            <div className="absolute top-0 right-0 bg-white rounded-2xl p-6 shadow-2xl max-w-sm transform rotate-3">
+            <motion.div
+              initial={{ y: 50, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ duration: 0.5, delay: 0.5, ease: "easeOut" }}
+              className="absolute top-0 right-0 bg-white rounded-2xl p-6 shadow-2xl max-w-sm transform rotate-3"
+            >
               <div className="space-y-4">
                 <div className="flex items-start gap-3">
                   <div className="w-8 h-8 bg-black rounded-full flex items-center justify-center">
@@ -164,7 +179,7 @@ export function LandingPage() {
                   </div>
                 </div>
               </div>
-            </div>
+            </motion.div>
           </div>
         </div>
       </section>
@@ -172,43 +187,11 @@ export function LandingPage() {
       {/* How it Works Section */}
       <section className="px-6 min-h-screen flex items-center bg-white">
         <div className="max-w-7xl mx-auto">
-          <h2 className="text-5xl font-bold text-center text-gray-900 mb-4 font-sans">How it Works</h2>
-          <p className="text-xl text-gray-600 text-center mb-16 ">Three simple steps to your perfect trip</p>
-
-          <div className="grid grid-cols-3 gap-12">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-black rounded-full flex items-center justify-center mx-auto mb-6">
-                <div className="w-4 h-4 bg-white rounded-full"></div>
-              </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-4 ">Chat with AI</h3>
-              <p className="text-gray-600 leading-relaxed ">
-                Tell our AI assistant about your dream destination in India, budget, interests, and travel style. The
-                more details you share, the better we can personalize your experience.
-              </p>
-            </div>
-
-            <div className="text-center">
-              <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 bg-black">
-                <Star className="w-8 h-8 text-white" />
-              </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-4 font-sans">Get Smart Recommendations</h3>
-              <p className="text-gray-600 leading-relaxed font-sans">
-                Our AI analyzes thousands of travel data points to suggest accommodations, activities, restaurants, and
-                hidden gems that match your preferences perfectly across India's diverse landscapes.
-              </p>
-            </div>
-
-            <div className="text-center">
-              <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 bg-black">
-                <Calendar className="w-8 h-8 text-white" />
-              </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-4 font-sans">Build Your Itinerary</h3>
-              <p className="text-gray-600 leading-relaxed font-sans">
-                Review, customize, and organize your personalized itinerary for India. Add or remove activities, adjust
-                timing, and share with travel companions for the perfect trip.
-              </p>
-            </div>
+          <div className="text-center mb-16">
+            <h2 className="text-5xl font-bold text-gray-900 mb-4 font-sans">How it Works</h2>
+            <p className="text-xl text-gray-600">Discover the power of AI-driven travel planning</p>
           </div>
+          <FeaturesSectionWithHoverEffects />
         </div>
       </section>
 
@@ -319,105 +302,8 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* Personalized Recommendations */}
-      <section className="px-6 min-h-screen flex items-center text-white bg-white border">
-        <div className="max-w-7xl mx-auto flex items-center gap-16">
-          <div className="flex-1">
-            <div className="bg-white p-8 rounded-4xl shadow-xl rounded-3xl px-9 py-0">
-              <div className="flex items-center gap-4 mb-6">
-                <div className="w-12 h-12 bg-sky-400 rounded-full flex items-center justify-center">
-                  <MapPin className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-lg text-black">Tea Valley Resort, Munnar</h3>
-                  <div className="flex items-center gap-1">
-                    <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                    <span className="text-sm text-gray-600">4.7 • Hill Station Resort</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 mb-6">
-                <img
-                  src="/munnar-tea-gardens-sunrise.png"
-                  alt="Munnar tea gardens"
-                  className="h-32 w-full object-cover rounded-lg"
-                />
-                <img
-                  src="/munnar-tea-hills.png"
-                  alt="Munnar misty hills"
-                  className="h-32 w-full object-cover rounded-lg"
-                />
-                <img
-                  src="/luxury-resort-room.png"
-                  alt="Tea valley resort room"
-                  className="h-20 w-full object-cover rounded-lg"
-                />
-                <div className="h-20 bg-gradient-to-br from-gray-400 to-gray-500 rounded-lg flex items-center justify-center">
-                  <span className="text-white text-sm font-medium">Show all photos</span>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between mb-6 text-sm text-gray-600">
-                <div>
-                  <p className="font-medium">Check-in</p>
-                  <p>Oct 12</p>
-                </div>
-                <div>
-                  <p className="font-medium">Check-out</p>
-                  <p>Oct 15</p>
-                </div>
-              </div>
-
-              <p className="text-sm text-gray-600 mb-6">2 Travelers, 1 Valley View Room</p>
-
-              <div className="space-y-3">
-                <Button
-                  onClick={() => handleProtectedAction("book now")}
-                  className="w-full bg-black text-white hover:bg-gray-800 rounded-full"
-                >
-                  Book now
-                </Button>
-                <Button
-                  onClick={() => handleProtectedAction("add to trip")}
-                  variant="outline"
-                  className="w-full rounded-full bg-transparent"
-                >
-                  + Add to trip
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex-1">
-            <h2 className="text-4xl font-bold text-gray-900 mb-6 font-sans">Get personalized recommendations.</h2>
-            <p className="text-xl text-gray-600 mb-8 leading-relaxed font-sans">
-              Discover India's breathtaking hill stations and coastal gems through AI-powered recommendations. From
-              misty tea gardens in Munnar to serene beaches at RK Beach, we'll curate experiences perfect for your
-              journey.
-            </p>
-
-            <div className="flex items-center gap-3 p-4 bg-sky-50 rounded-lg mb-6">
-              <div className="h-10 rounded-full flex items-center justify-center w-14 bg-[rgba(53,115,255,1)]">
-                <Star className="w-5 h-5 text-white" />
-              </div>
-              <p className="text-gray-700 font-sans">
-                Save your favorite places and build the perfect itinerary for your Indian adventure
-              </p>
-            </div>
-
-            <Button
-              onClick={() => handleProtectedAction("save to trip")}
-              className="text-white hover:bg-sky-500 rounded-full px-8 bg-black"
-            >
-              Save to Trip
-            </Button>
-          </div>
-        </div>
-      </section>
-
       {/* Popular Destinations */}
-      <section className="px-6 py-4 bg-white mb-8">
+      <section className="px-6 py-4 bg-white mb-16">
         <div className="max-w-5xl mx-auto">
           <div className="mb-3">
             <h2 className="text-2xl font-bold text-gray-900 mb-1">Popular destinations</h2>
@@ -519,6 +405,103 @@ export function LandingPage() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Personalized Recommendations */}
+      <section className="px-6 min-h-screen flex items-center text-white bg-white border">
+        <div className="max-w-7xl mx-auto flex items-center gap-16">
+          <div className="flex-1">
+            <div className="bg-white p-8 rounded-4xl shadow-xl rounded-3xl px-9 py-0">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-12 h-12 bg-sky-400 rounded-full flex items-center justify-center">
+                  <MapPin className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg text-black">Tea Valley Resort, Munnar</h3>
+                  <div className="flex items-center gap-1">
+                    <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                    <span className="text-sm text-gray-600">4.7 • Hill Station Resort</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mb-6">
+                <img
+                  src="/munnar-tea-gardens-sunrise.png"
+                  alt="Munnar tea gardens"
+                  className="h-32 w-full object-cover rounded-lg"
+                />
+                <img
+                  src="/munnar-tea-hills.png"
+                  alt="Munnar misty hills"
+                  className="h-32 w-full object-cover rounded-lg"
+                />
+                <img
+                  src="/luxury-resort-room.png"
+                  alt="Tea valley resort room"
+                  className="h-20 w-full object-cover rounded-lg"
+                />
+                <div className="h-20 bg-gradient-to-br from-gray-400 to-gray-500 rounded-lg flex items-center justify-center">
+                  <span className="text-white text-sm font-medium">Show all photos</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between mb-6 text-sm text-gray-600">
+                <div>
+                  <p className="font-medium">Check-in</p>
+                  <p>Oct 12</p>
+                </div>
+                <div>
+                  <p className="font-medium">Check-out</p>
+                  <p>Oct 15</p>
+                </div>
+              </div>
+
+              <p className="text-sm text-gray-600 mb-6">2 Travelers, 1 Valley View Room</p>
+
+              <div className="space-y-3">
+                <Button
+                  onClick={() => handleProtectedAction("book now")}
+                  className="w-full bg-black text-white hover:bg-gray-800 rounded-full"
+                >
+                  Book now
+                </Button>
+                <Button
+                  onClick={() => handleProtectedAction("add to trip")}
+                  variant="outline"
+                  className="w-full rounded-full bg-transparent"
+                >
+                  + Add to trip
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-1">
+            <h2 className="text-4xl font-bold text-gray-900 mb-6 font-sans">Get personalized recommendations.</h2>
+            <p className="text-xl text-gray-600 mb-8 leading-relaxed font-sans">
+              Discover India's breathtaking hill stations and coastal gems through AI-powered recommendations. From
+              misty tea gardens in Munnar to serene beaches at RK Beach, we'll curate experiences perfect for your
+              journey.
+            </p>
+
+            <div className="flex items-center gap-3 p-4 bg-sky-50 rounded-lg mb-6">
+              <div className="h-10 rounded-full flex items-center justify-center w-14 bg-[rgba(53,115,255,1)]">
+                <Star className="w-5 h-5 text-white" />
+              </div>
+              <p className="text-gray-700 font-sans">
+                Save your favorite places and build the perfect itinerary for your Indian adventure
+              </p>
+            </div>
+
+            <Button
+              onClick={() => handleProtectedAction("save to trip")}
+              className="text-white hover:bg-sky-500 rounded-full px-8 bg-black"
+            >
+              Save to Trip
+            </Button>
           </div>
         </div>
       </section>

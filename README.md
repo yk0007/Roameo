@@ -28,6 +28,17 @@ Roameo is an intelligent multi-agent AI travel planning platform that helps user
 - Message persistence and trip data storage
 - Database health monitoring and connection pooling
 
+## 📁 Project Organization
+
+The project follows a clean, organized structure:
+
+- **`Backend/`** - Node.js + TypeScript backend with LangGraph AI agents
+- **`roameo-frontend/`** - Next.js 14 React frontend with modern UI
+- **`database/`** - All SQL schema files, migrations, and policies
+- **`docs/`** - Implementation documentation and feature guides
+- **`LICENSE`** - GNU General Public License v3.0
+- **`README.md`** - This comprehensive project guide
+
 ## 🏗️ Architecture
 
 ### System Architecture Diagram
@@ -447,10 +458,17 @@ TTT/
 │   │   └── types.ts                 # TypeScript definitions
 │   ├── public/                      # Static assets (56 files)
 │   └── package.json                 # Dependencies and scripts
-├── Database Schema/                  # SQL scripts
+├── database/                    # 📁 Database schema and migration files
 │   ├── database_schema.sql          # Core database schema
 │   ├── database_performance_optimization.sql
-│   └── rls_policies_final.sql       # Security policies
+│   ├── rls_policies_final.sql       # Security policies
+│   └── [migration files]            # Database migration scripts
+├── docs/                        # 📁 Implementation documentation
+│   ├── CONVERSATIONAL_MEMORY_IMPLEMENTATION.md
+│   ├── DESTINATION_IMAGES_IMPLEMENTATION.md
+│   ├── DESTINATION_SEARCH_IMPROVEMENTS.md
+│   ├── IMPLEMENTATION_SUMMARY.md
+│   └── ITINERARY_PERSISTENCE_FIX.md
 └── Documentation/                    # Project documentation
     ├── README.md                    # This file
     ├── IMPLEMENTATION_SUMMARY.md    # Implementation details
@@ -476,9 +494,9 @@ cd TTT
 ```bash
 # Create a new Supabase project at https://supabase.com
 # Run the database schema in SQL editor:
-psql -d your_database < database_schema.sql
+psql -d your_database < database/database_schema.sql
 # Apply performance optimizations:
-psql -d your_database < database_performance_optimization.sql
+psql -d your_database < database/database_performance_optimization.sql
 ```
 
 3. **Backend Setup**
@@ -502,9 +520,9 @@ npm run dev  # Starts on http://localhost:3001
 5. **Database Performance** (Optional)
 ```bash
 # Apply performance optimizations
-psql -d your_database < database_performance_optimization.sql
+psql -d your_database < database/database_performance_optimization.sql
 # Set up Row Level Security
-psql -d your_database < rls_policies_final.sql
+psql -d your_database < database/rls_policies_final.sql
 ```
 
 ### Environment Variables
@@ -598,7 +616,7 @@ NEXT_PUBLIC_WS_URL=ws://localhost:4000/ws
 
 ## 📄 License
 
-This project is licensed under the GNU License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 

@@ -176,17 +176,25 @@ const graph = new StateGraph<State>({ channels: graphState })
     
     const events: WsEvent[] = [];
     
-    // Step 1: Extract destination information to determine if this is actually destination-related
-    const extraction = await destinationExtractionAgent(message, state.messages);
-    console.log(`[destination_search] Extracted destinations:`, extraction);
+    // OPTIMIZATION: Run destination extraction and intent re-classification in parallel
+    // This allows us to be more selective about whether to proceed with destination search
+    const [extraction, reClassifiedIntent] = await Promise.all([
+      destinationExtractionAgent(message, state.messages),
+      intentAgent(message, state.messages) // Re-classify with conversation context
+    ]);
     
-    // Step 2: Determine if this is actually a destination search or should be treated as general chat
+    console.log(`[destination_search] Parallel results - Extracted:`, extraction);
+    console.log(`[destination_search] Re-classified intent:`, reClassifiedIntent);
+    
+    // Step 1: Check if this should actually be handled as general chat
+    // If re-classification suggests CHAT, or if no valid destination is found
     const isActualDestinationSearch = extraction.hasDestination && 
-      (extraction.destination || (extraction.destinations && extraction.destinations.length > 0));
+      (extraction.destination || (extraction.destinations && extraction.destinations.length > 0)) &&
+      reClassifiedIntent !== "CHAT";
     
     if (!isActualDestinationSearch) {
       // This should be treated as general chat - provide immediate response and exit
-      console.log(`[destination_search] No valid destination found, treating as general chat`);
+      console.log(`[destination_search] Routing to chat - hasDestination: ${extraction.hasDestination}, reClassified: ${reClassifiedIntent}`);
       const chatResponse = await chatAgent(message, state.messages);
       events.push({
         type: "chat.append",
@@ -201,27 +209,12 @@ const graph = new StateGraph<State>({ channels: graphState })
       return { events, extractedDestination: extraction };
     }
     
-    // Step 3: This is a valid destination search - proceed with intelligent response
-    console.log(`[destination_search] Valid destination search for: ${extraction.destination || extraction.destinations?.[0]}`);
-    
-    // Check if user is asking for trip planning (even without explicit days)
-    const planningKeywords = ["plan", "trip", "itinerary", "travel", "visit"];
-    const messageContainsPlanningKeywords = planningKeywords.some(keyword => 
-      message.toLowerCase().includes(keyword)
-    );
-    
-    // Check if we have destination and either:
-    // 1. Both destination and days, OR
-    // 2. Destination and planning keywords (user wants trip planning)
-    const shouldTriggerPlanning = extraction.hasDestination && 
-      (extraction.destination || (extraction.destinations && extraction.destinations.length > 0)) &&
-      (extraction.days || messageContainsPlanningKeywords);
-    
-    if (shouldTriggerPlanning) {
-      // This is trip planning - provide immediate acknowledgment and trigger planning
-      console.log(`[destination_search] Triggering itinerary planning - days: ${extraction.days}, planning keywords: ${messageContainsPlanningKeywords}`);
+    // Step 2: Check if this should actually be trip planning instead
+    // If re-classification suggests PLAN_TRIP, handle it as planning
+    if (reClassifiedIntent === "PLAN_TRIP") {
+      console.log(`[destination_search] Re-classified as PLAN_TRIP, routing to planning logic`);
       
-      // PRIORITY: Give immediate acknowledgment for trip planning
+      // Provide immediate acknowledgment
       const quickResponse = await chatAgent(message, state.messages);
       events.push({
         type: "chat.append",
@@ -244,12 +237,12 @@ const graph = new StateGraph<State>({ channels: graphState })
         ...trip,
         destination: extraction.destination || (extraction.destinations ? extraction.destinations[0] : trip.destination),
         destinations: extraction.destinations || (extraction.destination ? [extraction.destination] : trip.destinations),
-        days: extraction.days || trip.days || 3, // Default to 3 days if not specified
+        days: extraction.days || trip.days || 3,
         origin: extraction.origin || trip.origin,
       };
       
       // Use planner agent to generate full itinerary
-      const res = await plannerAgent(planningTrip, message);
+      const res = await plannerAgent(planningTrip, message, state.messages);
       
       if (res) {
         const updatedTrip = { 
@@ -292,9 +285,8 @@ const graph = new StateGraph<State>({ channels: graphState })
         if (res.itinerary.daysPlan.length > 0) {
           events.push(emitItineraryUpdate(res.itinerary));
           
-          // Handle POI search for multiple destinations
           const searchDestination = res.destinations && res.destinations.length > 0 
-            ? res.destinations[0] // Use first destination for POI search
+            ? res.destinations[0]
             : res.destination;
           const poiEvt = await poiAgent({ destination: searchDestination });
           if (poiEvt) {
@@ -314,7 +306,7 @@ const graph = new StateGraph<State>({ channels: graphState })
       }
     }
     
-    // Step 4: This is destination search (not planning) - provide immediate response and then search
+    // Step 3: This is pure destination search - provide information about the destination
     console.log(`[destination_search] Proceeding with destination search for: ${extraction.destination || extraction.destinations?.[0]}`);
     
     // PRIORITY: Generate immediate response for better UX

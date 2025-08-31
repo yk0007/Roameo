@@ -48,7 +48,7 @@ export function TripHeader({ trip }: TripHeaderProps) {
 
           <Button variant="outline" className="gap-2 bg-transparent">
             <span className="w-4 h-4 bg-blue-600 rounded text-white text-xs flex items-center justify-center">14</span>
-            Trip
+            Unplanned Trip
           </Button>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { GoogleMapsClient } from "./maps.js";
+import { env } from "../config/env.js";
 
 interface DestinationImageResult {
   imageUrl?: string;
@@ -20,13 +21,19 @@ export class DestinationImageService {
     try {
       console.log(`[destination-images] Searching for image: ${destination}`);
       
+      // Check if Google Maps API key is available
+      if (!env.GOOGLE_MAPS_API_KEY) {
+        console.warn(`[destination-images] Google Maps API key not configured`);
+        return {};
+      }
+      
       // Use Places API to find the destination
       const searchQuery = `${destination} tourism attractions landmark`;
       const response = await fetch(
         `https://maps.googleapis.com/maps/api/place/textsearch/json?` +
         `query=${encodeURIComponent(searchQuery)}&` +
         `type=tourist_attraction&` +
-        `key=${process.env.GOOGLE_MAPS_API_KEY}`
+        `key=${env.GOOGLE_MAPS_API_KEY}`
       );
 
       if (!response.ok) {
@@ -64,12 +71,11 @@ export class DestinationImageService {
         return {};
       }
 
-      // Generate high-quality image URL using Places API Photo service
-      const imageUrl = `https://maps.googleapis.com/maps/api/place/photo?` +
+      // Generate high-quality image URL using the backend proxy to avoid CORS issues
+      const imageUrl = `http://localhost:4000/api/proxy/photo?` +
         `maxwidth=800&` +
-        `maxheight=600&` +
         `photo_reference=${photo.photo_reference}&` +
-        `key=${process.env.GOOGLE_MAPS_API_KEY}`;
+        `key=${env.GOOGLE_MAPS_API_KEY}`;
 
       console.log(`[destination-images] Found image for ${destination}: ${bestPlace.name}`);
       

@@ -140,7 +140,8 @@ export function buildApiRouter(
               destination: e.data.destination,
               destinations: e.data.destinations,
               days: e.data.days,
-              title: e.data.title
+              title: e.data.title,
+              destinationImageUrl: e.data.destinationImageUrl
             };
             db.patchTrip(sid, tripUpdate);
           }

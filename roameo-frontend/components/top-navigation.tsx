@@ -40,6 +40,7 @@ interface TopNavigationProps {
   onReplan?: () => void
   onPopulateInput?: (text: string) => void
   onSignOut?: () => void
+  showBottomBorder?: boolean // New prop to control gray border
 }
 
 export const TopNavigation = memo(function TopNavigation({
@@ -55,6 +56,7 @@ export const TopNavigation = memo(function TopNavigation({
   onReplan,
   onPopulateInput,
   onSignOut,
+  showBottomBorder = false, // Default to false
 }: TopNavigationProps) {
   const [editingField, setEditingField] = useState<string | null>(null)
   const [tempValues, setTempValues] = useState({
@@ -78,8 +80,14 @@ export const TopNavigation = memo(function TopNavigation({
   const handleLogoClick = useCallback(async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      if (session) router.push("/dashboard")
-      else router.push("/")
+      if (session) {
+        // Set flags to indicate navigation from chat
+        window.history.replaceState({ ...window.history.state, fromChat: true }, '')
+        sessionStorage.setItem('fromChat', 'true')
+        router.push("/dashboard")
+      } else {
+        router.push("/")
+      }
     } catch {
       router.push("/")
     }
@@ -118,7 +126,9 @@ export const TopNavigation = memo(function TopNavigation({
   }, [trip])
 
   return (
-    <div className="flex items-center justify-between px-8 py-3 bg-white border-b border-gray-200 shadow-sm">
+    <div className={`flex items-center justify-between px-8 py-3 bg-white shadow-sm ${
+      showBottomBorder ? 'border-b border-gray-200' : ''
+    }`}>
       {/* Left Section - Logo & Trip Title */}
       <div className="flex items-center gap-6">
         <div className="flex items-center gap-3">

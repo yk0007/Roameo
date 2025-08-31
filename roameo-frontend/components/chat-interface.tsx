@@ -3,7 +3,7 @@
 import React, { type ReactNode, isValidElement, cloneElement } from "react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
-import { Send, Plus, Mic, ArrowDown } from "lucide-react"
+import { Send, Plus, ArrowDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { sendChat } from "@/lib/api"
 import { InlinePlanningStatus } from "./inline-planning-status"
@@ -81,6 +81,15 @@ export function ChatInterface({
   }
 
   const safeMessages = messages || []
+  
+  // Debug logging for ChatInterface messages
+  useEffect(() => {
+    console.log('[chat-interface] Messages prop updated, count:', safeMessages.length)
+    if (safeMessages.length > 0) {
+      const lastMessage = safeMessages[safeMessages.length - 1]
+      console.log('[chat-interface] Last message:', { id: lastMessage.id, role: lastMessage.role, contentLength: lastMessage.content?.length })
+    }
+  }, [safeMessages.length])
   const lastMessage = useMemo(() => {
     return safeMessages.length > 0 ? safeMessages[safeMessages.length - 1] : undefined
   }, [safeMessages])
@@ -125,12 +134,17 @@ export function ChatInterface({
 
   // Update response type based on server-detected intent
   useEffect(() => {
-    if (detectedIntent && isTyping) {
+    if (isTyping) {
       if (detectedIntent === "PLAN_TRIP" || detectedIntent === "DESTINATION_SEARCH") {
+        console.log('[chat-interface] Setting response type to planning for intent:', detectedIntent)
         setResponseType('planning')
       } else {
+        console.log('[chat-interface] Setting response type to general for intent:', detectedIntent)
         setResponseType('general')
       }
+    } else {
+      console.log('[chat-interface] Clearing response type, isTyping:', isTyping)
+      setResponseType(null)
     }
   }, [detectedIntent, isTyping])
 
@@ -588,10 +602,7 @@ return (
                 className="flex-1 border-0 bg-transparent text-sm placeholder:text-gray-500 focus-visible:ring-0 focus-visible:ring-offset-0 px-0 shadow-none"
               />
               <div className="flex items-center gap-2 flex-shrink-0">
-                <Button type="button" variant="ghost" size="sm" className="w-10 h-10 rounded-full hover:bg-white/80">
-                  <Mic className="w-5 h-5" />
-                </Button>
-                <Button type="submit" size="sm" className="w-10 h-10 rounded-full bg-black text-white">
+                <Button type="submit" size="sm" className="w-10 h-10 rounded-full bg-black text-white hover:bg-gray-800">
                   <Send className="w-5 h-5" />
                 </Button>
               </div>

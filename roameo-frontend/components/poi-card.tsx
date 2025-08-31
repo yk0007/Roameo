@@ -32,7 +32,7 @@ export const CompactPoiCard = memo(function CompactPoiCard({ poi, isSaved, isIti
   }, [poi, onReplan])
   return (
     <motion.div 
-      className="bg-white rounded-2xl overflow-hidden shadow-sm border-0"
+      className="bg-white rounded-2xl overflow-hidden shadow-sm"
       whileHover={{
         scale: 1.05,
         y: -8,
@@ -91,11 +91,6 @@ export const CompactPoiCard = memo(function CompactPoiCard({ poi, isSaved, isIti
               <span className="text-sm text-gray-500">(995)</span>
             </div>
           )}
-        </div>
-        
-        <div className="flex items-center gap-2 text-xs text-gray-600 mb-2">
-          <span>🍽️</span>
-          <span>{poi.type}</span>
         </div>
         
         <p className="text-xs text-gray-600 mb-2">Address : {poi.address}</p>

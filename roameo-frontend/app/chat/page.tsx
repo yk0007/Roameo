@@ -49,6 +49,15 @@ export default function ChatPage() {
   })
 
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  
+  // Debug logging for messages state changes
+  useEffect(() => {
+    console.log('[client] Messages state updated, total count:', messages.length)
+    if (messages.length > 0) {
+      const lastMessage = messages[messages.length - 1]
+      console.log('[client] Last message:', { id: lastMessage.id, role: lastMessage.role, contentLength: lastMessage.content?.length })
+    }
+  }, [messages])
   const seenMessageIdsRef = useRef<Set<string>>(new Set())
   const [itinerary, setItinerary] = useState<Itinerary | undefined>(undefined)
   const [searchResults, setSearchResults] = useState<SearchResults | undefined>(undefined)
@@ -56,6 +65,8 @@ export default function ChatPage() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
   const [detectedIntent, setDetectedIntent] = useState<"PLAN_TRIP" | "DESTINATION_SEARCH" | "CHAT" | null>(null)
+  const planningTimeoutRef = useRef<number | null>(null)
+  const planningActiveRef = useRef(false) // Guard to prevent duplicate planning animations
   const [savedPoiIds, setSavedPoiIds] = useState<Set<string>>(new Set())
   const [inputMessage, setInputMessage] = useState<string>("") // Add state for controlling input
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
@@ -182,32 +193,97 @@ export default function ChatPage() {
           if (m.id) seenMessageIdsRef.current.add(m.id)
         })
       } else if (evt.type === "chat.append") {
+        console.log('[client] Received chat.append event:', evt.data)
         // Deduplicate messages by id to avoid duplicates on reconnect/replay
         setMessages((m) => {
           const id = evt.data?.id as string | undefined
+          console.log('[client] Processing message with id:', id, 'role:', evt.data.role)
+          
           if (id) {
-            if (seenMessageIdsRef.current.has(id)) return m
+            if (seenMessageIdsRef.current.has(id)) {
+              console.log('[client] Skipping duplicate message:', id)
+              return m
+            }
             seenMessageIdsRef.current.add(id)
           }
+          
           // Heuristic: suppress immediate server echo of the same user message we just appended locally
           if (evt.data.role === "user" && lastUserSentRef.current) {
             const withinWindow = Date.now() - lastUserSentRef.current.at < 4000
             if (withinWindow && evt.data.content.trim() === lastUserSentRef.current.content.trim()) {
+              console.log('[client] Suppressing user message echo')
               return m
             }
           }
+          
+          console.log('[client] Adding message to state, new total:', m.length + 1)
           return [...m, evt.data]
         })
+        
         if (evt.data.role === "assistant") {
-          setIsTyping(false)
-          setDetectedIntent(null) // Clear intent when assistant responds
+          console.log('[client] Processing assistant message')
+          // Check if this is a planning response first
+          const content = evt.data?.content || ''
+          const isPlanningResponse = content.includes('##') || content.includes('Day ') || content.includes('###') || content.includes('📍') || 
+                                   content.includes('itinerary') || content.includes('Itinerary') || 
+                                   content.includes('Morning') || content.includes('Afternoon') || content.includes('Evening') ||
+                                   content.includes('AM:') || content.includes('PM:') || 
+                                   content.includes('budget') || content.includes('Budget') ||
+                                   content.includes('accommodation') || content.includes('Accommodation')
+          console.log('[client] Assistant response - isPlanningResponse:', isPlanningResponse, 'content length:', content.length)
+          
+          if (isPlanningResponse) {
+            console.log('[client] Planning response detected - keeping typing active, will clear after delay')
+            // For planning responses, clear the planning animation after a delay to ensure visibility
+            // Don't immediately clear isTyping to ensure message visibility
+            setTimeout(() => {
+              console.log('[client] Delayed clearing of planning state for message visibility')
+              planningActiveRef.current = false
+              setIsTyping(false)
+              setDetectedIntent(null)
+              if (planningTimeoutRef.current) {
+                window.clearTimeout(planningTimeoutRef.current)
+                planningTimeoutRef.current = null
+              }
+            }, 1000) // 1 second delay to ensure message is visible
+          } else {
+            console.log('[client] Non-planning response - clearing typing state immediately')
+            setIsTyping(false)
+            planningActiveRef.current = false
+            setDetectedIntent(null)
+            // Clear timeout
+            if (planningTimeoutRef.current) {
+              window.clearTimeout(planningTimeoutRef.current)
+              planningTimeoutRef.current = null
+            }
+          }
         }
       } else if (evt.type === "navbar.update") {
         setTrip((t) => ({ ...t, ...evt.data }))
       } else if (evt.type === "itinerary.update") {
-        // Only clear itinerary if explicitly empty, not on null/undefined
-        if (evt.data !== null && evt.data !== undefined) {
-          setItinerary(evt.data)
+        // When itinerary is received, it means planning is complete
+        console.log('[client] Itinerary received - planning should be complete')
+        const data = evt.data
+        if (data !== null && data !== undefined) {
+          if (data === null) {
+            console.log('[client] Clearing itinerary as requested')
+            setItinerary(undefined)
+          } else if (data && typeof data === 'object' && data.daysPlan) {
+            console.log(`[client] Setting itinerary with ${data.daysPlan.length} days`)
+            setItinerary(data)
+            // Clear planning animation when itinerary is successfully loaded
+            setTimeout(() => {
+              planningActiveRef.current = false
+              setIsTyping(false)
+              setDetectedIntent(null)
+              if (planningTimeoutRef.current) {
+                window.clearTimeout(planningTimeoutRef.current)
+                planningTimeoutRef.current = null
+              }
+            }, 500) // Short delay to ensure smooth transition
+          } else {
+            console.warn('[client] Received invalid itinerary data, ignoring:', data)
+          }
         }
       } else if (evt.type === "search.results") {
         if (evt.data !== null && evt.data !== undefined) {
@@ -221,6 +297,65 @@ export default function ChatPage() {
         // Set detected intent when server classifies user message
         console.log('[client] Intent detected:', evt.data.intent, 'for message:', evt.data.message)
         setDetectedIntent(evt.data.intent)
+        // If planning intent is detected, immediately show planning animation
+        if (evt.data.intent === "PLAN_TRIP" && !planningActiveRef.current) {
+          console.log('[client] Immediately showing planning animation for PLAN_TRIP intent')
+          planningActiveRef.current = true
+          setIsTyping(true)
+          // Clear any existing timeout
+          if (planningTimeoutRef.current) {
+            window.clearTimeout(planningTimeoutRef.current)
+          }
+          // Set a fallback timeout to clear planning status after 30 seconds
+          planningTimeoutRef.current = window.setTimeout(() => {
+            console.log('[client] Planning timeout - clearing status')
+            planningActiveRef.current = false
+            setIsTyping(false)
+            setDetectedIntent(null)
+          }, 30000)
+        } else if (evt.data.intent === "PLAN_TRIP" && planningActiveRef.current) {
+          console.log('[client] Planning already active, skipping duplicate animation')
+        }
+      } else if (evt.type === "planning.status") {
+        // Handle planning status to show proper animation
+        console.log('[client] Planning status:', evt.data.status)
+        
+        // Check if planning is starting or completing based on status message
+        const status = evt.data.status || ''
+        
+        if (status.includes('Creating') || status.includes('Analyzing') || status.includes('Finding') || status.includes('planning') || status.includes('itinerary')) {
+          // Only start planning animation if not already active
+          if (!planningActiveRef.current) {
+            console.log('[client] Starting planning animation from status event')
+            planningActiveRef.current = true
+            setIsTyping(true)
+            setDetectedIntent("PLAN_TRIP")
+            // Clear any existing timeout
+            if (planningTimeoutRef.current) {
+              window.clearTimeout(planningTimeoutRef.current)
+            }
+            // Set a fallback timeout to clear planning status after 30 seconds
+            planningTimeoutRef.current = window.setTimeout(() => {
+              console.log('[client] Planning timeout - clearing status')
+              planningActiveRef.current = false
+              setIsTyping(false)
+              setDetectedIntent(null)
+            }, 30000)
+          } else {
+            console.log('[client] Planning already active, ignoring duplicate status event:', status)
+          }
+        } else if (status.includes('completed') || status.includes('finished') || status.includes('done')) {
+          // Planning is complete
+          console.log('[client] Planning completed via status')
+          planningActiveRef.current = false
+          // Clear timeout
+          if (planningTimeoutRef.current) {
+            window.clearTimeout(planningTimeoutRef.current)
+            planningTimeoutRef.current = null
+          }
+          setIsTyping(false)
+          setDetectedIntent(null)
+        }
       }
     }
 
@@ -291,6 +426,7 @@ export default function ChatPage() {
     const w = connectWithCallbacks()
     return () => {
       if (reconnectTimerRef.current) window.clearTimeout(reconnectTimerRef.current)
+      if (planningTimeoutRef.current) window.clearTimeout(planningTimeoutRef.current)
       if (w && (w.readyState === WebSocket.CONNECTING || w.readyState === WebSocket.OPEN)) {
         manualCloseRef.current = true
         w.close()
@@ -379,7 +515,9 @@ export default function ChatPage() {
         variant: "success" as any
       })
       
-      // Navigate to dashboard immediately
+      // Navigate to dashboard immediately - set flag to disable animations
+      window.history.replaceState({ ...window.history.state, fromChat: true }, '')
+      sessionStorage.setItem('fromChat', 'true')
       router.push("/dashboard")
       
     } catch (e: any) {
@@ -395,6 +533,7 @@ export default function ChatPage() {
   }
 
   const handleSendMessage = async (message: string) => {
+    console.log('[client] Sending message:', message)
     // append locally for immediate UX
     const localId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     setMessages((m) => {
@@ -405,6 +544,7 @@ export default function ChatPage() {
       ]
     })
     lastUserSentRef.current = { content: message, at: Date.now() }
+    console.log('[client] Setting isTyping=true for user message')
     setIsTyping(true)
     const res = await sendChat({ sessionId, inviteId, message })
     if (!sessionId && res.sessionId) {
@@ -417,40 +557,95 @@ export default function ChatPage() {
     if (res.events && Array.isArray(res.events)) {
       res.events.forEach((evt) => {
         if (evt.type === "chat.append") {
+          console.log('[client] Received HTTP chat.append event:', (evt as any).data)
           setMessages((m) => {
             const id = (evt as any).data?.id as string | undefined
+            console.log('[client] Processing HTTP message with id:', id, 'role:', (evt as any).data?.role)
+            
             if (id) {
-              if (seenMessageIdsRef.current.has(id)) return m
+              if (seenMessageIdsRef.current.has(id)) {
+                console.log('[client] Skipping duplicate HTTP message:', id)
+                return m
+              }
               seenMessageIdsRef.current.add(id)
             }
+            
             // Avoid echo of our just-sent user message
             if ((evt as any).data?.role === "user" && lastUserSentRef.current) {
               const withinWindow = Date.now() - lastUserSentRef.current.at < 4000
               if (withinWindow && (evt as any).data?.content?.trim() === lastUserSentRef.current.content.trim()) {
+                console.log('[client] Suppressing HTTP user message echo')
                 return m
               }
             }
+            
+            console.log('[client] Adding HTTP message to state, new total:', m.length + 1)
             return [...m, (evt as any).data]
           })
+          
           if ((evt as any).data?.role === "assistant") {
-            setIsTyping(false)
-            setDetectedIntent(null) // Clear intent when assistant responds
+            console.log('[client] Processing HTTP assistant message')
+            // Check if this is a planning response first
+            const content = (evt as any).data?.content || ''
+            const isPlanningResponse = content.includes('##') || content.includes('Day ') || content.includes('###') || content.includes('📍') || 
+                                     content.includes('itinerary') || content.includes('Itinerary') || 
+                                     content.includes('Morning') || content.includes('Afternoon') || content.includes('Evening') ||
+                                     content.includes('AM:') || content.includes('PM:') || 
+                                     content.includes('budget') || content.includes('Budget') ||
+                                     content.includes('accommodation') || content.includes('Accommodation')
+            console.log('[client] HTTP Assistant response - isPlanningResponse:', isPlanningResponse, 'content length:', content.length)
+            
+            if (isPlanningResponse) {
+              console.log('[client] HTTP Planning response detected - keeping typing active, will clear after delay')
+              // For planning responses, clear the planning animation after a delay to ensure visibility
+              // Don't immediately clear isTyping to ensure message visibility
+              setTimeout(() => {
+                console.log('[client] HTTP Delayed clearing of planning state for message visibility')
+                planningActiveRef.current = false
+                setIsTyping(false)
+                setDetectedIntent(null)
+                if (planningTimeoutRef.current) {
+                  window.clearTimeout(planningTimeoutRef.current)
+                  planningTimeoutRef.current = null
+                }
+              }, 1000) // 1 second delay to ensure message is visible
+            } else {
+              console.log('[client] HTTP Non-planning response - clearing typing state immediately')
+              setIsTyping(false)
+              planningActiveRef.current = false
+              setDetectedIntent(null)
+              // Clear timeout
+              if (planningTimeoutRef.current) {
+                window.clearTimeout(planningTimeoutRef.current)
+                planningTimeoutRef.current = null
+              }
+            }
           }
         } else if (evt.type === "navbar.update") {
           setTrip((t) => ({ ...t, ...(evt as any).data }))
         } else if (evt.type === "itinerary.update") {
           const data = (evt as any).data
-          console.log('[client] Received itinerary update:', data)
+          console.log('[client] Received HTTP itinerary update:', data)
           // Only update if we have valid itinerary data or explicit null to clear
           if (data !== undefined) {
             if (data === null) {
-              console.log('[client] Clearing itinerary as requested')
+              console.log('[client] Clearing HTTP itinerary as requested')
               setItinerary(undefined)
             } else if (data && typeof data === 'object' && data.daysPlan) {
-              console.log(`[client] Setting itinerary with ${data.daysPlan.length} days`)
+              console.log(`[client] Setting HTTP itinerary with ${data.daysPlan.length} days`)
               setItinerary(data)
+              // Clear planning animation when itinerary is successfully loaded
+              setTimeout(() => {
+                planningActiveRef.current = false
+                setIsTyping(false)
+                setDetectedIntent(null)
+                if (planningTimeoutRef.current) {
+                  window.clearTimeout(planningTimeoutRef.current)
+                  planningTimeoutRef.current = null
+                }
+              }, 500) // Short delay to ensure smooth transition
             } else {
-              console.warn('[client] Received invalid itinerary data, ignoring:', data)
+              console.warn('[client] Received invalid HTTP itinerary data, ignoring:', data)
             }
           }
         } else if (evt.type === "search.results") {
@@ -467,6 +662,25 @@ export default function ChatPage() {
           // Set detected intent when server classifies user message via HTTP
           console.log('[client] Intent detected via HTTP:', (evt as any).data.intent, 'for message:', (evt as any).data.message)
           setDetectedIntent((evt as any).data.intent)
+          // If planning intent is detected, immediately show planning animation
+          if ((evt as any).data.intent === "PLAN_TRIP" && !planningActiveRef.current) {
+            console.log('[client] Immediately showing planning animation for PLAN_TRIP intent via HTTP')
+            planningActiveRef.current = true
+            setIsTyping(true)
+            // Clear any existing timeout
+            if (planningTimeoutRef.current) {
+              window.clearTimeout(planningTimeoutRef.current)
+            }
+            // Set a fallback timeout to clear planning status after 30 seconds
+            planningTimeoutRef.current = window.setTimeout(() => {
+              console.log('[client] Planning timeout - clearing status')
+              planningActiveRef.current = false
+              setIsTyping(false)
+              setDetectedIntent(null)
+            }, 30000)
+          } else if ((evt as any).data.intent === "PLAN_TRIP" && planningActiveRef.current) {
+            console.log('[client] Planning already active via HTTP, skipping duplicate animation')
+          }
         }
       })
     }
@@ -569,6 +783,7 @@ export default function ChatPage() {
         onReplan={() => handleReplan()}
         onPopulateInput={handlePopulateInput}
         inviteLink={inviteId ? `${typeof window !== "undefined" ? window.location.origin : ""}/chat?inviteId=${inviteId}` : undefined}
+        showBottomBorder={true}
         onTripUpdate={async (t) => {
           const daysMatch = /\d+/.exec(t.duration || "")
           const travelersMatch = /\d+/.exec(t.travelers || "")

@@ -613,10 +613,10 @@ export function MapView({
         }
       }, 100)
     } else {
-      // Show world map when no content
-      console.log('No content - setting world map view')
-      mapInstance.current.setCenter({ lat: 20, lng: 0 })
-      mapInstance.current.setZoom(2)
+      // Show India map as default when no content
+      console.log('No content - setting India default view')
+      mapInstance.current.setCenter({ lat: 20.5937, lng: 78.9629 })
+      mapInstance.current.setZoom(5)
     }
   }, [filteredPois, mapData?.routes])
 

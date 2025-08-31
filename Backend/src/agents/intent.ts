@@ -33,7 +33,7 @@ export async function intentAgent(message: string, history: Message[] = []): Pro
         - "help me plan a trip to goa"
         - "make an itinerary for mumbai"
 
-    2. **DESTINATION_SEARCH**: The user mentions a destination or multiple destinations and is asking about places, attractions, or information about that destination, but doesn't explicitly ask for trip planning or mention duration.
+    2. **DESTINATION_SEARCH**: The user mentions a destination AND explicitly asks for information about places, attractions, hotels, or restaurants in that destination. Must have BOTH destination mention AND clear information-seeking intent.
         Examples:
         - "show me places in ooty"
         - "what to do in coonoor"
@@ -42,9 +42,14 @@ export async function intentAgent(message: string, history: Message[] = []): Pro
         - "restaurants in goa"
         - "tell me about places to visit in rajasthan"
         - "what are the top attractions in delhi"
-        - "I want to visit kerala" (without duration)
         - "what's good about manali?"
         - "show me goa beaches"
+        
+        NOT DESTINATION_SEARCH (should be CHAT):
+        - "I want to visit kerala" (vague, no specific information request)
+        - "tell me about goa" (too general)
+        - "is manali good?" (opinion question)
+        - "kerala looks nice" (statement, not query)
 
     3. **CHAT**: General conversation, questions about the bot, travel-related knowledge questions without specific destinations, or responses that don't clearly indicate destination search or planning intent.
         Examples:
@@ -62,13 +67,15 @@ export async function intentAgent(message: string, history: Message[] = []): Pro
         - "what do you recommend?"
 
     IMPORTANT RULES:
+    - **BE CONSERVATIVE**: When in doubt between any categories, prefer CHAT
+    - DESTINATION_SEARCH requires BOTH: (1) clear destination mention AND (2) explicit information-seeking language ("show", "what", "find", "tell me about")
+    - Vague statements like "I want to visit X" or "X looks nice" should be CHAT, not DESTINATION_SEARCH
     - Use conversation context to understand references like "there", "that place", "continue planning"
-    - If a destination is mentioned AND there's clear intent to get information about that destination, prefer DESTINATION_SEARCH
     - If there's explicit mention of planning, creating itinerary, or duration, prefer PLAN_TRIP
-    - If the message is vague, conversational, or doesn't mention specific destinations, use CHAT
-    - Be conservative: when in doubt between DESTINATION_SEARCH and CHAT, prefer CHAT
+    - If the message is conversational, opinion-based, or doesn't have clear action intent, use CHAT
     - Use context to resolve ambiguous messages: "plan a trip there" with previous destination context should be PLAN_TRIP
     - "Let's continue" in a planning context should maintain the previous intent
+    - Questions about travel in general (not destination-specific) should be CHAT
 
     User message: "${message}"
 
