@@ -48,11 +48,15 @@ Create a title that captures the travel spirit and destination vibe with the #${
     const raw = await gemini.chat(prompt, "flash");
     const title = (raw || "").trim().replace(/^\s*["'`]|["'`]\s*$/g, "");
 
-    // Basic sanity checks
-    if (!title || title.startsWith("[gemini:")) return fallback;
+    // Basic sanity checks - reject any error responses
+    if (!title || title.startsWith("[gemini:") || title.includes("error") || title.includes("503")) {
+      console.log(`[title] Gemini returned invalid response: ${title}, using fallback`);
+      return fallback;
+    }
     if (title.length > 64) return title.slice(0, 64).trim();
     return title;
-  } catch {
+  } catch (error: any) {
+    console.log(`[title] Title generation failed: ${error?.message || error}, using fallback`);
     return fallback;
   }
 }

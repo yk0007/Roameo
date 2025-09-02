@@ -108,13 +108,23 @@ const graph = new StateGraph<State>({ channels: graphState })
       days: res.days,
       destinationImageUrl: res.destinationImageUrl
     };
-    const title = await generateSessionTitle({
-      message,
-      origin: updatedTrip.origin,
-      destination: res.destination,
-      days: res.days,
-      existingTitle: trip.title,
-    });
+    
+    // Generate title with fallback handling
+    let title: string;
+    try {
+      title = await generateSessionTitle({
+        message,
+        origin: updatedTrip.origin,
+        destination: res.destination,
+        days: res.days,
+        existingTitle: trip.title,
+      });
+    } catch (error: any) {
+      console.log(`[planner] Title generation failed: ${error?.message || error}, using fallback`);
+      // Create fallback title
+      const sessionSuffix = Math.random().toString(36).substring(2, 5).toUpperCase();
+      title = res.destination ? `✨ ${res.destination} Adventure #${sessionSuffix}` : `✨ Dream Trip #${sessionSuffix}`;
+    }
 
     plannerEvents.push(
       {
@@ -253,13 +263,22 @@ const graph = new StateGraph<State>({ channels: graphState })
           destinationImageUrl: res.destinationImageUrl
         };
         
-        const title = await generateSessionTitle({
-          message,
-          origin: updatedTrip.origin,
-          destination: res.destination,
-          days: res.days,
-          existingTitle: trip.title,
-        });
+        // Generate title with fallback handling
+        let title: string;
+        try {
+          title = await generateSessionTitle({
+            message,
+            origin: updatedTrip.origin,
+            destination: res.destination,
+            days: res.days,
+            existingTitle: trip.title,
+          });
+        } catch (error: any) {
+          console.log(`[destination_search] Title generation failed: ${error?.message || error}, using fallback`);
+          // Create fallback title
+          const sessionSuffix = Math.random().toString(36).substring(2, 5).toUpperCase();
+          title = res.destination ? `✨ ${res.destination} Adventure #${sessionSuffix}` : `✨ Dream Trip #${sessionSuffix}`;
+        }
 
         events.push({
           type: "chat.append",

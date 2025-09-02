@@ -146,12 +146,26 @@ Make the itinerary **engaging, structured, and easy to follow** with ample spaci
     // Programmatically remove horizontal rules from the response.
     chatResponse = chatResponse.replace(/^\s*---+\s*$/gm, "");
 
-    if (!chatResponse?.trim() || chatResponse.startsWith("[gemini:")) {
+    // Check for error responses or invalid content
+    if (!chatResponse?.trim() || 
+        chatResponse.startsWith("[gemini:") || 
+        chatResponse.includes("error 503") || 
+        chatResponse.includes("error 500") ||
+        chatResponse.includes("error 429")) {
       console.warn(`[planner] Gemini returned an empty or invalid response: ${chatResponse}. Using fallback.`);
+      
+      // Create a basic fallback response based on available information
+      const fallbackResponse = destination && days 
+        ? `I'd be happy to help you plan your ${days}-day trip to ${destination}! I'm having some technical difficulties generating the detailed itinerary right now, but I can get you started with the basics. Would you like me to try again?`
+        : destination 
+        ? `Great choice! I'd love to help you plan a trip to ${destination}. Could you let me know how many days you'd like to stay so I can create a detailed itinerary for you?`
+        : "I'm having a little trouble generating that itinerary right now. Could you try rephrasing your request?";
+      
       return {
-        chatResponse: "I'm having a little trouble generating that itinerary right now. Could you try rephrasing your request?",
+        chatResponse: fallbackResponse,
         itinerary: { origin, destination: destination || "", days: days || 0, daysPlan: [] },
         destination: destination || "",
+        destinations,
         days: days || 0,
       };
     }
@@ -222,12 +236,34 @@ Make the itinerary **engaging, structured, and easy to follow** with ample spaci
   } catch (e: any) {
     console.warn("[planner] Gemini or Maps failed:", e);
     
+    // Handle API configuration issues
+    if (e.message && e.message.includes("API configuration")) {
+      return {
+        chatResponse: "I'm experiencing some technical difficulties right now. Please try again in a few minutes, or contact support if the issue persists.",
+        itinerary: { origin, destination: destination || "", days: days || 0, daysPlan: [] },
+        destination: destination || "",
+        destinations,
+        days: days || 0,
+      };
+    }
+    
     // Handle specific error types
-    if (e.message && e.message.includes("429")) {
+    if (e.message && (e.message.includes("429") || e.message.includes("rate limit"))) {
       return {
         chatResponse: "It looks like I'm very popular right now! I've hit my request limit. Please try again in a little while.",
         itinerary: { origin, destination: destination || "", days: days || 0, daysPlan: [] },
         destination: destination || "",
+        destinations,
+        days: days || 0,
+      };
+    }
+    
+    if (e.message && (e.message.includes("503") || e.message.includes("500"))) {
+      return {
+        chatResponse: "I'm experiencing some temporary technical difficulties. Let me try to help you plan your trip with a simpler approach. Could you tell me more about what you'd like to do?",
+        itinerary: { origin, destination: destination || "", days: days || 0, daysPlan: [] },
+        destination: destination || "",
+        destinations,
         days: days || 0,
       };
     }
@@ -237,16 +273,22 @@ Make the itinerary **engaging, structured, and easy to follow** with ample spaci
         chatResponse: `I'm taking a bit longer to plan your ${destination || 'trip'}. Let me give you a quick overview while I work on the details!`,
         itinerary: createDummyItinerary({ ..._ctx, destination, days }),
         destination: destination || "",
+        destinations,
         days: days || 0,
       };
     }
     
     // Return fallback itinerary instead of null
     console.log("[planner] Using fallback itinerary due to error:", e.message);
+    const fallbackResponse = destination 
+      ? `I ran into a little trouble creating your detailed ${destination} itinerary, but here's a sample to get you started!`
+      : "I ran into a little trouble, but I'm here to help! Could you tell me which destination you'd like to explore?";
+    
     return {
-      chatResponse: `I ran into a little trouble creating your detailed ${destination || 'itinerary'}, but here's a sample to get you started!`,
+      chatResponse: fallbackResponse,
       itinerary: createDummyItinerary({ ..._ctx, destination, days }),
       destination: destination || "",
+      destinations,
       days: days || 0,
     };
   }

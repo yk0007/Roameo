@@ -117,8 +117,13 @@ export async function chatAgent(message: string, history: Message[]): Promise<st
   try {
     const chatResponse = await gemini.chat(fullPrompt);
     return chatResponse || "Sorry, I'm having trouble thinking right now.";
-  } catch (error) {
+  } catch (error: any) {
     console.error('[chat] Error generating response:', error);
+    
+    if (error.message && error.message.includes("API configuration")) {
+      return "I'm experiencing some technical difficulties right now. Please try again in a few minutes!";
+    }
+    
     return "I'm having a bit of trouble right now. Could you please try again?";
   }
 }

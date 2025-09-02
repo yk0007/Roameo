@@ -256,8 +256,8 @@ export function MapView({
     const mapId = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID
     try {
       mapInstance.current = new window.google.maps.Map(mapRef.current, {
-        center: { lat: 20.5937, lng: 78.9629 }, // Center of India
-        zoom: 5, // Show India view
+        center: { lat: 20, lng: 0 }, // World view center
+        zoom: 2, // Show world view
         styles: customStyle ? CUSTOM_MAP_STYLE : [],
         mapTypeControl: false,
         streetViewControl: false,
@@ -266,6 +266,25 @@ export function MapView({
         ...(mapId ? { mapId } : {}),
       });
       console.log('Google Maps initialized successfully');
+      
+      // Ensure world view is set with multiple attempts
+      const ensureWorldView = () => {
+        if (mapInstance.current) {
+          console.log('Setting initial world view');
+          mapInstance.current.setCenter({ lat: 20, lng: 0 });
+          mapInstance.current.setZoom(2);
+        }
+      };
+      
+      // Set world view immediately
+      ensureWorldView();
+      
+      // Set world view again after map is idle (ensures it takes effect)
+      const idleListener = mapInstance.current.addListener('idle', () => {
+        ensureWorldView();
+        google.maps.event.removeListener(idleListener); // Remove listener after first idle
+      });
+      
       setIsMapLoading(false);
       setMapSearchStatus(null);
     } catch (error) {
@@ -309,9 +328,25 @@ export function MapView({
       // Trigger resize after a small delay to ensure the container is visible
       setTimeout(() => {
         window.google.maps.event.trigger(mapInstance.current, 'resize')
+        
+        // Always ensure world view is shown when map becomes visible and no POIs are present
+        if (filteredPois.length === 0 && (!mapData?.routes || mapData.routes.length === 0)) {
+          console.log('Map became visible with no POIs - setting world view')
+          mapInstance.current.setCenter({ lat: 20, lng: 0 })
+          mapInstance.current.setZoom(2)
+        }
       }, 50)
+      
+      // Additional fallback to ensure world view after longer delay
+      setTimeout(() => {
+        if (mapInstance.current && filteredPois.length === 0 && (!mapData?.routes || mapData.routes.length === 0)) {
+          console.log('Fallback: ensuring world view after extended delay')
+          mapInstance.current.setCenter({ lat: 20, lng: 0 })
+          mapInstance.current.setZoom(2)
+        }
+      }, 200)
     }
-  }, [isVisible])
+  }, [isVisible, filteredPois, mapData?.routes])
 
 
 
@@ -613,12 +648,37 @@ export function MapView({
         }
       }, 100)
     } else {
-      // Show India map as default when no content
-      console.log('No content - setting India default view')
-      mapInstance.current.setCenter({ lat: 20.5937, lng: 78.9629 })
-      mapInstance.current.setZoom(5)
+      // Show world map as default when no content
+      console.log('No content - setting world view')
+      mapInstance.current.setCenter({ lat: 20, lng: 0 })
+      mapInstance.current.setZoom(2)
+      
+      // Additional safety check after a short delay
+      setTimeout(() => {
+        if (mapInstance.current && filteredPois.length === 0) {
+          console.log('Safety check: re-setting world view')
+          mapInstance.current.setCenter({ lat: 20, lng: 0 })
+          mapInstance.current.setZoom(2)
+        }
+      }, 100)
     }
   }, [filteredPois, mapData?.routes])
+
+  // Additional effect to ensure world view on initial load when no data
+  useEffect(() => {
+    if (!mapInstance.current || !window.google?.maps) return
+    
+    // If no POIs and no map data, ensure world view
+    if ((filteredPois.length === 0) && (!mapData || mapData.pois?.length === 0)) {
+      console.log('Initial load with no data - ensuring world view')
+      setTimeout(() => {
+        if (mapInstance.current) {
+          mapInstance.current.setCenter({ lat: 20, lng: 0 })
+          mapInstance.current.setZoom(2)
+        }
+      }, 100)
+    }
+  }, [mapInstance.current, filteredPois.length, mapData])
 
   // Sync polylines with routes
   useEffect(() => {

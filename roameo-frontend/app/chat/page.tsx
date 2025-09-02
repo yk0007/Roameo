@@ -188,21 +188,35 @@ export default function ChatPage() {
         }, 100)
 
       } else if (evt.type === "chat.history") {
-        setMessages(evt.data)
-        evt.data.forEach((m: ChatMessage) => {
-          if (m.id) seenMessageIdsRef.current.add(m.id)
+        // Merge history with any messages already in state to avoid overwriting recent appends
+        setMessages((prev) => {
+          const byId = new Map<string, ChatMessage>()
+          // Seed with existing messages first
+          for (const m of prev) {
+            if (m?.id) byId.set(m.id, m)
+          }
+          // Add any new history messages by id
+          for (const m of evt.data) {
+            if (m?.id && !byId.has(m.id)) byId.set(m.id, m)
+          }
+          const merged = Array.from(byId.values())
+          // Sort by createdAt to keep chronological order if available
+          merged.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''))
+          // Track seen ids for future de-dup
+          merged.forEach((m) => { if (m.id) seenMessageIdsRef.current.add(m.id) })
+          return merged
         })
       } else if (evt.type === "chat.append") {
         console.log('[client] Received chat.append event:', evt.data)
         // Deduplicate messages by id to avoid duplicates on reconnect/replay
-        setMessages((m) => {
+        setMessages((prevMessages) => {
           const id = evt.data?.id as string | undefined
-          console.log('[client] Processing message with id:', id, 'role:', evt.data.role)
+          console.log('[client] Processing message with id:', id, 'role:', evt.data.role, 'content length:', evt.data?.content?.length)
           
           if (id) {
             if (seenMessageIdsRef.current.has(id)) {
               console.log('[client] Skipping duplicate message:', id)
-              return m
+              return prevMessages
             }
             seenMessageIdsRef.current.add(id)
           }
@@ -212,50 +226,37 @@ export default function ChatPage() {
             const withinWindow = Date.now() - lastUserSentRef.current.at < 4000
             if (withinWindow && evt.data.content.trim() === lastUserSentRef.current.content.trim()) {
               console.log('[client] Suppressing user message echo')
-              return m
+              return prevMessages
             }
           }
           
-          console.log('[client] Adding message to state, new total:', m.length + 1)
-          return [...m, evt.data]
+          const newMessages = [...prevMessages, evt.data]
+          console.log('[client] Adding message to state, new total:', newMessages.length)
+          
+          // Force a state update for assistant messages to ensure immediate display
+          if (evt.data.role === "assistant") {
+            console.log('[client] Assistant message received - forcing immediate display')
+          }
+          
+          return newMessages
         })
         
         if (evt.data.role === "assistant") {
           console.log('[client] Processing assistant message')
-          // Check if this is a planning response first
-          const content = evt.data?.content || ''
-          const isPlanningResponse = content.includes('##') || content.includes('Day ') || content.includes('###') || content.includes('📍') || 
-                                   content.includes('itinerary') || content.includes('Itinerary') || 
-                                   content.includes('Morning') || content.includes('Afternoon') || content.includes('Evening') ||
-                                   content.includes('AM:') || content.includes('PM:') || 
-                                   content.includes('budget') || content.includes('Budget') ||
-                                   content.includes('accommodation') || content.includes('Accommodation')
-          console.log('[client] Assistant response - isPlanningResponse:', isPlanningResponse, 'content length:', content.length)
           
-          if (isPlanningResponse) {
-            console.log('[client] Planning response detected - keeping typing active, will clear after delay')
-            // For planning responses, clear the planning animation after a delay to ensure visibility
-            // Don't immediately clear isTyping to ensure message visibility
-            setTimeout(() => {
-              console.log('[client] Delayed clearing of planning state for message visibility')
-              planningActiveRef.current = false
-              setIsTyping(false)
-              setDetectedIntent(null)
-              if (planningTimeoutRef.current) {
-                window.clearTimeout(planningTimeoutRef.current)
-                planningTimeoutRef.current = null
-              }
-            }, 1000) // 1 second delay to ensure message is visible
-          } else {
-            console.log('[client] Non-planning response - clearing typing state immediately')
-            setIsTyping(false)
-            planningActiveRef.current = false
-            setDetectedIntent(null)
-            // Clear timeout
-            if (planningTimeoutRef.current) {
-              window.clearTimeout(planningTimeoutRef.current)
-              planningTimeoutRef.current = null
-            }
+          // Always clear typing immediately so the message appears
+          setIsTyping(false)
+          
+          // Always clear planning states when assistant message arrives
+          // This ensures the response is visible regardless of planning status
+          console.log('[client] Assistant message received - clearing all planning states')
+          planningActiveRef.current = false
+          setDetectedIntent(null)
+          
+          // Clear timeout
+          if (planningTimeoutRef.current) {
+            window.clearTimeout(planningTimeoutRef.current)
+            planningTimeoutRef.current = null
           }
         }
       } else if (evt.type === "navbar.update") {
@@ -280,7 +281,7 @@ export default function ChatPage() {
                 window.clearTimeout(planningTimeoutRef.current)
                 planningTimeoutRef.current = null
               }
-            }, 500) // Short delay to ensure smooth transition
+            }, 300) // Shorter delay for better UX
           } else {
             console.warn('[client] Received invalid itinerary data, ignoring:', data)
           }
@@ -534,6 +535,8 @@ export default function ChatPage() {
 
   const handleSendMessage = async (message: string) => {
     console.log('[client] Sending message:', message)
+    console.log('[client] Current WebSocket state:', wsRef.current?.readyState)
+    
     // append locally for immediate UX
     const localId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     setMessages((m) => {
@@ -546,26 +549,36 @@ export default function ChatPage() {
     lastUserSentRef.current = { content: message, at: Date.now() }
     console.log('[client] Setting isTyping=true for user message')
     setIsTyping(true)
-    const res = await sendChat({ sessionId, inviteId, message })
-    if (!sessionId && res.sessionId) {
-      setSessionId(res.sessionId)
-      const qp = new URLSearchParams(window.location.search)
-      qp.set("sessionId", res.sessionId)
-      router.replace(`?${qp.toString()}`)
-    }
+    
+    try {
+      const res = await sendChat({ sessionId, inviteId, message })
+      if (!sessionId && res.sessionId) {
+        setSessionId(res.sessionId)
+        const qp = new URLSearchParams(window.location.search)
+        qp.set("sessionId", res.sessionId)
+        router.replace(`?${qp.toString()}`)
+      }
     // Apply any events returned by HTTP immediately (mirror WS handler)
+    // Only process HTTP events if WebSocket is not connected or ready to avoid race conditions
     if (res.events && Array.isArray(res.events)) {
-      res.events.forEach((evt) => {
+      const wsConnected = wsRef.current?.readyState === WebSocket.OPEN
+      console.log('[client] Processing HTTP events:', res.events.length, 'events, WebSocket connected:', wsConnected)
+      
+      res.events.forEach((evt, index) => {
+        console.log(`[client] Processing HTTP event ${index + 1}:`, evt.type)
+        // Process all events regardless of WebSocket state to ensure reliability
+        // WebSocket deduplication will handle any duplicates by message ID
+        
         if (evt.type === "chat.append") {
           console.log('[client] Received HTTP chat.append event:', (evt as any).data)
-          setMessages((m) => {
+          setMessages((prevMessages) => {
             const id = (evt as any).data?.id as string | undefined
-            console.log('[client] Processing HTTP message with id:', id, 'role:', (evt as any).data?.role)
+            console.log('[client] Processing HTTP message with id:', id, 'role:', (evt as any).data?.role, 'content length:', (evt as any).data?.content?.length)
             
             if (id) {
               if (seenMessageIdsRef.current.has(id)) {
                 console.log('[client] Skipping duplicate HTTP message:', id)
-                return m
+                return prevMessages
               }
               seenMessageIdsRef.current.add(id)
             }
@@ -575,50 +588,43 @@ export default function ChatPage() {
               const withinWindow = Date.now() - lastUserSentRef.current.at < 4000
               if (withinWindow && (evt as any).data?.content?.trim() === lastUserSentRef.current.content.trim()) {
                 console.log('[client] Suppressing HTTP user message echo')
-                return m
+                return prevMessages
               }
             }
             
-            console.log('[client] Adding HTTP message to state, new total:', m.length + 1)
-            return [...m, (evt as any).data]
+            const newMessages = [...prevMessages, (evt as any).data]
+            console.log('[client] Adding HTTP message to state, new total:', newMessages.length)
+            console.log('[client] HTTP message content preview:', (evt as any).data?.content?.substring(0, 100) + '...')
+            
+            // Force immediate display for assistant messages
+            if ((evt as any).data?.role === "assistant") {
+              console.log('[client] HTTP Assistant message received - forcing immediate display')
+              console.log('[client] Full assistant message content:', (evt as any).data?.content)
+              // Use a micro-task to ensure state update is processed
+              setTimeout(() => {
+                console.log('[client] HTTP Assistant message state update completed')
+              }, 0)
+            }
+            
+            return newMessages
           })
           
           if ((evt as any).data?.role === "assistant") {
             console.log('[client] Processing HTTP assistant message')
-            // Check if this is a planning response first
-            const content = (evt as any).data?.content || ''
-            const isPlanningResponse = content.includes('##') || content.includes('Day ') || content.includes('###') || content.includes('📍') || 
-                                     content.includes('itinerary') || content.includes('Itinerary') || 
-                                     content.includes('Morning') || content.includes('Afternoon') || content.includes('Evening') ||
-                                     content.includes('AM:') || content.includes('PM:') || 
-                                     content.includes('budget') || content.includes('Budget') ||
-                                     content.includes('accommodation') || content.includes('Accommodation')
-            console.log('[client] HTTP Assistant response - isPlanningResponse:', isPlanningResponse, 'content length:', content.length)
             
-            if (isPlanningResponse) {
-              console.log('[client] HTTP Planning response detected - keeping typing active, will clear after delay')
-              // For planning responses, clear the planning animation after a delay to ensure visibility
-              // Don't immediately clear isTyping to ensure message visibility
-              setTimeout(() => {
-                console.log('[client] HTTP Delayed clearing of planning state for message visibility')
-                planningActiveRef.current = false
-                setIsTyping(false)
-                setDetectedIntent(null)
-                if (planningTimeoutRef.current) {
-                  window.clearTimeout(planningTimeoutRef.current)
-                  planningTimeoutRef.current = null
-                }
-              }, 1000) // 1 second delay to ensure message is visible
-            } else {
-              console.log('[client] HTTP Non-planning response - clearing typing state immediately')
-              setIsTyping(false)
-              planningActiveRef.current = false
-              setDetectedIntent(null)
-              // Clear timeout
-              if (planningTimeoutRef.current) {
-                window.clearTimeout(planningTimeoutRef.current)
-                planningTimeoutRef.current = null
-              }
+            // Always clear typing immediately so the message appears
+            setIsTyping(false)
+            
+            // Always clear planning states when assistant message arrives
+            // This ensures the response is visible regardless of planning status
+            console.log('[client] HTTP Assistant message received - clearing all planning states')
+            planningActiveRef.current = false
+            setDetectedIntent(null)
+            
+            // Clear timeout
+            if (planningTimeoutRef.current) {
+              window.clearTimeout(planningTimeoutRef.current)
+              planningTimeoutRef.current = null
             }
           }
         } else if (evt.type === "navbar.update") {
@@ -643,7 +649,7 @@ export default function ChatPage() {
                   window.clearTimeout(planningTimeoutRef.current)
                   planningTimeoutRef.current = null
                 }
-              }, 500) // Short delay to ensure smooth transition
+              }, 300) // Shorter delay for better UX
             } else {
               console.warn('[client] Received invalid HTTP itinerary data, ignoring:', data)
             }
@@ -682,6 +688,23 @@ export default function ChatPage() {
             console.log('[client] Planning already active via HTTP, skipping duplicate animation')
           }
         }
+      })
+    }
+    } catch (error) {
+      console.error('[client] Error sending message:', error)
+      // If HTTP fails, ensure we still clear the typing indicator
+      setIsTyping(false)
+      planningActiveRef.current = false
+      setDetectedIntent(null)
+      if (planningTimeoutRef.current) {
+        window.clearTimeout(planningTimeoutRef.current)
+        planningTimeoutRef.current = null
+      }
+      
+      toast({
+        title: "Failed to send message",
+        description: "Please check your connection and try again.",
+        variant: "destructive"
       })
     }
   }

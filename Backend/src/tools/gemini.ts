@@ -64,15 +64,22 @@ export class GeminiClient {
       if (!res.ok) {
         const text = await res.text();
         lastError = `[${modelId}] error ${res.status}: ${text.slice(0, 200)}`;
+        console.log(`[gemini] API error: ${lastError}`);
         
-        // Retry on 500 errors
-        if (res.status === 500 && attempt < maxRetries) {
-          console.log(`[gemini] Attempt ${attempt}/${maxRetries} failed with 500 error, retrying in ${attempt * 1000}ms...`);
+        // For user-facing errors, don't expose raw API errors
+        if (res.status === 400 && text.includes("API key expired")) {
+          throw new Error("API configuration issue");
+        }
+        
+        // Retry on 5xx server errors
+        if ((res.status >= 500 && res.status < 600) && attempt < maxRetries) {
+          console.log(`[gemini] Attempt ${attempt}/${maxRetries} failed with ${res.status} error, retrying in ${attempt * 1000}ms...`);
           await new Promise(resolve => setTimeout(resolve, attempt * 1000));
           continue;
         }
         
-        return lastError;
+        // For non-retriable errors, throw a generic error
+        throw new Error(`API request failed with status ${res.status}`);
       }
       
       const data: any = await res.json();

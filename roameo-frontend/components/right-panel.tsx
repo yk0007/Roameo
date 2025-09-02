@@ -97,18 +97,16 @@ export function RightPanel({
       {/* Content */}
       <div className="flex-1 overflow-hidden h-full">
         <div className={`h-full ${activeView === "map" ? "block" : "hidden"}`}>
-          {mapData && (
-            <MapView
-              mapData={mapData}
-              savedIds={savedIds}
-              itinerary={itinerary}
-              itineraryPoiIds={itineraryPoiIds}
-              onToggleSave={onToggleSave}
-              onAddPoi={onAddPoi}
-              onReplan={onReplan}
-              isVisible={activeView === "map"}
-            />
-          )}
+          <MapView
+            mapData={mapData || { pois: [], routes: [] }}
+            savedIds={savedIds}
+            itinerary={itinerary}
+            itineraryPoiIds={itineraryPoiIds}
+            onToggleSave={onToggleSave}
+            onAddPoi={onAddPoi}
+            onReplan={onReplan}
+            isVisible={activeView === "map"}
+          />
         </div>
 
         {activeView === "itinerary" && (

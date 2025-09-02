@@ -4,22 +4,23 @@ import type { Message } from "../db/types.js";
 export type Intent = "PLAN_TRIP" | "DESTINATION_SEARCH" | "CHAT";
 
 export async function intentAgent(message: string, history: Message[] = []): Promise<Intent> {
-  const gemini = new GeminiClient({ model: "flash" });
-  
-  // Extract conversation context for better intent classification
-  const conversationContext = extractIntentContext(history);
-  
-  // Build context-aware prompt
-  let contextPrompt = "";
-  if (conversationContext.previousDestinations.length > 0) {
-    contextPrompt = `\n\nCONVERSATION CONTEXT: User has previously discussed these destinations: ${conversationContext.previousDestinations.join(', ')}. This helps understand references to "there", "that place", or continuing conversations about planning.`;
-  }
-  if (conversationContext.planningInProgress) {
-    contextPrompt += `\nUser appears to be in the middle of trip planning. References to "continue", "also", "next" may indicate continued planning intent.`;
-  }
-  if (conversationContext.recentIntents.length > 0) {
-    contextPrompt += `\nRecent conversation intents: ${conversationContext.recentIntents.join(', ')}.`;
-  }
+  try {
+    const gemini = new GeminiClient({ model: "flash" });
+    
+    // Extract conversation context for better intent classification
+    const conversationContext = extractIntentContext(history);
+    
+    // Build context-aware prompt
+    let contextPrompt = "";
+    if (conversationContext.previousDestinations.length > 0) {
+      contextPrompt = `\n\nCONVERSATION CONTEXT: User has previously discussed these destinations: ${conversationContext.previousDestinations.join(', ')}. This helps understand references to "there", "that place", or continuing conversations about planning.`;
+    }
+    if (conversationContext.planningInProgress) {
+      contextPrompt += `\nUser appears to be in the middle of trip planning. References to "continue", "also", "next" may indicate continued planning intent.`;
+    }
+    if (conversationContext.recentIntents.length > 0) {
+      contextPrompt += `\nRecent conversation intents: ${conversationContext.recentIntents.join(', ')}.`;
+    }
   const prompt = `
     You are an intent detection agent for a travel planning chatbot with conversation memory.
     Your goal is to classify the user's message into one of three categories:${contextPrompt}
@@ -90,6 +91,37 @@ export async function intentAgent(message: string, history: Message[] = []): Pro
     return intent;
   }
   return "CHAT";
+} catch (error: any) {
+  console.warn("[intent] Gemini failed, using heuristic fallback:", error.message);
+  
+  // Fallback: Use simple heuristic pattern matching when Gemini is unavailable
+  const lowerMessage = message.toLowerCase();
+  
+  // Check for strong planning keywords
+  const planningKeywords = ["plan", "planning", "create itinerary", "make itinerary", "trip plan"];
+  const hasPlanningKeyword = planningKeywords.some(keyword => lowerMessage.includes(keyword));
+  
+  // Check for destination + planning pattern  
+  const hasDestination = /\b(to|visit|visiting|in)\s+[a-zA-Z]{2,}/i.test(message);
+  
+  // Strong indicators for PLAN_TRIP
+  if (hasPlanningKeyword && hasDestination) {
+    console.log(`[intent] Heuristic classified as PLAN_TRIP: planning=${hasPlanningKeyword}, destination=${hasDestination}`);
+    return "PLAN_TRIP";
+  }
+  
+  // Check for destination search patterns
+  const searchKeywords = ["show me", "what to do", "places in", "attractions", "restaurants", "hotels", "find"];
+  const hasSearchKeyword = searchKeywords.some(keyword => lowerMessage.includes(keyword));
+  
+  if (hasSearchKeyword && hasDestination) {
+    console.log(`[intent] Heuristic classified as DESTINATION_SEARCH: search=${hasSearchKeyword}, destination=${hasDestination}`);
+    return "DESTINATION_SEARCH";
+  }
+  
+  console.log(`[intent] Heuristic fallback to CHAT`);
+  return "CHAT";
+}
 }
 
 /**
