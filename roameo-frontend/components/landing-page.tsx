@@ -80,8 +80,9 @@ export function LandingPage() {
 
       {/* Main content - Hidden on mobile */}
       <div className="hidden md:block">
-      {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 px-6 py-4 flex items-center justify-between bg-white/80 backdrop-blur-md border-b border-white/30 shadow-lg">
+      {/* Floating Header */}
+      <header className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-7xl mx-auto px-4">
+        <div className="bg-white/70 backdrop-blur-md backdrop-saturate-150 border border-white/20 rounded-2xl shadow-2xl shadow-black/5 hover:shadow-black/10 transition-all duration-200 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-black rounded-full flex items-center justify-center">
             <div className="w-2 h-2 bg-white rounded-full"></div>
@@ -107,6 +108,7 @@ export function LandingPage() {
           >
             Get started
           </Button>
+        </div>
         </div>
       </header>
 

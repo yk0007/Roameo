@@ -19,6 +19,7 @@ export interface ChatMessage {
   role: "user" | "assistant" | "system" | "tool"
   content: string
   createdAt: string // ISO
+  fromDashboard?: boolean
 }
 
 export interface POI {

@@ -245,14 +245,14 @@ export function MapView({
 
   // Initialize the map once Google Maps is ready
   useEffect(() => {
-    console.log('Map initialization effect:', { gmapsReady, hasMapRef: !!mapRef.current, hasMapInstance: !!mapInstance.current });
+    
     if (!gmapsReady || !mapRef.current || mapInstance.current) return
     if (!window.google?.maps?.Map) {
-      console.error('Google Maps API not available');
+      
       return;
     }
 
-    console.log('Initializing Google Maps...');
+    
     const mapId = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID
     try {
       mapInstance.current = new window.google.maps.Map(mapRef.current, {
@@ -265,12 +265,12 @@ export function MapView({
         backgroundColor: '#f5f5f5',
         ...(mapId ? { mapId } : {}),
       });
-      console.log('Google Maps initialized successfully');
+      
       
       // Ensure world view is set with multiple attempts
       const ensureWorldView = () => {
         if (mapInstance.current) {
-          console.log('Setting initial world view');
+          
           mapInstance.current.setCenter({ lat: 20, lng: 0 });
           mapInstance.current.setZoom(2);
         }
@@ -288,7 +288,7 @@ export function MapView({
       setIsMapLoading(false);
       setMapSearchStatus(null);
     } catch (error) {
-      console.error('Failed to initialize Google Maps:', error);
+      
       setApiKeyError(true);
       setIsMapLoading(false);
       return;
@@ -624,7 +624,7 @@ export function MapView({
       }
     })
 
-    console.log('Auto-zoom effect:', { hasContent, markersCount: markersRef.current.length, polylinesCount: polylinesRef.current.length });
+    
 
     if (hasContent) {
       console.log('Fitting bounds to content - showing POIs/routes')

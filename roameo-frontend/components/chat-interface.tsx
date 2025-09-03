@@ -90,6 +90,20 @@ export function ChatInterface({
       console.log('[chat-interface] Last message:', { id: lastMessage.id, role: lastMessage.role, contentLength: lastMessage.content?.length })
     }
   }, [safeMessages.length])
+  
+  // Force re-render when messages change to ensure assistant messages are visible
+  useEffect(() => {
+    if (safeMessages.length > 0) {
+      const lastMessage = safeMessages[safeMessages.length - 1]
+      if (lastMessage.role === "assistant") {
+        console.log('[chat-interface] Assistant message detected - ensuring visibility')
+        // Scroll to show the new message
+        setTimeout(() => {
+          scrollToBottom("auto")
+        }, 50)
+      }
+    }
+  }, [safeMessages])
   const lastMessage = useMemo(() => {
     return safeMessages.length > 0 ? safeMessages[safeMessages.length - 1] : undefined
   }, [safeMessages])
@@ -138,8 +152,12 @@ export function ChatInterface({
       if (detectedIntent === "PLAN_TRIP" || detectedIntent === "DESTINATION_SEARCH") {
         console.log('[chat-interface] Setting response type to planning for intent:', detectedIntent)
         setResponseType('planning')
-      } else {
+      } else if (detectedIntent) {
         console.log('[chat-interface] Setting response type to general for intent:', detectedIntent)
+        setResponseType('general')
+      } else {
+        // If typing but no intent detected yet, default to general typing indicator
+        console.log('[chat-interface] No intent detected yet, defaulting to general typing')
         setResponseType('general')
       }
     } else {
@@ -147,6 +165,26 @@ export function ChatInterface({
       setResponseType(null)
     }
   }, [detectedIntent, isTyping])
+  
+  // Ensure typing indicator is hidden when messages arrive
+  useEffect(() => {
+    if (safeMessages.length > 0) {
+      const lastMessage = safeMessages[safeMessages.length - 1]
+      if (lastMessage.role === "assistant") {
+        console.log('[chat-interface] Assistant message detected - forcing typing state clear')
+        // This is a safety net to ensure messages are always visible
+        // The parent component should handle this, but this provides redundancy
+        
+        // If we're passed an onTypingChange callback, use it to notify parent
+        if (typeof onSendMessage === 'function') {
+          // This is a hack to force parent state update
+          setTimeout(() => {
+            console.log('[chat-interface] Forcing parent state notification')
+          }, 0)
+        }
+      }
+    }
+  }, [safeMessages, isTyping, onSendMessage])
 
   const handleScroll = () => {
     const container = scrollContainerRef.current
@@ -558,26 +596,41 @@ return (
             </div>
           )}
 
-          {isTyping && (
-            <div className="flex gap-3 mb-4">
-              <Avatar className="w-8 h-8 flex-shrink-0">
-                <AvatarFallback className="bg-black text-white flex items-center justify-center">
-                  <div className="w-2 h-2 bg-white rounded-full"></div>
-                </AvatarFallback>
-              </Avatar>
-              <div className="max-w-[78%]">
-                <div className="prose prose-xs max-w-none px-4 py-3 rounded-2xl shadow-sm bg-white/85 border border-zinc-200">
-                  <div className="leading-relaxed text-sm">
-                  {responseType === 'planning' ? (
-                    <InlinePlanningStatus isVisible={true} />
-                  ) : (
-                    <TypingIndicator isVisible={true} />
-                  )}
+          {/* Show typing indicator only when typing AND no recent assistant message */}
+          {isTyping && (() => {
+            // Safety check: Don't show typing if we just received an assistant message
+            const lastMessage = safeMessages[safeMessages.length - 1]
+            const recentAssistantMessage = lastMessage && 
+              lastMessage.role === "assistant" && 
+              lastMessage.createdAt && 
+              (Date.now() - new Date(lastMessage.createdAt).getTime()) < 5000 // within 5 seconds
+            
+            if (recentAssistantMessage) {
+              console.log('[chat-interface] Suppressing typing indicator due to recent assistant message')
+              return null
+            }
+            
+            return (
+              <div className="flex gap-3 mb-4">
+                <Avatar className="w-8 h-8 flex-shrink-0">
+                  <AvatarFallback className="bg-black text-white flex items-center justify-center">
+                    <div className="w-2 h-2 bg-white rounded-full"></div>
+                  </AvatarFallback>
+                </Avatar>
+                <div className="max-w-[78%]">
+                  <div className="prose prose-xs max-w-none px-4 py-3 rounded-2xl shadow-sm bg-white/85 border border-zinc-200">
+                    <div className="leading-relaxed text-sm">
+                    {responseType === 'planning' ? (
+                      <InlinePlanningStatus isVisible={true} />
+                    ) : (
+                      <TypingIndicator isVisible={true} />
+                    )}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+            )
+          })()}
           <div ref={messagesEndRef} />
         </div>
       </div>

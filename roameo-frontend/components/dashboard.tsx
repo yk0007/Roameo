@@ -141,30 +141,24 @@ export function Dashboard() {
           <div className={`space-y-4 transition-all duration-1000 transform ${
             heroVisible ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'
           }`}>
-            <p className="text-sm text-muted-foreground font-medium tracking-wide uppercase animate-pulse">I'm</p>
-            <h1 className="text-6xl md:text-7xl font-bold text-foreground tracking-tight bg-gradient-to-r from-blue-600 via-purple-600 to-blue-800 bg-clip-text text-transparent animate-gradient-x">
+            <p className="text-sm text-muted-foreground font-medium tracking-wide uppercase">I'm</p>
+            <h1 className="text-6xl md:text-7xl font-bold text-foreground tracking-tight bg-gradient-to-r from-blue-600 via-purple-600 to-blue-800 bg-clip-text text-transparent">
               Roameo
             </h1>
             <div className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto leading-relaxed min-h-[3rem] flex items-center justify-center">
-              <span className="border-r-2 border-primary animate-pulse pr-1">{typingText}</span>
+              <span className="border-r-2 border-primary pr-1">{typingText}</span>
             </div>
           </div>
 
-          {/* Decorative elements with animations */}
-          <div className={`absolute top-20 left-10 text-primary/20 transition-all duration-1000 delay-500 transform ${
-            heroVisible ? 'translate-y-0 opacity-100 rotate-45' : 'translate-y-10 opacity-0 rotate-0'
-          }`}>
-            <Plane className="w-8 h-8 hover:scale-125 transition-transform duration-300" />
+          {/* Decorative elements static */}
+          <div className="absolute top-20 left-10 text-primary/20">
+            <Plane className="w-8 h-8" />
           </div>
-          <div className={`absolute top-32 right-16 text-secondary/20 transition-all duration-1000 delay-700 transform ${
-            heroVisible ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'
-          }`}>
-            <Camera className="w-6 h-6 hover:scale-125 transition-transform duration-300 animate-bounce" />
+          <div className="absolute top-32 right-16 text-secondary/20">
+            <Camera className="w-6 h-6" />
           </div>
-          <div className={`absolute bottom-20 left-20 text-primary/20 transition-all duration-1000 delay-1000 transform ${
-            heroVisible ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'
-          }`}>
-            <Mountain className="w-10 h-10 hover:scale-125 transition-transform duration-300" />
+          <div className="absolute bottom-20 left-20 text-primary/20">
+            <Mountain className="w-10 h-10" />
           </div>
         </div>
       </div>

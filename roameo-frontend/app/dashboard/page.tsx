@@ -249,30 +249,29 @@ export default function Dashboard() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 via-white to-indigo-50">
         <div className="text-center">
-          {/* Roameo Logo Animation */}
+          {/* Roameo Logo Static */}
           <div className="mb-8 relative">
-            <div className="w-20 h-20 bg-black rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
-              <div className="w-8 h-8 bg-white rounded-full animate-ping"></div>
+            <div className="w-20 h-20 bg-black rounded-full flex items-center justify-center mx-auto mb-4">
+              <div className="w-8 h-8 bg-white rounded-full"></div>
             </div>
-            <div className="absolute inset-0 w-20 h-20 bg-black rounded-full mx-auto opacity-20 animate-ping"></div>
           </div>
           
           {/* Roameo Text */}
-          <h2 className="text-3xl font-bold text-gray-900 mb-2 animate-fade-in">
+          <h2 className="text-3xl font-bold text-gray-900 mb-2">
             roameo
           </h2>
-          <p className="text-gray-600 mb-6 animate-fade-in-delay">
+          <p className="text-gray-600 mb-6">
             Your Intelligent Travel CoPilot
           </p>
           
-          {/* Loading Animation */}
+          {/* Loading Indicator (Static) */}
           <div className="flex justify-center items-center space-x-2 mb-4">
-            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
           </div>
           
-          <p className="text-gray-500 text-sm animate-pulse">Loading your personalized travel dashboard...</p>
+          <p className="text-gray-500 text-sm">Loading your personalized travel dashboard...</p>
         </div>
         
         <style jsx>{`
@@ -297,8 +296,7 @@ export default function Dashboard() {
       <header className="bg-white px-20 py-10 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-black rounded-full flex items-center justify-center relative overflow-hidden">
-            <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-20 animate-sweep"></div>
+            <div className="w-2 h-2 bg-white rounded-full"></div>
           </div>
           <span className="text-xl font-bold text-gray-900 tracking-tight">roameo</span>
         </div>
@@ -621,7 +619,7 @@ export default function Dashboard() {
                           alt={trip.destination || trip.title || 'Trip destination'}
                           className="w-full h-full object-cover"
                           onError={() => {
-                            console.log(`Failed to load destination image for ${trip.destination}`);
+                            
                           }}
                         />
                       ) : (
