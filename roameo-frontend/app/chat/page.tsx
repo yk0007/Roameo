@@ -624,7 +624,9 @@ export default function ChatPage() {
                 router.replace(`?${qp.toString()}`)
               }
             })
-            .catch(err => 
+            .catch(err => {
+              // Handle error if needed
+            });
             
           // Set typing indicator
           setIsTyping(true);
