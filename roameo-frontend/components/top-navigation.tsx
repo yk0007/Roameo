@@ -71,10 +71,14 @@ export const TopNavigation = memo(function TopNavigation({
   const router = useRouter()
 
   const handleSignOut = useCallback(async () => {
-    // Navigate immediately for instant UX
-    window.location.href = "/auth/login"
-    // Sign out in background
-    await supabase.auth.signOut()
+    try {
+      await supabase.auth.signOut()
+    } catch (e) {
+      // ignore and force navigation anyway
+    } finally {
+      // Hard navigation to prevent flicker/intermediate renders
+      window.location.replace("/auth/login")
+    }
   }, [])
 
   const handleLogoClick = useCallback(async () => {

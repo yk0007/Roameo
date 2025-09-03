@@ -47,11 +47,15 @@ export function LandingPage() {
   }
 
   const handleSignOut = async () => {
-    // Navigate immediately for instant UX
-    router.push("/auth/login")
-    // Sign out in background
-    await supabase.auth.signOut()
-    setUser(null)
+    try {
+      await supabase.auth.signOut()
+    } catch (e) {
+      // ignore errors and continue navigation
+    } finally {
+      setUser(null)
+      // Hard navigation prevents intermediate renders/flicker
+      window.location.replace("/auth/login")
+    }
   }
 
   return (

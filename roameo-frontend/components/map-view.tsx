@@ -420,13 +420,17 @@ export function MapView({
         disableAutoPan: true,
       })
 
-      const showInfoWindow = (e: google.maps.MapMouseEvent, isPersistent = false) => {
+      const showInfoWindow = (e: google.maps.MapMouseEvent | null, isPersistent = false) => {
         if (!mapInstance.current || !overlayRef.current) return
 
         const projection = overlayRef.current.getProjection()
-        if (!projection || !e.latLng) return
+        if (!projection) return
 
-        const pixel = projection.fromLatLngToContainerPixel(e.latLng)
+        // Fallback to marker position if event latLng is unavailable
+        const eventLatLng = e?.latLng || marker.getPosition?.()
+        if (!eventLatLng) return
+
+        const pixel = projection.fromLatLngToContainerPixel(eventLatLng)
         const mapDiv = mapInstance.current.getDiv()
         const mapWidth = mapDiv.clientWidth
         const mapHeight = mapDiv.clientHeight

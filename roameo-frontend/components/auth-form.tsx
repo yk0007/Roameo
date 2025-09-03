@@ -128,7 +128,7 @@ export default function AuthForm() {
                     type="text"
                     placeholder="johndoe"
                     required
-                    className="border-gray-300 focus:border-gray-500 focus:ring-gray-500 rounded-lg placeholder:text-gray-400"
+                    className="border-gray-300 focus:border-gray-500 focus:ring-gray-500 rounded-lg"
                   />
                 </div>
               </>

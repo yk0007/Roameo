@@ -407,7 +407,20 @@ export default function Profile() {
               </CardContent>
             </Card>
 
-
+            <Card className="bg-white/60 backdrop-blur-sm border-0 shadow-xl rounded-3xl">
+              <CardHeader>
+                <CardTitle className="text-gray-900">Travel Preferences</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-gray-600 mb-4">Set your travel preferences to get better recommendations</p>
+                <Button
+                  variant="outline"
+                  className="w-full border-0 text-gray-700 hover:bg-white/60 bg-neutral-200 shadow-md hover:shadow-lg transition-shadow rounded-xl"
+                >
+                  Update Preferences
+                </Button>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>

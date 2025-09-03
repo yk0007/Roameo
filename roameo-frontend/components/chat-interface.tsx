@@ -27,6 +27,7 @@ interface ChatInterfaceProps {
   pois?: POI[]
   isTyping?: boolean
   detectedIntent?: "PLAN_TRIP" | "DESTINATION_SEARCH" | "CHAT" | null
+  planningActive?: boolean
   savedIds?: Set<string>
   onToggleSave?: (poi: POI, nextSaved: boolean) => void
   onAddPoi?: (poi: POI) => void
@@ -49,6 +50,7 @@ export function ChatInterface({
   pois,
   isTyping,
   detectedIntent,
+  planningActive,
   savedIds,
   onToggleSave,
   onAddPoi,
@@ -59,6 +61,9 @@ export function ChatInterface({
 }: ChatInterfaceProps) {
   const [inputValue, setInputValue] = useState(externalInputValue || "")
   const [showSuggestion, setShowSuggestion] = useState(false)
+  const [lastSuggestionAt, setLastSuggestionAt] = useState<number>(0)
+  const SUGGESTION_COOLDOWN_MS = 60_000 // do not show more than once per minute
+  const SUGGESTION_PROBABILITY = 0.65 // ~65% of eligible assistant turns
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
   const [userJustSent, setUserJustSent] = useState(false)
   const [responseType, setResponseType] = useState<'general' | 'planning' | null>(null)
@@ -124,11 +129,15 @@ export function ChatInterface({
     const isNewAssistantTurn = lastAssistantIdRef.current !== lastAssistant.id
     if (isNewAssistantTurn) {
       lastAssistantIdRef.current = lastAssistant.id
-      const shouldShow = (lastAssistant.content?.length || 0) > 80 && safeMessages.length >= 3
+      const longEnough = (lastAssistant.content?.length || 0) > 80 && safeMessages.length >= 3
+      const cooldownOk = Date.now() - lastSuggestionAt > SUGGESTION_COOLDOWN_MS
+      const chance = Math.random() < SUGGESTION_PROBABILITY
+      const shouldShow = longEnough && cooldownOk && chance
       setShowSuggestion(shouldShow)
+      if (shouldShow) setLastSuggestionAt(Date.now())
       setUserJustSent(false) // Reset after assistant responds
     }
-  }, [lastAssistant, safeMessages.length, activeView, userJustSent])
+  }, [lastAssistant, safeMessages.length, activeView, userJustSent, lastSuggestionAt])
 
   const scrollToBottom = (behavior: "smooth" | "auto" = "smooth") => {
     messagesEndRef.current?.scrollIntoView({ behavior })
@@ -149,7 +158,7 @@ export function ChatInterface({
   // Update response type based on server-detected intent
   useEffect(() => {
     if (isTyping) {
-      if (detectedIntent === "PLAN_TRIP" || detectedIntent === "DESTINATION_SEARCH") {
+      if (detectedIntent === "PLAN_TRIP" || planningActive || detectedIntent === "DESTINATION_SEARCH") {
         console.log('[chat-interface] Setting response type to planning for intent:', detectedIntent)
         setResponseType('planning')
       } else if (detectedIntent) {
@@ -164,7 +173,7 @@ export function ChatInterface({
       console.log('[chat-interface] Clearing response type, isTyping:', isTyping)
       setResponseType(null)
     }
-  }, [detectedIntent, isTyping])
+  }, [detectedIntent, isTyping, planningActive])
   
   // Ensure typing indicator is hidden when messages arrive
   useEffect(() => {
@@ -554,8 +563,8 @@ return (
     <div className="flex flex-col h-full bg-white relative">
       <div ref={scrollContainerRef} onScroll={handleScroll} className={`flex-1 overflow-y-auto ${isRightPanelVisible ? "p-6" : "px-6 py-4 w-full"} pt-20`}>
         <div className="w-full">
-          {safeMessages.map((message) => (
-            <div key={message.id} className={`flex gap-3 mb-4 ${message.role === "user" ? "justify-end" : "justify-start"}`}>
+          {safeMessages.map((message, i) => (
+            <div key={message.id || message.createdAt || i} className={`flex gap-3 mb-4 ${message.role === "user" ? "justify-end" : "justify-start"}`}>
               <Avatar className={`w-8 h-8 flex-shrink-0 ${message.role === "user" ? "order-2" : "order-1"}`}>
                 <AvatarFallback className={message.role === "user" ? "bg-blue-500 text-white" : "bg-black text-white flex items-center justify-center"}>
                   {message.role === "user" ? "N" : <div className="w-2 h-2 bg-white rounded-full"></div>}
@@ -581,16 +590,40 @@ return (
               <div className="text-sm text-gray-600">
                 <p className="mb-3 font-medium">Want me to customize your plan? Try:</p>
                 <div className="flex flex-wrap gap-2">
-                  <button className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors" onClick={() => onSendMessage("What's the best way to travel within the city?")}>🚗 Transportation options</button>
-                  <button className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors" onClick={() => onSendMessage("Can you suggest local food specialties I should try?")}>🍽️ Local cuisine</button>
-                  <button className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors" onClick={() => onSendMessage("What are the must-visit cultural attractions?")}>🏛️ Cultural sites</button>
-                  <button className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors" onClick={() => onSendMessage("Are there any local festivals or events during my visit?")}>🎉 Events & festivals</button>
-                  <button className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors" onClick={() => onSendMessage("What's the best time to visit popular attractions to avoid crowds?")}>⏰ Best visiting times</button>
-                  <button className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors" onClick={() => onSendMessage("Can you recommend some hidden gems or off-the-beaten-path places?")}>💎 Hidden gems</button>
-                  <button className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors" onClick={() => onSendMessage("Add adventure activities?")}>🎿 Adventure activities</button>
-                  <button className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors" onClick={() => onSendMessage("Family-friendly tips?")}>👨‍👩‍👧‍👦 Family-friendly tips</button>
-                  <button className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors" onClick={() => onSendMessage("Must-try local dishes?")}>🥘 Must-try local dishes</button>
-                  <button className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors" onClick={() => onSendMessage("Best time to visit?")}>🌤️ Best time to visit</button>
+                  {(() => {
+                    const pool: Array<{label: string; prompt: string}> = [
+                      { label: "🚗 Transportation options", prompt: "What's the best way to travel within the city?" },
+                      { label: "🍽️ Local cuisine", prompt: "Can you suggest local food specialties I should try?" },
+                      { label: "🏛️ Cultural sites", prompt: "What are the must-visit cultural attractions?" },
+                      { label: "🎉 Events & festivals", prompt: "Are there any local festivals or events during my visit?" },
+                      { label: "⏰ Best visiting times", prompt: "What's the best time to visit popular attractions to avoid crowds?" },
+                      { label: "💎 Hidden gems", prompt: "Can you recommend some hidden gems or off-the-beaten-path places?" },
+                      { label: "🎿 Adventure activities", prompt: "Could you add adventure activities to the plan?" },
+                      { label: "👨‍👩‍👧‍👦 Family-friendly tips", prompt: "What are some family-friendly tips and places?" },
+                      { label: "🥘 Must-try dishes", prompt: "Which local dishes should I not miss?" },
+                      { label: "📅 Day-by-day tweaks", prompt: "Can you tweak Day 2 to be more relaxed?" },
+                      { label: "💰 Budget optimizations", prompt: "How can we reduce the overall budget without losing experiences?" },
+                      { label: "🕒 Time-saving routes", prompt: "Can you optimize the route to save travel time?" },
+                      { label: "📸 Photo spots", prompt: "Where are the best photo spots?" },
+                      { label: "🌦️ Weather prep", prompt: "What should I pack given the typical weather?" },
+                      { label: "🛍️ Shopping", prompt: "What are the best places to shop for souvenirs?" },
+                      { label: "🚶 Walkability", prompt: "Which parts of the itinerary are walkable?" },
+                      { label: "🕰️ Opening hours", prompt: "Do any attractions require booking or have tight hours?" },
+                      { label: "♿ Accessibility", prompt: "Can you adjust for accessibility considerations?" },
+                    ]
+                    // Shuffle and pick a subset (6-9)
+                    const shuffled = [...pool].sort(() => Math.random() - 0.5)
+                    const count = Math.floor(6 + Math.random() * 4)
+                    return shuffled.slice(0, count).map((item, idx) => (
+                      <button
+                        key={idx}
+                        className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors"
+                        onClick={() => onSendMessage(item.prompt)}
+                      >
+                        {item.label}
+                      </button>
+                    ))
+                  })()}
                 </div>
               </div>
             </div>
@@ -605,7 +638,8 @@ return (
               lastMessage.createdAt && 
               (Date.now() - new Date(lastMessage.createdAt).getTime()) < 5000 // within 5 seconds
             
-            if (recentAssistantMessage) {
+            // Do not suppress typing if planning is active or PLAN_TRIP is detected
+            if (recentAssistantMessage && !(planningActive || detectedIntent === 'PLAN_TRIP')) {
               console.log('[chat-interface] Suppressing typing indicator due to recent assistant message')
               return null
             }
@@ -666,3 +700,4 @@ return (
     </div>
   )
 }
+

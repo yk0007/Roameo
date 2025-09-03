@@ -161,10 +161,19 @@ export function buildApiRouter(
           }
           // Persist search results
           if (e.type === "search.results") {
+            console.log(`[router] Persisting search results for session ${sid}:`, {
+              stays: e.data.stays?.length || 0,
+              restaurants: e.data.restaurants?.length || 0,
+              attractions: e.data.attractions?.length || 0
+            });
             db.patchTrip(sid, { searchResults: e.data });
           }
           // Persist map data
           if (e.type === "map.update") {
+            console.log(`[router] Persisting map data for session ${sid}:`, {
+              pois: e.data.pois?.length || 0,
+              routes: e.data.routes?.length || 0
+            });
             db.patchTrip(sid, { mapData: e.data });
           }
         }

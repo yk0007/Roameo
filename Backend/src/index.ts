@@ -78,9 +78,117 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
   }
   // Replay last search results and map snapshot if present
   const maybeSearch = (existing.trip as any)?.searchResults;
-  if (maybeSearch) hub.emit(sessionId, { type: "search.results", data: maybeSearch });
+  if (maybeSearch) {
+    console.log(`[ws] Restoring search results for session ${sessionId}:`, {
+      stays: maybeSearch.stays?.length || 0,
+      restaurants: maybeSearch.restaurants?.length || 0,
+      attractions: maybeSearch.attractions?.length || 0
+    });
+    hub.emit(sessionId, { type: "search.results", data: maybeSearch });
+  } else {
+    console.log(`[ws] No search results found for session ${sessionId}`);
+    
+    // If we have an itinerary but no search results, and we have a destination, 
+    // trigger a search to populate POI data for the map hover functionality
+    const destination = (existing.trip as any)?.destination;
+    if (maybeItin && destination) {
+      console.log(`[ws] Triggering POI search for destination ${destination} to restore map functionality`);
+      
+      // Import and use POI agent to regenerate search results
+      import('./agents/poi.js').then(async ({ poiAgent }) => {
+        try {
+          const poiResult = await poiAgent({ destination });
+          if (poiResult && poiResult.type === 'search.results') {
+            console.log(`[ws] Generated search results for session ${sessionId}:`, {
+              stays: poiResult.data.stays?.length || 0,
+              restaurants: poiResult.data.restaurants?.length || 0,
+              attractions: poiResult.data.attractions?.length || 0
+            });
+            
+            // Emit the search results and persist them
+            hub.emit(sessionId, poiResult);
+            db.patchTrip(sessionId, { searchResults: poiResult.data });
+            
+            // Also generate map data if we don't have it
+            const currentMapData = (existing.trip as any)?.mapData;
+            if (!currentMapData) {
+              // Extract POI IDs from itinerary
+              const itineraryPoiIds = new Set<string>();
+              maybeItin.daysPlan.forEach((day: any) => {
+                day.activities?.forEach((activity: any) => {
+                  if (activity.poiId) itineraryPoiIds.add(activity.poiId);
+                });
+                if (day.accommodation?.poiId) itineraryPoiIds.add(day.accommodation.poiId);
+              });
+              
+              // Find matching POIs from the newly generated search results
+              const allSearchPois = [
+                ...poiResult.data.stays,
+                ...poiResult.data.restaurants,
+                ...poiResult.data.attractions
+              ];
+              
+              const itineraryPois = allSearchPois.filter((poi: any) => itineraryPoiIds.has(poi.id));
+              
+              if (itineraryPois.length > 0) {
+                console.log(`[ws] Generated map data with ${itineraryPois.length} POIs from regenerated search results`);
+                const mapData = { pois: itineraryPois, routes: [] };
+                hub.emit(sessionId, { type: "map.update", data: mapData });
+                db.patchTrip(sessionId, { mapData });
+              }
+            }
+          }
+        } catch (error) {
+          console.error(`[ws] Failed to regenerate POI search for session ${sessionId}:`, error);
+        }
+      }).catch(error => {
+        console.error(`[ws] Failed to import POI agent for session ${sessionId}:`, error);
+      });
+    }
+  }
+  
   const maybeMap = (existing.trip as any)?.mapData;
-  if (maybeMap) hub.emit(sessionId, { type: "map.update", data: maybeMap });
+  if (maybeMap) {
+    console.log(`[ws] Restoring map data for session ${sessionId}:`, {
+      pois: maybeMap.pois?.length || 0,
+      routes: maybeMap.routes?.length || 0
+    });
+    hub.emit(sessionId, { type: "map.update", data: maybeMap });
+  } else {
+    console.log(`[ws] No map data found for session ${sessionId}`);
+    
+    // Fallback: If we have an itinerary but no map data, try to generate map data from itinerary POIs
+    if (maybeItin && maybeItin.daysPlan && maybeSearch) {
+      console.log(`[ws] Attempting to generate map data from itinerary and search results for session ${sessionId}`);
+      
+      // Extract POI IDs from itinerary
+      const itineraryPoiIds = new Set<string>();
+      maybeItin.daysPlan.forEach((day: any) => {
+        day.activities?.forEach((activity: any) => {
+          if (activity.poiId) itineraryPoiIds.add(activity.poiId);
+        });
+        if (day.accommodation?.poiId) itineraryPoiIds.add(day.accommodation.poiId);
+      });
+      
+      // Find matching POIs from search results
+      const allSearchPois = [
+        ...(maybeSearch.stays || []),
+        ...(maybeSearch.restaurants || []),
+        ...(maybeSearch.attractions || [])
+      ];
+      
+      const itineraryPois = allSearchPois.filter((poi: any) => itineraryPoiIds.has(poi.id));
+      
+      if (itineraryPois.length > 0) {
+        console.log(`[ws] Generated map data with ${itineraryPois.length} POIs from itinerary for session ${sessionId}`);
+        const mapData = { pois: itineraryPois, routes: [] };
+        hub.emit(sessionId, { type: "map.update", data: mapData });
+        
+        // Persist the generated map data for future sessions
+        db.patchTrip(sessionId, { mapData });
+      }
+    }
+  }
   // Replay prior messages to rebuild chat UI on fresh connects
   if (existing.messages?.length) {
     hub.emit(sessionId, { type: "chat.history", data: existing.messages as any });
