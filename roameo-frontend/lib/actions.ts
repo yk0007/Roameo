@@ -109,14 +109,24 @@ export async function signUp(prevState: any, formData: FormData) {
     }
   )
 
+  // Normalize Supabase sign-up errors into user-friendly messages
+  const humanizeSignUpError = (error: any) => {
+    const raw = (error?.message || "").toString()
+    const msg = raw.toLowerCase()
+    if (msg.includes("already registered") || error?.status === 422) {
+      return "An account with this email already exists. Try logging in, or resend the verification email if you didn’t receive it."
+    }
+    return raw || "Could not sign up. Please try again."
+  }
+
   try {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email: email.toString(),
       password: password.toString(),
       options: {
         emailRedirectTo:
           process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ||
-          `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/dashboard`,
+          `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/auth/callback`,
         data: {
           first_name: firstName?.toString(),
           last_name: lastName?.toString(),
@@ -125,8 +135,14 @@ export async function signUp(prevState: any, formData: FormData) {
       },
     })
 
+    // Supabase sometimes returns no error but an empty identities array when the email already exists (confirmed)
+    const identities = (data as any)?.user?.identities
+    if (!error && Array.isArray(identities) && identities.length === 0) {
+      return { error: "An account with this email already exists. Try logging in, or resend the verification email if you didn’t receive it." }
+    }
+
     if (error) {
-      return { error: error.message }
+      return { error: humanizeSignUpError(error) }
     }
 
     return { success: "Check your email to confirm your account." }
@@ -283,18 +299,29 @@ export async function signUpForm(formData: FormData) {
       },
     }
   )
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
       emailRedirectTo:
         process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ||
-        `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/dashboard`,
+        `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/auth/callback`,
       data: { first_name: firstName, last_name: lastName, username },
     },
   })
+  // Detect existing user via identities array when no error is returned
+  const identities = (data as any)?.user?.identities
+  if (!error && Array.isArray(identities) && identities.length === 0) {
+    const friendly = "An account with this email already exists. Try logging in, or resend the verification email if you didn’t receive it."
+    redirect(`/auth/login?error=${encodeURIComponent(friendly)}`)
+  }
   if (error) {
-    redirect(`/auth/login?error=${encodeURIComponent(error.message)}`)
+    const raw = (error.message || "").toString()
+    const msg = raw.toLowerCase()
+    const friendly = msg.includes("already registered") || (error as any)?.status === 422
+      ? "An account with this email already exists. Try logging in, or resend the verification email if you didn’t receive it."
+      : (raw || "Could not sign up. Please try again.")
+    redirect(`/auth/login?error=${encodeURIComponent(friendly)}`)
   }
   // If confirmation is required, send to login with success message
   redirect(`/auth/login?success=${encodeURIComponent("Check your email to confirm your account.")}`)

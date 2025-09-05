@@ -1,4 +1,6 @@
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server"
+import dynamic from "next/dynamic"
+const ClearQuery = dynamic(() => import("@/components/clear-query"), { ssr: false })
 import { redirect } from "next/navigation"
 import AuthForm from "@/components/auth-form"
 
@@ -29,6 +31,9 @@ export default async function LoginPage({
 
   return (
     <div className="min-h-screen bg-white flex">
+      {/* Clear query params after first render so banners show only once */}
+      {/* This is a client-only helper and renders nothing visually */}
+      <ClearQuery keys={["success"]} />
       {/* Left side - Auth Form */}
       <div className="flex-1 flex items-center justify-center p-8 relative">
         {/* Grid background */}
