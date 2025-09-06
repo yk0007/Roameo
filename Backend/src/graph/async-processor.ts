@@ -5,7 +5,8 @@ import { poiAgent } from "../agents/poi.js";
 import { mapAgent } from "../agents/map.js";
 import { generateSessionTitle } from "../agents/title.js";
 import { randomUUID } from "crypto";
-import type { TripContext, Message } from "../types/schemas.js";
+import type { TripContext } from "../types/schemas.js";
+import type { Message } from "../db/types.js";
 
 export class AsyncBackgroundProcessor {
   private hub: WsHub;

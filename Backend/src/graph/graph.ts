@@ -551,19 +551,20 @@ const graph = new StateGraph<State>({ channels: graphState })
     // Run POI search in parallel for better performance
     const poiSearchPromise = immediatePoiSearchAgent(extraction);
     
-    // Generate AI-powered conversational response with POI formatting + ask for missing info
-    const destinationChatResponse = await generateDestinationChatResponse(extraction, message, {});
+    // Wait for POI search to complete first
+    const poiSearchEvents = await poiSearchPromise;
+    const poiEvents: WsEvent[] = poiSearchEvents || [];
     
-    // Wait for POI search to complete
-    const poiSearchEvent = await poiSearchPromise;
-    const poiEvents: WsEvent[] = poiSearchEvent ? [poiSearchEvent] : [];
-    
-    // Extract POI data for response generation
+    // Extract POI data for response generation - get from first search.results event
+    const poiSearchEvent = poiEvents.find(event => event.type === "search.results");
     const poiData = poiSearchEvent ? {
       stays: poiSearchEvent.data.stays || [],
       restaurants: poiSearchEvent.data.restaurants || [],
       attractions: poiSearchEvent.data.attractions || []
     } : { stays: [], restaurants: [], attractions: [] };
+    
+    // Generate AI-powered conversational response with POI formatting + ask for missing info
+    const destinationChatResponse = await generateDestinationChatResponse(extraction, message, poiData);
     
     // Generate follow-up questions for missing information
     let followUpResponse = "";

@@ -533,11 +533,11 @@ You MUST respond with ONLY this complete JSON structure:
     let parsed: Itinerary;
     try {
       parsed = JSON.parse(cleanedJson) as Itinerary;
-    } catch (parseError) {
+    } catch (parseError: any) {
       console.error("[planner] JSON parse error:", parseError);
       console.error("[planner] Problematic JSON:", cleanedJson);
       throw new Error(
-        `JSON parsing failed: ${parseError.message}. JSON length: ${cleanedJson.length}`,
+        `JSON parsing failed: ${parseError?.message || parseError}. JSON length: ${cleanedJson.length}`,
       );
     }
 
