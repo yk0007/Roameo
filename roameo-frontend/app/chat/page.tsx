@@ -1,18 +1,31 @@
-"use client"
+"use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useSearchParams, useRouter } from "next/navigation"
-import { supabase } from "@/lib/supabase/client"
-import { TopNavigation } from "@/components/top-navigation"
-import { ChatInterface } from "@/components/chat-interface"
-import { SearchInterface } from "@/components/search-interface"
-import { RightPanel } from "@/components/right-panel"
-import { LeftPanelTabs } from "@/components/left-panel-tabs"
-import { Button } from "@/components/ui/button"
-import { MessageCircle, Search, Bookmark, Map as MapIcon, Calendar } from "lucide-react"
-import { connectWs } from "@/lib/ws"
-import { sendChat, tripUpdate, createInvite, deleteTrip as apiDeleteTrip, savePoi as apiSavePoi, getSavedPoiIds } from "@/lib/api"
-import { toast } from "@/hooks/use-toast"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase/client";
+import { TopNavigation } from "@/components/top-navigation";
+import { ChatInterface } from "@/components/chat-interface";
+import { SearchInterface } from "@/components/search-interface";
+import { RightPanel } from "@/components/right-panel";
+import { LeftPanelTabs } from "@/components/left-panel-tabs";
+import { Button } from "@/components/ui/button";
+import {
+  MessageCircle,
+  Search,
+  Bookmark,
+  Map as MapIcon,
+  Calendar,
+} from "lucide-react";
+import { connectWs } from "@/lib/ws";
+import {
+  sendChat,
+  tripUpdate,
+  createInvite,
+  deleteTrip as apiDeleteTrip,
+  savePoi as apiSavePoi,
+  getSavedPoiIds,
+} from "@/lib/api";
+import { toast } from "@/hooks/use-toast";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,20 +36,31 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
-import type { ChatMessage, Itinerary, SearchResults, TripContext, WsEvent, POI } from "@/lib/types"
+} from "@/components/ui/alert-dialog";
+import type {
+  ChatMessage,
+  Itinerary,
+  SearchResults,
+  TripContext,
+  WsEvent,
+  POI,
+} from "@/lib/types";
 
 export default function ChatPage() {
-  const [activeLeftView, setActiveLeftView] = useState<"chat" | "search" | "saved">("chat")
-  const [activeRightView, setActiveRightView] = useState<"map" | "itinerary">("map")
-  const [isRightPanelVisible, setIsRightPanelVisible] = useState(true)
+  const [activeLeftView, setActiveLeftView] = useState<
+    "chat" | "search" | "saved"
+  >("chat");
+  const [activeRightView, setActiveRightView] = useState<"map" | "itinerary">(
+    "map",
+  );
+  const [isRightPanelVisible, setIsRightPanelVisible] = useState(true);
 
-  const searchParams = useSearchParams()
-  const router = useRouter()
+  const searchParams = useSearchParams();
+  const router = useRouter();
 
-  const [sessionId, setSessionId] = useState<string | undefined>(undefined)
-  const [inviteId, setInviteId] = useState<string | undefined>(undefined)
-  const wsRef = useRef<WebSocket | null>(null)
+  const [sessionId, setSessionId] = useState<string | undefined>(undefined);
+  const [inviteId, setInviteId] = useState<string | undefined>(undefined);
+  const wsRef = useRef<WebSocket | null>(null);
 
   const [trip, setTrip] = useState<TripContext>({
     sessionId: "temp",
@@ -46,162 +70,211 @@ export default function ChatPage() {
     days: undefined,
     travelers: undefined,
     budget: undefined,
-  })
+  });
 
   // Enhanced message state management with better deduplication and immediate updates
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const seenMessageIdsRef = useRef<Set<string>>(new Set())
-  const [itinerary, setItinerary] = useState<Itinerary | undefined>(undefined)
-  const [searchResults, setSearchResults] = useState<SearchResults | undefined>(undefined)
-  const [mapData, setMapData] = useState<any>(undefined)
-  
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const seenMessageIdsRef = useRef<Set<string>>(new Set());
+  const [itinerary, setItinerary] = useState<Itinerary | undefined>(undefined);
+  const [searchResults, setSearchResults] = useState<SearchResults | undefined>(
+    undefined,
+  );
+  const [mapData, setMapData] = useState<any>(undefined);
+
   // Enhanced debugging for itinerary and map data
   useEffect(() => {
-    console.log('[client] Itinerary state updated:', itinerary ? `${itinerary.daysPlan?.length || 0} days` : 'undefined')
+    console.log(
+      "[client] Itinerary state updated:",
+      itinerary ? `${itinerary.daysPlan?.length || 0} days` : "undefined",
+    );
     if (itinerary) {
-      console.log('[client] Itinerary details:', JSON.stringify(itinerary, null, 2))
+      console.log(
+        "[client] Itinerary details:",
+        JSON.stringify(itinerary, null, 2),
+      );
     }
-  }, [itinerary])
-  
+  }, [itinerary]);
+
   useEffect(() => {
-    console.log('[client] Map data state updated:', mapData ? `${mapData.pois?.length || 0} POIs, ${mapData.routes?.length || 0} routes` : 'undefined')
+    console.log(
+      "[client] Map data state updated:",
+      mapData
+        ? `${mapData.pois?.length || 0} POIs, ${mapData.routes?.length || 0} routes`
+        : "undefined",
+    );
     if (mapData) {
-      console.log('[client] Map data details:', JSON.stringify(mapData, null, 2))
+      console.log(
+        "[client] Map data details:",
+        JSON.stringify(mapData, null, 2),
+      );
     }
-  }, [mapData])
-  
+  }, [mapData]);
+
   useEffect(() => {
-    console.log('[client] Search results state updated:', searchResults ? `${(searchResults.stays?.length || 0) + (searchResults.restaurants?.length || 0) + (searchResults.attractions?.length || 0)} total POIs` : 'undefined')
-  }, [searchResults])
-  const [isDeleting, setIsDeleting] = useState(false)
-  const [isTyping, setIsTyping] = useState(false)
-  const [detectedIntent, setDetectedIntent] = useState<"PLAN_TRIP" | "DESTINATION_SEARCH" | "CHAT" | null>(null)
-  const planningTimeoutRef = useRef<number | null>(null)
-  const planningActiveRef = useRef(false) // Guard to prevent duplicate planning animations
-  const planningReplyInjectedRef = useRef(false) // Track whether we've shown a reply for current planning
-  const [isPlanning, setIsPlanning] = useState(false) // Mirror ref in state for UI
-  const [savedPoiIds, setSavedPoiIds] = useState<Set<string>>(new Set())
-  const [inputMessage, setInputMessage] = useState<string>("") // Add state for controlling input
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const reconnectAttemptsRef = useRef(0)
-  const reconnectTimerRef = useRef<number | null>(null)
-  const messagesRef = useRef<ChatMessage[]>([])
-  useEffect(() => { messagesRef.current = messages }, [messages])
-  const [authChecked, setAuthChecked] = useState(false)
-  const initialMessageHandledRef = useRef(false)
-  const lastUserSentRef = useRef<{ content: string; at: number } | null>(null)
-  const hadDisconnectRef = useRef(false)
-  const manualCloseRef = useRef(false)
-  const connectingRef = useRef(false)
-  
+    console.log(
+      "[client] Search results state updated:",
+      searchResults
+        ? `${(searchResults.stays?.length || 0) + (searchResults.restaurants?.length || 0) + (searchResults.attractions?.length || 0)} total POIs`
+        : "undefined",
+    );
+  }, [searchResults]);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  const [detectedIntent, setDetectedIntent] = useState<
+    "PLAN_TRIP" | "DESTINATION_SEARCH" | "CHAT" | null
+  >(null);
+  const planningTimeoutRef = useRef<number | null>(null);
+  const planningActiveRef = useRef(false); // Guard to prevent duplicate planning animations
+  const planningReplyInjectedRef = useRef(false); // Track whether we've shown a reply for current planning
+  const [isPlanning, setIsPlanning] = useState(false); // Mirror ref in state for UI
+  const [savedPoiIds, setSavedPoiIds] = useState<Set<string>>(new Set());
+  const [inputMessage, setInputMessage] = useState<string>(""); // Add state for controlling input
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimerRef = useRef<number | null>(null);
+  const messagesRef = useRef<ChatMessage[]>([]);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+  const [authChecked, setAuthChecked] = useState(false);
+  const initialMessageHandledRef = useRef(false);
+  const lastUserSentRef = useRef<{ content: string; at: number } | null>(null);
+  const hadDisconnectRef = useRef(false);
+  const manualCloseRef = useRef(false);
+  const connectingRef = useRef(false);
+
   // Enhanced debug logging for messages state changes
   useEffect(() => {
-    console.log('[client] Messages state updated, total count:', messages.length)
+    console.log(
+      "[client] Messages state updated, total count:",
+      messages.length,
+    );
     if (messages.length > 0) {
-      const lastMessage = messages[messages.length - 1]
-      console.log('[client] Last message:', { id: lastMessage.id, role: lastMessage.role, contentLength: lastMessage.content?.length })
-      
+      const lastMessage = messages[messages.length - 1];
+      console.log("[client] Last message:", {
+        id: lastMessage.id,
+        role: lastMessage.role,
+        contentLength: lastMessage.content?.length,
+      });
+
       // Force typing state clear if we have a recent assistant message
       if (lastMessage.role === "assistant" && isTyping) {
-        console.log('[client] Force clearing typing state due to new assistant message')
-        setIsTyping(false)
-        setDetectedIntent(null)
-        planningActiveRef.current = false
+        console.log(
+          "[client] Force clearing typing state due to new assistant message",
+        );
+        setIsTyping(false);
+        setDetectedIntent(null);
+        planningActiveRef.current = false;
         if (planningTimeoutRef.current) {
-          window.clearTimeout(planningTimeoutRef.current)
-          planningTimeoutRef.current = null
+          window.clearTimeout(planningTimeoutRef.current);
+          planningTimeoutRef.current = null;
         }
       }
     }
-  }, [messages, isTyping])
+  }, [messages, isTyping]);
 
   // Require login to access chat
   useEffect(() => {
-    let mounted = true
+    let mounted = true;
     const check = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session) {
-        router.replace("/auth/login")
-        return
+        router.replace("/auth/login");
+        return;
       }
-      if (mounted) setAuthChecked(true)
-    }
-    check()
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_evt, session) => {
-      if (!session) router.replace("/auth/login")
-    })
+      if (mounted) setAuthChecked(true);
+    };
+    check();
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_evt, session) => {
+      if (!session) router.replace("/auth/login");
+    });
     return () => {
-      mounted = false
-      subscription.unsubscribe()
-    }
-  }, [router])
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [router]);
 
   // Filter POIs for map display - only show itinerary POIs
   const mapPois = useMemo(() => {
-    if (!itinerary?.daysPlan?.length) return []
-    const itineraryPoiIds = new Set()
+    if (!itinerary?.daysPlan?.length) return [];
+    const itineraryPoiIds = new Set();
     itinerary.daysPlan.forEach((day: any) => {
       day.activities?.forEach((activity: any) => {
         if (activity.poiId) {
-          itineraryPoiIds.add(activity.poiId)
+          itineraryPoiIds.add(activity.poiId);
         }
-      })
-    })
+      });
+    });
     // Get all POIs from search results and any existing map data
     const allPois = [
       ...(searchResults?.stays || []),
       ...(searchResults?.restaurants || []),
       ...(searchResults?.attractions || []),
       ...(mapData?.pois || []),
-    ]
-    return allPois.filter((poi: any) => itineraryPoiIds.has(poi.id)) || []
-  }, [searchResults, itinerary, mapData])
+    ];
+    return allPois.filter((poi: any) => itineraryPoiIds.has(poi.id)) || [];
+  }, [searchResults, itinerary, mapData]);
 
   // Fallback: Geocode missing itinerary POIs and add them to mapData
   useEffect(() => {
     // Require itinerary and an API key
-    if (!itinerary?.daysPlan?.length) return
-    const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
-    if (!key) return
+    if (!itinerary?.daysPlan?.length) return;
+    const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    if (!key) return;
 
     // Build set of existing POI ids from known sources
-    const existing = new Set<string>()
+    const existing = new Set<string>();
     const existingPois: POI[] = [
       ...(searchResults?.stays || []),
       ...(searchResults?.restaurants || []),
       ...(searchResults?.attractions || []),
       ...(mapData?.pois || []),
-    ]
-    existingPois.forEach(p => { if (p?.id) existing.add(p.id) })
+    ];
+    existingPois.forEach((p) => {
+      if (p?.id) existing.add(p.id);
+    });
 
     // Collect itinerary POIs missing from our sources
-    const missing: { id: string; name?: string; address?: string }[] = []
+    const missing: { id: string; name?: string; address?: string }[] = [];
     itinerary.daysPlan.forEach((d: any) => {
       d.activities?.forEach((a: any) => {
-        if (a?.poiId && !existing.has(a.poiId)) missing.push({ id: a.poiId, name: a.name, address: a.address })
-      })
+        if (a?.poiId && !existing.has(a.poiId))
+          missing.push({ id: a.poiId, name: a.name, address: a.address });
+      });
       if (d.accommodation?.poiId && !existing.has(d.accommodation.poiId)) {
-        missing.push({ id: d.accommodation.poiId, name: d.accommodation.name, address: d.accommodation.address })
+        missing.push({
+          id: d.accommodation.poiId,
+          name: d.accommodation.name,
+          address: d.accommodation.address,
+        });
       }
-    })
+    });
 
     // Nothing to do
-    if (missing.length === 0) return
+    if (missing.length === 0) return;
 
     // Limit requests per run to avoid quota spikes
-    const toLookup = missing.slice(0, 3)
-    let cancelled = false
+    const toLookup = missing.slice(0, 3);
+    let cancelled = false;
 
-    ;(async () => {
-      const resolved: POI[] = []
+    (async () => {
+      const resolved: POI[] = [];
       for (const m of toLookup) {
-        if (cancelled) break
-        const q = encodeURIComponent([m.name, m.address, trip?.destination].filter(Boolean).join(" "))
+        if (cancelled) break;
+        const q = encodeURIComponent(
+          [m.name, m.address, trip?.destination].filter(Boolean).join(" "),
+        );
         try {
-          const resp = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${q}&key=${key}`)
-          const j = await resp.json()
-          const first = j?.results?.[0]
-          const loc = first?.geometry?.location
+          const resp = await fetch(
+            `https://maps.googleapis.com/maps/api/geocode/json?address=${q}&key=${key}`,
+          );
+          const j = await resp.json();
+          const first = j?.results?.[0];
+          const loc = first?.geometry?.location;
           if (loc) {
             resolved.push({
               id: m.id,
@@ -210,453 +283,661 @@ export default function ChatPage() {
               lat: loc.lat,
               lng: loc.lng,
               type: "attraction",
-            } as any)
+            } as any);
           }
         } catch (e) {
-          console.warn('[client] Geocoding failed for', m, e)
+          console.warn("[client] Geocoding failed for", m, e);
         }
         // Small delay to be nice to the API
-        await new Promise(r => setTimeout(r, 200))
+        await new Promise((r) => setTimeout(r, 200));
       }
       if (!cancelled && resolved.length > 0) {
         setMapData((prev: any) => ({
           ...(prev || {}),
-          pois: [ ...(prev?.pois || []), ...resolved ],
-        }))
+          pois: [...(prev?.pois || []), ...resolved],
+        }));
       }
-    })()
+    })();
 
-    return () => { cancelled = true }
-  }, [itinerary, searchResults, mapData, trip?.destination])
+    return () => {
+      cancelled = true;
+    };
+  }, [itinerary, searchResults, mapData, trip?.destination]);
 
   // Set of itinerary POI IDs for 'Added only' map filter
   const itineraryPoiIds = useMemo(() => {
-    const ids = new Set<string>()
+    const ids = new Set<string>();
     if (itinerary?.daysPlan?.length) {
       itinerary.daysPlan.forEach((d) => {
-        d.activities.forEach((a) => { if (a.poiId) ids.add(a.poiId) })
-        if (d.accommodation?.poiId) ids.add(d.accommodation.poiId)
-      })
+        d.activities.forEach((a) => {
+          if (a.poiId) ids.add(a.poiId);
+        });
+        if (d.accommodation?.poiId) ids.add(d.accommodation.poiId);
+      });
     }
-    return ids
-  }, [itinerary])
+    return ids;
+  }, [itinerary]);
 
   // Saved-only results for unified Saved UI using SearchInterface
   const savedResults: SearchResults | undefined = useMemo(() => {
-    if (!savedPoiIds || savedPoiIds.size === 0) return { stays: [] as POI[], restaurants: [] as POI[], attractions: [] as POI[] }
+    if (!savedPoiIds || savedPoiIds.size === 0)
+      return {
+        stays: [] as POI[],
+        restaurants: [] as POI[],
+        attractions: [] as POI[],
+      };
     const all: POI[] = [
       ...(searchResults?.stays || []),
       ...(searchResults?.restaurants || []),
       ...(searchResults?.attractions || []),
       ...(mapData?.pois || []),
-    ]
-    if (all.length === 0) return { stays: [] as POI[], restaurants: [] as POI[], attractions: [] as POI[] }
-    const uniq = new Map() as Map<string, POI>
+    ];
+    if (all.length === 0)
+      return {
+        stays: [] as POI[],
+        restaurants: [] as POI[],
+        attractions: [] as POI[],
+      };
+    const uniq = new Map() as Map<string, POI>;
     all.forEach((p) => {
-      if (savedPoiIds.has(p.id) && !uniq.has(p.id)) uniq.set(p.id, p)
-    })
-    const arr = Array.from(uniq.values())
+      if (savedPoiIds.has(p.id) && !uniq.has(p.id)) uniq.set(p.id, p);
+    });
+    const arr = Array.from(uniq.values());
     return {
       stays: arr.filter((p) => p.type === "stay"),
       restaurants: arr.filter((p) => p.type === "restaurant"),
       attractions: arr.filter((p) => p.type === "attraction"),
-    }
-  }, [savedPoiIds, searchResults, mapData])
+    };
+  }, [savedPoiIds, searchResults, mapData]);
 
   // Restore sessionId from URL if present
   useEffect(() => {
-    const fromQuery = searchParams.get("sessionId") || undefined
-    if (fromQuery && fromQuery !== sessionId) setSessionId(fromQuery)
-  }, [searchParams, sessionId])
+    const fromQuery = searchParams.get("sessionId") || undefined;
+    if (fromQuery && fromQuery !== sessionId) setSessionId(fromQuery);
+  }, [searchParams, sessionId]);
+
+  // Handle message parameter from dashboard - auto-send message for existing session
+  useEffect(() => {
+    const messageFromUrl = searchParams.get("message");
+    if (
+      messageFromUrl &&
+      !initialMessageHandledRef.current &&
+      authChecked &&
+      sessionId
+    ) {
+      console.log(
+        "[client] Processing message from URL for existing session:",
+        messageFromUrl,
+      );
+      initialMessageHandledRef.current = true;
+
+      // Mark this message as coming from dashboard to prevent duplicates
+      const dashboardMessage: ChatMessage = {
+        id: `dashboard-${Date.now()}`,
+        role: "user",
+        content: messageFromUrl.trim(),
+        createdAt: new Date().toISOString(),
+        fromDashboard: true as any,
+      };
+
+      // Add message to UI immediately and show thinking state
+      setMessages((prev) => {
+        console.log("[client] Adding dashboard message to existing messages");
+        return [...prev, dashboardMessage];
+      });
+
+      // Set thinking state immediately
+      console.log("[client] Setting thinking state for dashboard message");
+      setIsTyping(true);
+      setDetectedIntent(null);
+      planningActiveRef.current = false;
+      setIsPlanning(false);
+      lastUserSentRef.current = {
+        content: messageFromUrl.trim(),
+        at: Date.now(),
+      };
+
+      // Send to backend
+      sendChat({ sessionId, inviteId, message: messageFromUrl.trim() }).catch(
+        (e: any) => {
+          setIsTyping(false);
+          toast({
+            title: "Failed to send message",
+            description: e?.message || "Please try again.",
+            variant: "destructive",
+          });
+        },
+      );
+
+      // Clear URL parameter immediately to prevent re-sending
+      setTimeout(() => {
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.delete("message");
+        window.history.replaceState({}, "", newUrl.toString());
+      }, 100);
+    }
+  }, [
+    searchParams,
+    authChecked,
+    sessionId,
+    inviteId,
+    initialMessageHandledRef,
+  ]);
+
+  // Handle message parameter from dashboard when no session exists - create new session
+  useEffect(() => {
+    const messageFromUrl = searchParams.get("message");
+    if (
+      messageFromUrl &&
+      !sessionId &&
+      !initialMessageHandledRef.current &&
+      authChecked
+    ) {
+      console.log(
+        "[client] Creating new session for dashboard message:",
+        messageFromUrl,
+      );
+      initialMessageHandledRef.current = true;
+
+      // Add user message to UI immediately and show thinking state
+      const dashboardMessage: ChatMessage = {
+        id: `dashboard-new-${Date.now()}`,
+        role: "user",
+        content: messageFromUrl.trim(),
+        createdAt: new Date().toISOString(),
+        fromDashboard: true as any,
+      };
+
+      console.log("[client] Setting initial message for new session");
+      setMessages([dashboardMessage]);
+
+      // Set thinking state immediately with multiple attempts
+      console.log("[client] Setting thinking state for new session");
+      setIsTyping(true);
+      setDetectedIntent(null);
+      planningActiveRef.current = false;
+      setIsPlanning(false);
+      lastUserSentRef.current = {
+        content: messageFromUrl.trim(),
+        at: Date.now(),
+      };
+
+      // Force UI updates to ensure immediate feedback
+      setTimeout(() => {
+        console.log("[client] Force updating thinking state");
+        setIsTyping(true);
+        setIsPlanning(false);
+      }, 10);
+
+      setTimeout(() => {
+        console.log("[client] Final thinking state update");
+        setIsTyping(true);
+      }, 100);
+
+      // Send message which will create a new session
+      sendChat({ message: messageFromUrl.trim() })
+        .then((response) => {
+          if (response.sessionId) {
+            console.log("[client] New session created:", response.sessionId);
+            // Set session info which will trigger WebSocket connection
+            setSessionId(response.sessionId);
+            setInviteId(response.inviteId);
+
+            // Clear URL parameter and add sessionId after a brief delay
+            setTimeout(() => {
+              const newUrl = new URL(window.location.href);
+              newUrl.searchParams.delete("message");
+              newUrl.searchParams.set("sessionId", response.sessionId);
+              window.history.replaceState({}, "", newUrl.toString());
+              console.log("[client] URL updated with new sessionId");
+            }, 500);
+          }
+        })
+        .catch((e: any) => {
+          setIsTyping(false);
+          console.error(
+            "[client] Failed to create session from dashboard message:",
+            e,
+          );
+          toast({
+            title: "Failed to send message",
+            description: e?.message || "Please try again.",
+            variant: "destructive",
+          });
+        });
+    }
+  }, [searchParams, sessionId, authChecked, initialMessageHandledRef]);
 
   // Open WS when we have a sessionId
   useEffect(() => {
-    if (!sessionId) return
-    if (wsRef.current) wsRef.current.close()
+    if (!sessionId) return;
+    if (wsRef.current) wsRef.current.close();
 
     const onEvent = (evt: WsEvent) => {
       if (evt.type === "session.ready") {
-        setSessionId(evt.data.sessionId)
-        setInviteId(evt.data.inviteId)
+        setSessionId(evt.data.sessionId);
+        setInviteId(evt.data.inviteId);
         // push sessionId to URL if missing
-        const qp = new URLSearchParams(window.location.search)
+        const qp = new URLSearchParams(window.location.search);
         if (!qp.get("sessionId")) {
-          qp.set("sessionId", evt.data.sessionId)
-          router.replace(`?${qp.toString()}`)
+          qp.set("sessionId", evt.data.sessionId);
+          router.replace(`?${qp.toString()}`);
         }
         // hydrate saved POIs for Saved tab
-        ;(async () => {
+        (async () => {
           try {
-            const res = await getSavedPoiIds(evt.data.sessionId)
-            setSavedPoiIds(new Set(res.ids))
+            const res = await getSavedPoiIds(evt.data.sessionId);
+            setSavedPoiIds(new Set(res.ids));
           } catch {}
-        })()
+        })();
         // nudge map to render immediately on first connection
         setTimeout(() => {
-          try { window.dispatchEvent(new Event("resize")) } catch {}
-        }, 100)
-
+          try {
+            window.dispatchEvent(new Event("resize"));
+          } catch {}
+        }, 100);
       } else if (evt.type === "chat.history") {
-        console.log('[client] Received chat history:', evt.data?.length)
+        console.log("[client] Received chat history:", evt.data?.length);
         // Merge history with existing messages while PRESERVING id-less messages.
         // Deduplicate strictly by message id. This prevents temporary assistant messages
         // (often emitted without id for PLAN_TRIP) from being dropped.
         setMessages((prev) => {
-          const next = [...prev]
-          const existingIds = new Set<string>()
+          const next = [...prev];
+          const existingIds = new Set<string>();
           // Build a set of user messages we injected from the dashboard to avoid re-adding their echoes
           const dashboardContents = new Set(
             prev
-              .filter((m) => (m as any).fromDashboard === true && m.role === "user")
-              .map((m) => String(m.content).trim())
-          )
+              .filter(
+                (m) => (m as any).fromDashboard === true && m.role === "user",
+              )
+              .map((m) => String(m.content).trim()),
+          );
           for (const m of prev) {
-            if (m?.id) existingIds.add(m.id)
+            if (m?.id) existingIds.add(m.id);
           }
 
           for (const m of evt.data) {
             // Skip server echoes matching dashboard-sent user messages
             if (m.role === "user" && dashboardContents.has(m.content.trim())) {
-              continue
+              continue;
             }
             if (m?.id) {
               if (!existingIds.has(m.id)) {
-                existingIds.add(m.id)
-                next.push(m)
+                existingIds.add(m.id);
+                next.push(m);
               }
             } else {
               // No id: append if not an exact duplicate of recent content-role pair
-              const isDup = next.slice(-5).some((pm) => pm.role === m.role && String(pm.content).trim() === String(m.content).trim())
-              if (!isDup) next.push(m)
+              const isDup = next
+                .slice(-5)
+                .some(
+                  (pm) =>
+                    pm.role === m.role &&
+                    String(pm.content).trim() === String(m.content).trim(),
+                );
+              if (!isDup) next.push(m);
             }
           }
 
           // Sort by createdAt when available; stable for items without createdAt
-          next.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''))
+          next.sort((a, b) =>
+            (a.createdAt || "").localeCompare(b.createdAt || ""),
+          );
 
           // Track seen ids for future de-dup
-          next.forEach((m) => { if (m.id) seenMessageIdsRef.current.add(m.id) })
-          return next
-        })
+          next.forEach((m) => {
+            if (m.id) seenMessageIdsRef.current.add(m.id);
+          });
+          return next;
+        });
       } else if (evt.type === "chat.append") {
-        console.log('[client] Received chat.append event:', evt.data)
+        console.log("[client] Received chat.append event:", evt.data);
         // Deduplicate messages by id to avoid duplicates on reconnect/replay
         setMessages((prevMessages) => {
-          const id = evt.data?.id as string | undefined
-          console.log('[client] Processing message with id:', id, 'role:', evt.data.role, 'content length:', evt.data?.content?.length)
-          
+          const id = evt.data?.id as string | undefined;
+          console.log(
+            "[client] Processing message with id:",
+            id,
+            "role:",
+            evt.data.role,
+            "content length:",
+            evt.data?.content?.length,
+          );
+
           if (id) {
             if (seenMessageIdsRef.current.has(id)) {
-              console.log('[client] Skipping duplicate message:', id)
-              return prevMessages
+              console.log("[client] Skipping duplicate message:", id);
+              return prevMessages;
             }
-            seenMessageIdsRef.current.add(id)
+            seenMessageIdsRef.current.add(id);
           }
-          
+
           // Check for any message with fromDashboard flag - these should never be duplicated
-          const isDashboardMessage = prevMessages.some(m => 
-            m.fromDashboard === true && 
-            m.role === evt.data.role && 
-            m.content.trim() === evt.data.content.trim()
+          const isDashboardMessage = prevMessages.some(
+            (m) =>
+              m.fromDashboard === true &&
+              m.role === evt.data.role &&
+              m.content.trim() === evt.data.content.trim(),
           );
-          
+
           if (isDashboardMessage) {
-            console.log('[client] Skipping duplicate of dashboard message')
-            return prevMessages
+            console.log("[client] Skipping duplicate of dashboard message");
+            return prevMessages;
           }
-          
+
           // Enhanced heuristic: suppress immediate server echo of the same user message we just appended locally
           if (evt.data.role === "user" && lastUserSentRef.current) {
-            const withinWindow = Date.now() - lastUserSentRef.current.at < 6000 // Extended to 6 seconds
-            const contentMatch = evt.data.content.trim() === lastUserSentRef.current.content.trim()
-            
+            const withinWindow = Date.now() - lastUserSentRef.current.at < 6000; // Extended to 6 seconds
+            const contentMatch =
+              evt.data.content.trim() ===
+              lastUserSentRef.current.content.trim();
+
             // Also check if we already have this exact message content in recent messages
-            const recentUserMessages = prevMessages.slice(-3).filter(m => m.role === "user")
-            const alreadyHasContent = recentUserMessages.some(m => m.content.trim() === evt.data.content.trim())
-            
+            const recentUserMessages = prevMessages
+              .slice(-3)
+              .filter((m) => m.role === "user");
+            const alreadyHasContent = recentUserMessages.some(
+              (m) => m.content.trim() === evt.data.content.trim(),
+            );
+
             if ((withinWindow && contentMatch) || alreadyHasContent) {
-              console.log('[client] Suppressing user message echo - withinWindow:', withinWindow, 'contentMatch:', contentMatch, 'alreadyHasContent:', alreadyHasContent)
-              return prevMessages
+              console.log(
+                "[client] Suppressing user message echo - withinWindow:",
+                withinWindow,
+                "contentMatch:",
+                contentMatch,
+                "alreadyHasContent:",
+                alreadyHasContent,
+              );
+              return prevMessages;
             }
           }
-          
-          const newMessages = [...prevMessages, evt.data]
-          console.log('[client] Adding message to state, new total:', newMessages.length)
-          
-          // For assistant messages, ensure visibility; if planning is active, KEEP planning animation until itinerary completes
+
+          const newMessages = [...prevMessages, evt.data];
+          console.log(
+            "[client] Adding message to state, new total:",
+            newMessages.length,
+          );
+
+          // For assistant messages, show immediately but handle planning state smartly
           if (evt.data.role === "assistant") {
-            console.log('[client] Processing assistant message')
+            console.log(
+              "[client] Processing assistant message - showing immediately",
+            );
+
+            // Always clear typing for non-planning responses
             if (!planningActiveRef.current) {
-              // Clear states only when not actively planning
-              setIsTyping(false)
-              setDetectedIntent(null)
-              planningActiveRef.current = false
-              setIsPlanning(false)
+              setIsTyping(false);
+              setDetectedIntent(null);
+              setIsPlanning(false);
             } else {
-              // Keep planning visuals running
-              setIsTyping(true)
-              setDetectedIntent("PLAN_TRIP")
-              setIsPlanning(true)
+              // For planning responses, keep animation until itinerary arrives
+              console.log(
+                "[client] Planning active - keeping animation for planning response",
+              );
+              // Don't clear planning states yet - wait for itinerary
             }
-            if (planningTimeoutRef.current) {
-              window.clearTimeout(planningTimeoutRef.current)
-              planningTimeoutRef.current = null
-            }
-            planningReplyInjectedRef.current = true
+
+            planningReplyInjectedRef.current = true;
             // Safety: if another concurrent update overwrote messages, re-assert presence of this assistant message
-            const msgId = id
-            const msgCopy = { ...evt.data }
+            const msgId = id;
+            const msgCopy = { ...evt.data };
             setTimeout(() => {
               setMessages((prev) => {
                 if (msgId && !prev.some((m) => m.id === msgId)) {
-                  console.warn('[client] Assistant message missing after update, re-inserting:', msgId)
-                  seenMessageIdsRef.current.add(msgId)
-                  return [...prev, msgCopy]
+                  console.warn(
+                    "[client] Assistant message missing after update, re-inserting:",
+                    msgId,
+                  );
+                  seenMessageIdsRef.current.add(msgId);
+                  return [...prev, msgCopy];
                 }
-                return prev
-              })
-            }, 5)
+                return prev;
+              });
+            }, 5);
           }
-          
-          return newMessages
-        })
-        
+
+          return newMessages;
+        });
+
+        // Additional assistant message handling for immediate display
         if (evt.data.role === "assistant") {
-          console.log('[client] Processing assistant message')
-          
-          // CRITICAL: Always clear all typing and planning states IMMEDIATELY
-          // Use immediate state updates to ensure message visibility
-          setIsTyping(false)
-          setIsPlanning(false)
-          setDetectedIntent(null)
-          planningActiveRef.current = false
-          
-          // Clear timeout
-          if (planningTimeoutRef.current) {
-            window.clearTimeout(planningTimeoutRef.current)
-            planningTimeoutRef.current = null
+          console.log(
+            "[client] Assistant message displayed - checking planning state",
+          );
+
+          // Only clear states if we're not in an active planning cycle
+          if (!planningActiveRef.current) {
+            console.log(
+              "[client] No active planning - clearing thinking states",
+            );
+            setIsTyping(false);
+            setIsPlanning(false);
+            setDetectedIntent(null);
+
+            if (planningTimeoutRef.current) {
+              window.clearTimeout(planningTimeoutRef.current);
+              planningTimeoutRef.current = null;
+            }
+          } else {
+            console.log(
+              "[client] Planning active - message shown but keeping animation",
+            );
+            // Message is shown, but keep planning animation until itinerary completes
           }
-          
-          // Force multiple state clearing attempts to ensure UI updates
-          setTimeout(() => {
-            console.log('[client] First UI update after assistant message')
-            setIsTyping(false)
-            setIsPlanning(false)
-            setDetectedIntent(null)
-            planningActiveRef.current = false
-          }, 0)
-          
-          setTimeout(() => {
-            console.log('[client] Second UI update after assistant message')
-            setIsTyping(false)
-            setIsPlanning(false)
-            setDetectedIntent(null)
-            planningActiveRef.current = false
-          }, 10)
-          
-          setTimeout(() => {
-            console.log('[client] Final UI update after assistant message')
-            setIsTyping(false)
-            setIsPlanning(false)
-            setDetectedIntent(null)
-            planningActiveRef.current = false
-          }, 50)
         }
       } else if (evt.type === "navbar.update") {
-        setTrip((t) => ({ ...t, ...evt.data }))
+        setTrip((t) => ({ ...t, ...evt.data }));
       } else if (evt.type === "itinerary.update") {
         // When itinerary is received, it means planning is complete
-        console.log('[client] Itinerary received - planning should be complete')
-        const data = evt.data
+        console.log(
+          "[client] Itinerary received - planning should be complete",
+        );
+        const data = evt.data;
         if (data === null) {
           // Avoid flicker: if a new planning cycle is active, keep showing previous itinerary until new one arrives
           if (!planningActiveRef.current) {
-            console.log('[client] Clearing itinerary as requested')
-            setItinerary(undefined)
+            console.log("[client] Clearing itinerary as requested");
+            setItinerary(undefined);
           } else {
-            console.log('[client] Skipping itinerary clear due to active planning')
+            console.log(
+              "[client] Skipping itinerary clear due to active planning",
+            );
           }
-        } else if (data && typeof data === 'object' && (data as any).daysPlan) {
-          // Valid itinerary arrived – set it and clear planning UI
-          const newItin = data as Itinerary
-          console.log(`[client] Setting itinerary with ${newItin.daysPlan?.length || 0} days`)
-          setItinerary(newItin)
-          planningActiveRef.current = false
-          setIsPlanning(false)
-          setIsTyping(false)
-          setDetectedIntent(null)
+        } else if (data && typeof data === "object" && (data as any).daysPlan) {
+          // Valid itinerary arrived – set it and NOW clear all planning UI
+          const newItin = data as Itinerary;
+          console.log(
+            `[client] Itinerary complete with ${newItin.daysPlan?.length || 0} days - clearing all planning states`,
+          );
+          setItinerary(newItin);
+
+          // NOW we clear all planning states since itinerary is complete
+          planningActiveRef.current = false;
+          setIsPlanning(false);
+          setIsTyping(false);
+          setDetectedIntent(null);
+          planningReplyInjectedRef.current = false;
+
           if (planningTimeoutRef.current) {
-            window.clearTimeout(planningTimeoutRef.current)
-            planningTimeoutRef.current = null
+            window.clearTimeout(planningTimeoutRef.current);
+            planningTimeoutRef.current = null;
           }
-          // If no assistant reply was shown yet for this planning turn, inject a concise confirmation
-          if (!planningReplyInjectedRef.current) {
-            const dest = (trip?.destination || '').trim()
-            const d = trip?.days
-            const summary = dest && d
-              ? `I've planned a ${d}-day itinerary for ${dest}. You can view it in the Itinerary tab. Want any adjustments?`
-              : `Your itinerary is ready. Check the Itinerary tab on the right. Want me to tweak anything?`
-            setMessages((prev) => ([
-              ...prev,
-              {
-                id: `plan-reply-${Date.now()}`,
-                role: "assistant",
-                content: summary,
-                createdAt: new Date().toISOString(),
-              } as any,
-            ]))
-            planningReplyInjectedRef.current = true
-          }
+          // Do NOT auto-inject an extra assistant confirmation here.
+          // We'll rely on the real assistant chat message to avoid out-of-order rendering.
         } else {
-          console.warn('[client] Received invalid itinerary data, ignoring:', data)
+          console.warn(
+            "[client] Received invalid itinerary data, ignoring:",
+            data,
+          );
         }
       } else if (evt.type === "search.results") {
         if (evt.data !== null && evt.data !== undefined) {
-          setSearchResults(evt.data)
+          setSearchResults(evt.data);
         }
       } else if (evt.type === "map.update") {
         // Do not clear or change map when planning is active unless we receive real data
         if (evt.data === null || evt.data === undefined) {
           if (planningActiveRef.current) {
-            console.log('[client] Skipping map clear due to active planning')
+            console.log("[client] Skipping map clear due to active planning");
           } else {
-            setMapData(undefined)
+            setMapData(undefined);
           }
         } else {
-          setMapData(evt.data)
+          setMapData(evt.data);
         }
       } else if (evt.type === "intent.detected") {
         // Set detected intent when server classifies user message
-        console.log('[client] Intent detected:', evt.data.intent, 'for message:', evt.data.message)
-        setDetectedIntent(evt.data.intent)
+        console.log(
+          "[client] Intent detected:",
+          evt.data.intent,
+          "for message:",
+          evt.data.message,
+        );
+        setDetectedIntent(evt.data.intent);
         // If planning intent is detected, immediately show planning animation
-        if (evt.data.intent === "PLAN_TRIP" && !planningActiveRef.current) {
-          console.log('[client] Immediately showing planning animation for PLAN_TRIP intent')
-          planningActiveRef.current = true
-          setIsPlanning(true)
-          setIsTyping(true)
-          setDetectedIntent("PLAN_TRIP")
-          if (planningTimeoutRef.current) window.clearTimeout(planningTimeoutRef.current)
+        if (evt.data.intent === "PLAN_TRIP") {
+          console.log(
+            "[client] PLAN_TRIP intent detected - starting planning animation",
+          );
+          planningActiveRef.current = true;
+          planningReplyInjectedRef.current = false;
+          setIsPlanning(true);
+          setIsTyping(true);
+          setDetectedIntent("PLAN_TRIP");
+
+          // Clear any existing timeout
+          if (planningTimeoutRef.current)
+            window.clearTimeout(planningTimeoutRef.current);
+
+          // Set timeout as safety fallback
           planningTimeoutRef.current = window.setTimeout(() => {
-            planningActiveRef.current = false
-            setIsPlanning(false)
-            setIsTyping(false)
-            setDetectedIntent(null)
-          }, 30000)
+            console.log("[client] Planning safety timeout - clearing states");
+            planningActiveRef.current = false;
+            setIsPlanning(false);
+            setIsTyping(false);
+            setDetectedIntent(null);
+          }, 60000); // Increased to 60 seconds for complex planning
         }
       } else if (evt.type === "planning.status") {
         // Handle planning status to show proper animation
-        const status = evt.data?.status || ''
-        console.log('[client] Planning status:', status)
+        const status = evt.data?.status || "";
+        console.log("[client] Planning status:", status);
         if (/(Creating|Analyzing|Finding|planning|itinerary)/i.test(status)) {
+          console.log("[client] Planning status active:", status);
           if (!planningActiveRef.current) {
-            planningActiveRef.current = true
-            setIsTyping(true)
-            setIsPlanning(true)
-            setDetectedIntent("PLAN_TRIP")
+            planningActiveRef.current = true;
+            setIsTyping(true);
+            setIsPlanning(true);
+            setDetectedIntent("PLAN_TRIP");
           }
-          if (planningTimeoutRef.current) window.clearTimeout(planningTimeoutRef.current)
+          // Refresh timeout on each status update
+          if (planningTimeoutRef.current)
+            window.clearTimeout(planningTimeoutRef.current);
           planningTimeoutRef.current = window.setTimeout(() => {
-            planningActiveRef.current = false
-            setIsTyping(false)
-            setIsPlanning(false)
-            setDetectedIntent(null)
-          }, 30000)
+            console.log("[client] Planning status timeout - clearing states");
+            planningActiveRef.current = false;
+            setIsTyping(false);
+            setIsPlanning(false);
+            setDetectedIntent(null);
+          }, 60000);
         } else if (/(completed|finished|done)/i.test(status)) {
-          planningActiveRef.current = false
-          if (planningTimeoutRef.current) {
-            window.clearTimeout(planningTimeoutRef.current)
-            planningTimeoutRef.current = null
-          }
-          setIsTyping(false)
-          setIsPlanning(false)
-          setDetectedIntent(null)
+          console.log("[client] Planning status completed:", status);
+          // Don't clear immediately - wait for itinerary.update event
+          // This ensures smooth transition from planning to itinerary display
         }
       }
-    }
+    };
 
     // Open connection and setup cleanup
     try {
       const ws = connectWs(sessionId, onEvent, {
         onOpen: () => {
-          reconnectAttemptsRef.current = 0
-          connectingRef.current = false
+          reconnectAttemptsRef.current = 0;
+          connectingRef.current = false;
         },
         onClose: () => {
-          hadDisconnectRef.current = true
+          hadDisconnectRef.current = true;
         },
         onError: () => {},
         onHealthCheck: (healthy) => {
           if (!healthy) {
-            try { (wsRef.current as any)?.closeWithCleanup?.() } catch {}
-            wsRef.current = null
+            try {
+              (wsRef.current as any)?.closeWithCleanup?.();
+            } catch {}
+            wsRef.current = null;
           }
         },
-      })
-      wsRef.current = ws
+      });
+      wsRef.current = ws;
     } catch (e) {
-      console.error('[client] Failed to open WebSocket', e)
+      console.error("[client] Failed to open WebSocket", e);
     }
 
     return () => {
       try {
-        const w = wsRef.current as any
-        if (w?.closeWithCleanup) w.closeWithCleanup()
-        else wsRef.current?.close()
+        const w = wsRef.current as any;
+        if (w?.closeWithCleanup) w.closeWithCleanup();
+        else wsRef.current?.close();
       } catch {}
-      wsRef.current = null
-    }
-  }, [sessionId])
+      wsRef.current = null;
+    };
+  }, [sessionId]);
 
   const handleToggleSave = async (poi: POI, nextSaved: boolean) => {
-    if (!sessionId) return
+    if (!sessionId) return;
     try {
-      await apiSavePoi(sessionId, poi.id, nextSaved)
+      await apiSavePoi(sessionId, poi.id, nextSaved);
       setSavedPoiIds((prev) => {
-        const next = new Set(prev)
-        if (nextSaved) next.add(poi.id)
-        else next.delete(poi.id)
-        return next
-      })
+        const next = new Set(prev);
+        if (nextSaved) next.add(poi.id);
+        else next.delete(poi.id);
+        return next;
+      });
     } catch (e: any) {
-      toast({ 
-        title: "Failed to update saved", 
-        description: e?.message || "Please try again.", 
-        variant: "destructive"
-      })
+      toast({
+        title: "Failed to update saved",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      });
     }
-  }
-
+  };
 
   const handleAddPoi = async (poi: POI) => {
     // Just populate the input box, don't auto-send
-    const loc = poi.address ? ` at ${poi.address}` : ""
-    const coord = poi.lat && poi.lng ? ` (coords: ${poi.lat}, ${poi.lng})` : ""
-    const msg = `Please add ${poi.name}${loc}${coord} to my itinerary in an appropriate slot. If needed, adjust nearby activities accordingly.`
-    setInputMessage(msg)
-    setActiveLeftView("chat")
-  }
+    const loc = poi.address ? ` at ${poi.address}` : "";
+    const coord = poi.lat && poi.lng ? ` (coords: ${poi.lat}, ${poi.lng})` : "";
+    const msg = `Please add ${poi.name}${loc}${coord} to my itinerary in an appropriate slot. If needed, adjust nearby activities accordingly.`;
+    setInputMessage(msg);
+    setActiveLeftView("chat");
+  };
 
   const handlePopulateInput = (text: string) => {
-    setInputMessage(text)
-    setActiveLeftView("chat")
-  }
+    setInputMessage(text);
+    setActiveLeftView("chat");
+  };
 
   const handleReplan = async (poi?: POI) => {
-    const base = `Replan the itinerary optimizing for travel time and experience. Keep origin ${trip.origin || ""} and destination ${trip.destination || ""} for ${trip.days || "?"} days.`
-    const withPoi = poi ? ` Consider including ${poi.name} (${poi.address || ""}).` : ""
-    await handleSendMessage(base + withPoi)
-    setActiveLeftView("chat")
-    setActiveRightView("itinerary")
-  }
+    const base = `Replan the itinerary optimizing for travel time and experience. Keep origin ${trip.origin || ""} and destination ${trip.destination || ""} for ${trip.days || "?"} days.`;
+    const withPoi = poi
+      ? ` Consider including ${poi.name} (${poi.address || ""}).`
+      : "";
+    await handleSendMessage(base + withPoi);
+    setActiveLeftView("chat");
+    setActiveRightView("itinerary");
+  };
 
   // Send a chat message via HTTP (server will emit WS updates)
   const handleSendMessage = async (content?: string) => {
-    const text = (content ?? inputMessage).trim()
-    if (!text) return
+    const text = (content ?? inputMessage).trim();
+    if (!text) return;
     if (!sessionId) {
-      toast({ title: "No session", description: "Please wait for session to initialize.", variant: "destructive" })
-      return
+      toast({
+        title: "No session",
+        description: "Please wait for session to initialize.",
+        variant: "destructive",
+      });
+      return;
     }
 
     // Optimistically add user message
@@ -666,50 +947,64 @@ export default function ChatPage() {
       content: text,
       createdAt: new Date().toISOString(),
       fromDashboard: false as any,
-    }
-    setMessages((prev) => [...prev, local])
-    lastUserSentRef.current = { content: text, at: Date.now() }
-    setIsTyping(true)
-    setDetectedIntent(null)
-    planningActiveRef.current = false
-    setIsPlanning(false)
-    setInputMessage("")
+    };
+    setMessages((prev) => [...prev, local]);
+    lastUserSentRef.current = { content: text, at: Date.now() };
+    setIsTyping(true);
+    setDetectedIntent(null);
+    planningActiveRef.current = false;
+    setIsPlanning(false);
+    setInputMessage("");
 
     try {
-      await sendChat({ sessionId, inviteId, message: text })
+      await sendChat({ sessionId, inviteId, message: text });
     } catch (e: any) {
-      setIsTyping(false)
-      toast({ title: "Failed to send", description: e?.message || "Please try again.", variant: "destructive" })
+      setIsTyping(false);
+      toast({
+        title: "Failed to send",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      });
     }
-  }
+  };
 
   // Save trip handler (frontend acknowledgement; backend generally auto-saves updates)
   const handleSaveTrip = () => {
-    toast({ title: "Trip saved", description: "Your changes are saved.", variant: "default" })
-  }
+    toast({
+      title: "Trip saved",
+      description: "Your changes are saved.",
+      variant: "default",
+    });
+  };
 
   // Open delete confirmation dialog
   const handleDeleteTrip = () => {
-    setShowDeleteDialog(true)
-  }
+    setShowDeleteDialog(true);
+  };
 
   // Confirm delete and navigate away
   const confirmDeleteTrip = async () => {
-    if (!sessionId) return
-    setIsDeleting(true)
+    if (!sessionId) return;
+    setIsDeleting(true);
     try {
-      await apiDeleteTrip(sessionId)
-      setShowDeleteDialog(false)
-      toast({ title: "Trip deleted" })
+      await apiDeleteTrip(sessionId);
+      setShowDeleteDialog(false);
+      toast({ title: "Trip deleted" });
       // Navigate to dashboard
-      try { await supabase.auth.getSession() } catch {}
-      window.location.replace("/dashboard")
+      try {
+        await supabase.auth.getSession();
+      } catch {}
+      window.location.replace("/dashboard");
     } catch (e: any) {
-      toast({ title: "Failed to delete", description: e?.message || "Please try again.", variant: "destructive" })
+      toast({
+        title: "Failed to delete",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      });
     } finally {
-      setIsDeleting(false)
+      setIsDeleting(false);
     }
-  }
+  };
 
   if (!authChecked) {
     return (
@@ -723,32 +1018,42 @@ export default function ChatPage() {
             </div>
             <div className="absolute inset-0 w-16 h-16 bg-black rounded-full mx-auto opacity-20 animate-ping"></div>
           </div>
-          
+
           {/* Roameo Text */}
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            roameo
-          </h2>
-          <p className="text-gray-600 mb-4">Initializing your travel companion...</p>
-          
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">roameo</h2>
+          <p className="text-gray-600 mb-4">
+            Initializing your travel companion...
+          </p>
+
           {/* Loading dots */}
           <div className="flex justify-center items-center space-x-1">
             <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+            <div
+              className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
+              style={{ animationDelay: "0.1s" }}
+            ></div>
+            <div
+              className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
+              style={{ animationDelay: "0.2s" }}
+            ></div>
           </div>
         </div>
-        
+
         <style jsx>{`
           @keyframes sweep {
-            0% { transform: translateX(-100%); }
-            100% { transform: translateX(100%); }
+            0% {
+              transform: translateX(-100%);
+            }
+            100% {
+              transform: translateX(100%);
+            }
           }
           .animate-sweep {
             animation: sweep 2s ease-in-out infinite;
           }
         `}</style>
       </div>
-    )
+    );
   }
 
   return (
@@ -765,31 +1070,41 @@ export default function ChatPage() {
         }}
         onReplan={() => handleReplan()}
         onPopulateInput={handlePopulateInput}
-        inviteLink={inviteId ? `${typeof window !== "undefined" ? window.location.origin : ""}/chat?inviteId=${inviteId}` : undefined}
+        inviteLink={
+          inviteId
+            ? `${typeof window !== "undefined" ? window.location.origin : ""}/chat?inviteId=${inviteId}`
+            : undefined
+        }
         showBottomBorder={true}
         onTripUpdate={async (t) => {
-          const daysMatch = /\d+/.exec(t.duration || "")
-          const travelersMatch = /\d+/.exec(t.travelers || "")
+          const daysMatch = /\d+/.exec(t.duration || "");
+          const travelersMatch = /\d+/.exec(t.travelers || "");
           const nextTrip = (prev: TripContext) => ({
             ...prev,
             title: t.title,
             origin: t.origin,
             destination: t.destination,
             days: daysMatch ? parseInt(daysMatch[0], 10) : prev.days,
-            travelers: travelersMatch ? parseInt(travelersMatch[0], 10) : prev.travelers,
+            travelers: travelersMatch
+              ? parseInt(travelersMatch[0], 10)
+              : prev.travelers,
             budget: t.budget,
-          })
-          setTrip(nextTrip)
+          });
+          setTrip(nextTrip);
           if (sessionId) {
             const patch: Partial<TripContext> = {
               title: t.title,
               origin: t.origin,
               destination: t.destination,
               days: daysMatch ? parseInt(daysMatch[0], 10) : undefined,
-              travelers: travelersMatch ? parseInt(travelersMatch[0], 10) : undefined,
+              travelers: travelersMatch
+                ? parseInt(travelersMatch[0], 10)
+                : undefined,
               budget: t.budget,
-            }
-            try { await tripUpdate(sessionId, patch) } catch {}
+            };
+            try {
+              await tripUpdate(sessionId, patch);
+            } catch {}
           }
         }}
         onInvite={() => {}}
@@ -800,21 +1115,26 @@ export default function ChatPage() {
         isDeleting={isDeleting}
         onSignOut={async () => {
           try {
-            await supabase.auth.signOut()
+            await supabase.auth.signOut();
           } catch (e) {
             // ignore
           } finally {
-            window.location.replace("/auth/login")
+            window.location.replace("/auth/login");
           }
         }}
       />
 
       <div className="flex-1 flex overflow-hidden">
         {/* Left Panel - Chat/Search */}
-        <div className={`${isRightPanelVisible ? "w-1/2" : "w-full"} relative h-full border-r border-gray-200 transition-all duration-500 ease-in-out`}>
+        <div
+          className={`${isRightPanelVisible ? "w-1/2" : "w-full"} relative h-full border-r border-gray-200 transition-all duration-500 ease-in-out`}
+        >
           <div className="h-full flex flex-col">
             {isRightPanelVisible ? (
-              <LeftPanelTabs activeView={activeLeftView} onViewChange={setActiveLeftView} />
+              <LeftPanelTabs
+                activeView={activeLeftView}
+                onViewChange={setActiveLeftView}
+              />
             ) : (
               <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 bg-white/95 backdrop-blur-md rounded-full p-1 border border-white/30 shadow-xl transition-all duration-300">
                 <Button
@@ -861,8 +1181,8 @@ export default function ChatPage() {
                   size="sm"
                   className="rounded-full px-4 hover:bg-white/80 backdrop-blur-sm"
                   onClick={() => {
-                    setActiveRightView("map")
-                    setIsRightPanelVisible(true)
+                    setActiveRightView("map");
+                    setIsRightPanelVisible(true);
                   }}
                 >
                   <MapIcon className="w-4 h-4 mr-1" />
@@ -873,8 +1193,8 @@ export default function ChatPage() {
                   size="sm"
                   className="rounded-full px-4 hover:bg-white/80 backdrop-blur-sm"
                   onClick={() => {
-                    setActiveRightView("itinerary")
-                    setIsRightPanelVisible(true)
+                    setActiveRightView("itinerary");
+                    setIsRightPanelVisible(true);
                   }}
                 >
                   <Calendar className="w-4 h-4 mr-1" />
@@ -935,7 +1255,9 @@ export default function ChatPage() {
         </div>
 
         {/* Right Panel - Map/Itinerary */}
-        <div className={`${isRightPanelVisible ? "w-1/2" : "w-0"} h-full transition-all duration-500 ease-in-out overflow-hidden`}>
+        <div
+          className={`${isRightPanelVisible ? "w-1/2" : "w-0"} h-full transition-all duration-500 ease-in-out overflow-hidden`}
+        >
           <RightPanel
             activeView={activeRightView}
             onViewChange={setActiveRightView}
@@ -959,7 +1281,7 @@ export default function ChatPage() {
           />
         </div>
       </div>
-      
+
       {/* Delete Trip Confirmation Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent className="sm:max-w-[400px] p-0 bg-white rounded-2xl border-0 shadow-2xl">
@@ -969,34 +1291,46 @@ export default function ChatPage() {
             className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors z-10"
             disabled={isDeleting}
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <line x1="18" y1="6" x2="6" y2="18"></line>
               <line x1="6" y1="6" x2="18" y2="18"></line>
             </svg>
           </button>
-          
+
           <div className="p-8 text-center">
             {/* Warning Icon */}
             <div className="mx-auto mb-6 w-20 h-20 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center relative overflow-hidden">
               {/* Diagonal stripes pattern */}
               <div className="absolute inset-0 bg-black opacity-20">
-                <div className="absolute inset-0" style={{
-                  backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 3px, black 3px, black 6px)',
-                  opacity: 0.8
-                }}></div>
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    backgroundImage:
+                      "repeating-linear-gradient(45deg, transparent, transparent 3px, black 3px, black 6px)",
+                    opacity: 0.8,
+                  }}
+                ></div>
               </div>
             </div>
-            
+
             {/* Title */}
             <h2 className="text-xl font-bold text-gray-900 mb-3">
               Are you sure you want to delete?
             </h2>
-            
+
             {/* Description */}
             <p className="text-gray-600 text-sm mb-6 leading-relaxed">
-              Click on Agree if you like to delete this trip permanently. If not click on cancel!
+              Click on Agree if you like to delete this trip permanently. If not
+              click on cancel!
             </p>
-            
+
             {/* Warning Banner */}
             <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-6 flex items-center gap-2">
               <div className="w-5 h-5 rounded-full bg-orange-400 flex items-center justify-center flex-shrink-0">
@@ -1006,7 +1340,7 @@ export default function ChatPage() {
                 You can't revert back if once deleted!
               </span>
             </div>
-            
+
             {/* Action Buttons */}
             <div className="space-y-3">
               <button
@@ -1020,10 +1354,10 @@ export default function ChatPage() {
                     Deleting...
                   </>
                 ) : (
-                  'Agree'
+                  "Agree"
                 )}
               </button>
-              
+
               <button
                 onClick={() => setShowDeleteDialog(false)}
                 disabled={isDeleting}
@@ -1036,5 +1370,5 @@ export default function ChatPage() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
-  )
+  );
 }

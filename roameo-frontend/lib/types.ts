@@ -8,10 +8,12 @@ export interface TripContext {
   title?: string
   origin?: string
   destination?: string
+  destinations?: string[]
   days?: number
   travelers?: number
   budget?: string
   destinationImageUrl?: string // Add destination image URL
+  itinerarySegments?: Array<{ destination: string; startDay: number; endDay: number }>
 }
 
 export interface ChatMessage {

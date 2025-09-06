@@ -3,12 +3,31 @@ import type { SessionRecord } from "./types.js";
 
 export class SupabaseDb {
   private client: SupabaseClient;
+  private static clientPool: Map<string, SupabaseClient> = new Map();
 
   constructor(url: string, serviceKey: string) {
-    this.client = createClient(url, serviceKey, { auth: { persistSession: false } });
+    // Use connection pooling to reuse clients
+    const poolKey = `${url}:${serviceKey}`;
+    if (SupabaseDb.clientPool.has(poolKey)) {
+      this.client = SupabaseDb.clientPool.get(poolKey)!;
+    } else {
+      this.client = createClient(url, serviceKey, {
+        auth: { persistSession: false },
+        db: { schema: "public" },
+        global: {
+          headers: {
+            "x-client-info": "roameo-backend",
+          },
+        },
+      });
+      SupabaseDb.clientPool.set(poolKey, this.client);
+    }
   }
 
-  async upsertSession(sessionId: string, data: Partial<SessionRecord>): Promise<SessionRecord> {
+  async upsertSession(
+    sessionId: string,
+    data: Partial<SessionRecord>,
+  ): Promise<SessionRecord> {
     // Ensure base row exists
     const base: any = { session_id: sessionId };
     if (data.inviteId !== undefined) base.invite_id = data.inviteId;
@@ -29,14 +48,21 @@ export class SupabaseDb {
         content: m.content,
         created_at: m.createdAt,
       }));
-      const { error: merr } = await this.client.from("messages").upsert(rows, { onConflict: "id" });
+      const { error: merr } = await this.client
+        .from("messages")
+        .upsert(rows, { onConflict: "id" });
       if (merr) throw merr;
     }
 
     // Merge saved POIs if provided
     if (data.savedPoiIds && data.savedPoiIds.size) {
-      const inserts = Array.from(data.savedPoiIds).map((poiId) => ({ session_id: sessionId, poi_id: poiId }));
-      const { error: perr } = await this.client.from("saved_pois").upsert(inserts, { onConflict: "session_id,poi_id" });
+      const inserts = Array.from(data.savedPoiIds).map((poiId) => ({
+        session_id: sessionId,
+        poi_id: poiId,
+      }));
+      const { error: perr } = await this.client
+        .from("saved_pois")
+        .upsert(inserts, { onConflict: "session_id,poi_id" });
       if (perr) throw perr;
     }
 
@@ -70,12 +96,20 @@ export class SupabaseDb {
       inviteId: srow.invite_id ?? undefined,
       trip: (srow.trip as any) || {},
       userId: srow.user_id ?? undefined,
-      messages: (mrows || []).map((m) => ({ id: m.id, role: m.role as any, content: m.content, createdAt: new Date(m.created_at!).toISOString() })),
+      messages: (mrows || []).map((m) => ({
+        id: m.id,
+        role: m.role as any,
+        content: m.content,
+        createdAt: new Date(m.created_at!).toISOString(),
+      })),
       savedPoiIds: new Set((prow || []).map((p) => p.poi_id)),
     };
   }
 
-  async appendMessage(sessionId: string, msg: SessionRecord["messages"][number]): Promise<void> {
+  async appendMessage(
+    sessionId: string,
+    msg: SessionRecord["messages"][number],
+  ): Promise<void> {
     const { error } = await this.client.from("messages").insert({
       id: msg.id,
       session_id: sessionId,
@@ -86,35 +120,58 @@ export class SupabaseDb {
     if (error) throw error;
   }
 
-  async patchTrip(sessionId: string, patch: Record<string, any>): Promise<void> {
+  async patchTrip(
+    sessionId: string,
+    patch: Record<string, any>,
+  ): Promise<void> {
     const current = (await this.getSession(sessionId))?.trip || {};
     const merged = { ...current, ...patch };
-    const { error } = await this.client.from("chat_sessions").upsert({ session_id: sessionId, trip: merged });
+    const { error } = await this.client
+      .from("chat_sessions")
+      .upsert({ session_id: sessionId, trip: merged });
     if (error) throw error;
   }
 
   async setInvite(sessionId: string, inviteId: string): Promise<void> {
-    const { error } = await this.client.from("chat_sessions").upsert({ session_id: sessionId, invite_id: inviteId });
+    const { error } = await this.client
+      .from("chat_sessions")
+      .upsert({ session_id: sessionId, invite_id: inviteId });
     if (error) throw error;
   }
 
-  async setPoiSaved(sessionId: string, poiId: string, saved: boolean): Promise<void> {
+  async setPoiSaved(
+    sessionId: string,
+    poiId: string,
+    saved: boolean,
+  ): Promise<void> {
     if (saved) {
-      const { error } = await this.client.from("saved_pois").upsert({ session_id: sessionId, poi_id: poiId });
+      const { error } = await this.client
+        .from("saved_pois")
+        .upsert({ session_id: sessionId, poi_id: poiId });
       if (error) throw error;
     } else {
-      const { error } = await this.client.from("saved_pois").delete().eq("session_id", sessionId).eq("poi_id", poiId);
+      const { error } = await this.client
+        .from("saved_pois")
+        .delete()
+        .eq("session_id", sessionId)
+        .eq("poi_id", poiId);
       if (error) throw error;
     }
   }
 
   async clearMessages(sessionId: string): Promise<void> {
-    const { error } = await this.client.from("messages").delete().eq("session_id", sessionId);
+    const { error } = await this.client
+      .from("messages")
+      .delete()
+      .eq("session_id", sessionId);
     if (error) throw error;
   }
 
   async deleteSession(sessionId: string): Promise<void> {
-    const { error } = await this.client.from("chat_sessions").delete().eq("session_id", sessionId);
+    const { error } = await this.client
+      .from("chat_sessions")
+      .delete()
+      .eq("session_id", sessionId);
     if (error) throw error;
   }
 
@@ -122,7 +179,8 @@ export class SupabaseDb {
     const { data: sessions, error } = await this.client
       .from("chat_sessions")
       .select("session_id, invite_id, trip, user_id, updated_at")
-      .order("updated_at", { ascending: false });
+      .order("updated_at", { ascending: false })
+      .limit(100); // Reasonable limit
     if (error) throw error;
 
     const results: SessionRecord[] = [];
@@ -131,5 +189,36 @@ export class SupabaseDb {
       if (sess) results.push(sess);
     }
     return results;
+  }
+
+  // Optimized method for fetching user trips without loading all session data
+  async getUserTrips(
+    userId: string,
+    limit: number = 50,
+  ): Promise<
+    Array<{
+      sessionId: string;
+      inviteId?: string;
+      trip: any;
+      createdAt: string;
+      updatedAt: string;
+    }>
+  > {
+    const { data: sessions, error } = await this.client
+      .from("chat_sessions")
+      .select("session_id, invite_id, trip, created_at, updated_at")
+      .eq("user_id", userId)
+      .order("updated_at", { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+
+    return (sessions || []).map((s) => ({
+      sessionId: s.session_id,
+      inviteId: s.invite_id ?? undefined,
+      trip: (s.trip as any) || {},
+      createdAt: s.created_at,
+      updatedAt: s.updated_at,
+    }));
   }
 }

@@ -43,6 +43,7 @@ export function ItineraryPanel({
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null)
   const [expandedPoiCards, setExpandedPoiCards] = useState<Set<string>>(new Set())
   const [activeCard, setActiveCard] = useState<Activity | null>(null)
+  const [activeSegmentIdx, setActiveSegmentIdx] = useState<number | null>(null)
   const ref = useRef<HTMLDivElement>(null)
   const id = useId()
 
@@ -64,6 +65,30 @@ export function ItineraryPanel({
   }, [activeCard])
 
   useOutsideClick(ref, () => setActiveCard(null))
+
+  // Derive segments for multi-destination trips from trip.itinerarySegments
+  const segments: Array<{ destination: string; startDay: number; endDay: number }> = useMemo(() => {
+    return Array.isArray(trip?.itinerarySegments) ? trip.itinerarySegments : []
+  }, [trip?.itinerarySegments])
+
+  // Ensure active segment stays valid when segments update
+  useEffect(() => {
+    if (!segments.length) {
+      setActiveSegmentIdx(null)
+      return
+    }
+    if (activeSegmentIdx === null || activeSegmentIdx >= segments.length) {
+      setActiveSegmentIdx(0)
+    }
+  }, [segments, activeSegmentIdx])
+
+  // Compute visible days based on active segment selection
+  const visibleDays = useMemo(() => {
+    const allDays = itinerary?.daysPlan || []
+    if (!segments.length || activeSegmentIdx === null) return allDays
+    const seg = segments[activeSegmentIdx]
+    return allDays.filter(d => typeof d?.day === 'number' && d.day >= seg.startDay && d.day <= seg.endDay)
+  }, [itinerary?.daysPlan, segments, activeSegmentIdx])
 
   // Memoized function to convert activity to POI
   const activityToPoi = useCallback((activity: Activity): POI => {
@@ -269,15 +294,45 @@ export function ItineraryPanel({
 
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto">
+        {/* Destination Tabs for multi-destination trips */}
+        {segments.length > 0 && (
+          <div className="sticky top-[64px] z-10 bg-white px-4 py-2 border-b border-gray-100">
+            <div className="flex flex-wrap gap-2">
+              {segments.map((seg, idx) => {
+                const active = idx === activeSegmentIdx
+                return (
+                  <button
+                    key={`${seg.destination}-${seg.startDay}-${seg.endDay}`}
+                    onClick={() => setActiveSegmentIdx(idx)}
+                    className={`px-3 py-1 rounded-full text-sm border transition-colors ${active ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'}`}
+                    title={`${seg.destination}: Days ${seg.startDay}-${seg.endDay}`}
+                  >
+                    {seg.destination}
+                    <span className={`ml-2 text-xs ${active ? 'text-blue-100' : 'text-gray-500'}`}>D{seg.startDay}–D{seg.endDay}</span>
+                  </button>
+                )
+              })}
+              {/* All tab */}
+              <button
+                onClick={() => setActiveSegmentIdx(null)}
+                className={`px-3 py-1 rounded-full text-sm border transition-colors ${activeSegmentIdx === null ? 'bg-zinc-800 text-white border-zinc-800' : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'}`}
+                title="Show all days"
+              >
+                All Days
+              </button>
+            </div>
+          </div>
+        )}
+
         {!itinerary && (
           <div className="text-sm text-gray-500 p-4">No itinerary yet. Tell Roameo your origin, destination and days.</div>
         )}
 
-        {itinerary?.daysPlan && itinerary.daysPlan.length > 0 && itinerary.daysPlan.map((day, dayIndex) => {
+        {visibleDays && visibleDays.length > 0 && visibleDays.map((day, dayIndex) => {
           if (!day || typeof day.day !== 'number') return null;
           
           return (
-            <div key={day.day} className="relative">
+            <div key={`${day.day}-${day.title || ''}`} className="relative">
               <div className="flex items-center gap-3 p-3 bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-sm sticky top-0 z-10">
                 <span className="text-sm font-bold bg-zinc-800 text-white rounded-full w-8 h-8 flex items-center justify-center flex-shrink-0">{day.day}</span>
                 <h4 className="font-semibold text-md italic">{day.title || `Day ${day.day}`}</h4>

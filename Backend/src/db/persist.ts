@@ -7,9 +7,9 @@ const SUPABASE_CONFIG = {
   auth: { persistSession: false },
   global: {
     headers: {
-      'x-application-name': 'roameo-backend'
-    }
-  }
+      "x-application-name": "roameo-backend",
+    },
+  },
 } as const;
 
 export class WriteThroughDb implements Db {
@@ -29,14 +29,16 @@ export class WriteThroughDb implements Db {
   // Health monitoring for database connection
   private setupHealthMonitoring(): void {
     if (!this.client) return;
-    
+
     setInterval(async () => {
       try {
-        const { error } = await this.client!.from('chat_sessions').select('session_id').limit(1);
+        const { error } = await this.client!.from("chat_sessions")
+          .select("session_id")
+          .limit(1);
         this.connectionHealth = !error;
         this.lastHealthCheck = Date.now();
       } catch (e) {
-        console.warn('[persist] Database health check failed:', e);
+        console.warn("[persist] Database health check failed:", e);
         this.connectionHealth = false;
       }
     }, this.HEALTH_CHECK_INTERVAL);
@@ -44,97 +46,105 @@ export class WriteThroughDb implements Db {
 
   private isConnectionHealthy(): boolean {
     const timeSinceLastCheck = Date.now() - this.lastHealthCheck;
-    return this.connectionHealth && timeSinceLastCheck < this.HEALTH_CHECK_INTERVAL * 2;
+    return (
+      this.connectionHealth &&
+      timeSinceLastCheck < this.HEALTH_CHECK_INTERVAL * 2
+    );
   }
 
   // Optimized one-time hydrate from Supabase -> memory with batch processing
   async hydrateFromRemote(): Promise<void> {
     if (!this.client) {
-      console.warn('[persist] No Supabase client available, skipping hydration');
+      console.warn(
+        "[persist] No Supabase client available, skipping hydration",
+      );
       return;
     }
-    
+
     // For startup hydration, don't require health check - just try to connect
     console.log("[persist] Starting optimized hydration from Supabase...");
-    
+
     try {
       // Test connection first with a simple query
       const { error: testError } = await this.client
-        .from('chat_sessions')
-        .select('session_id')
+        .from("chat_sessions")
+        .select("session_id")
         .limit(1);
-        
+
       if (testError) {
-        console.warn('[persist] Database connection test failed:', testError);
-        console.warn('[persist] Skipping hydration due to connection issues');
+        console.warn("[persist] Database connection test failed:", testError);
+        console.warn("[persist] Skipping hydration due to connection issues");
         return;
       }
-      
+
       // Mark connection as healthy since the test succeeded
       this.connectionHealth = true;
       this.lastHealthCheck = Date.now();
-      
+
       // Use a custom query to get all sessions with recent messages for hydration
-      // Since get_session_with_recent_messages requires a specific session_id, 
+      // Since get_session_with_recent_messages requires a specific session_id,
       // we'll use a different approach for bulk hydration
       const { data: sessions, error: sessionsError } = await this.client
-        .from('chat_sessions')
-        .select('session_id, invite_id, trip, created_at, updated_at');
-        
+        .from("chat_sessions")
+        .select("session_id, invite_id, trip, created_at, updated_at");
+
       if (sessionsError) {
         console.error("[persist] Failed to fetch sessions:", sessionsError);
         return this.hydrateFromRemoteClassic();
       }
-      
+
       if (!sessions || sessions.length === 0) {
         console.log("[persist] No sessions found");
         return;
       }
-      
+
       // Get recent messages for all sessions in batches
-      const sessionIds = sessions.map(s => s.session_id);
+      const sessionIds = sessions.map((s) => s.session_id);
       const { data: allMessages, error: messagesError } = await this.client
-        .from('messages')
-        .select('id, role, content, created_at, session_id')
-        .in('session_id', sessionIds)
-        .order('created_at', { ascending: false })
+        .from("messages")
+        .select("id, role, content, created_at, session_id")
+        .in("session_id", sessionIds)
+        .order("created_at", { ascending: false })
         .limit(100 * sessions.length); // Reasonable limit per session
-        
+
       if (messagesError) {
         console.error("[persist] Failed to fetch messages:", messagesError);
         return this.hydrateFromRemoteClassic();
       }
-      
+
       // Group messages by session and limit to recent messages
       const messagesBySession = new Map<string, any[]>();
-      (allMessages || []).forEach(msg => {
+      (allMessages || []).forEach((msg) => {
         if (!messagesBySession.has(msg.session_id)) {
           messagesBySession.set(msg.session_id, []);
         }
         const sessionMessages = messagesBySession.get(msg.session_id)!;
-        if (sessionMessages.length < 100) { // Limit per session
+        if (sessionMessages.length < 100) {
+          // Limit per session
           sessionMessages.push(msg);
         }
       });
-      
+
       // Reverse messages to get chronological order for each session
-      messagesBySession.forEach(messages => {
+      messagesBySession.forEach((messages) => {
         messages.reverse();
       });
-      
-      const sessionsWithMessages = sessions.map(session => ({
+
+      const sessionsWithMessages = sessions.map((session) => ({
         ...session,
-        messages: messagesBySession.get(session.session_id) || []
+        messages: messagesBySession.get(session.session_id) || [],
       }));
-      
-      console.log(`[persist] Found ${sessionsWithMessages?.length || 0} sessions`);
-      
+
+      console.log(
+        `[persist] Found ${sessionsWithMessages?.length || 0} sessions`,
+      );
+
       // Batch fetch all saved POIs for all sessions
       const { data: allSavedPois } = await this.client
         .from("saved_pois")
         .select("session_id, poi_id")
-        .in('session_id', sessionIds);
-      
+        .in("session_id", sessionIds);
+
       // Group saved POIs by session
       const savedPoisBySession = new Map<string, string[]>();
       (allSavedPois || []).forEach((poi: any) => {
@@ -143,14 +153,18 @@ export class WriteThroughDb implements Db {
         }
         savedPoisBySession.get(poi.session_id)!.push(poi.poi_id);
       });
-      
+
       // Process each session
       for (const session of sessionsWithMessages || []) {
-        const messages = Array.isArray(session.messages) ? session.messages : [];
+        const messages = Array.isArray(session.messages)
+          ? session.messages
+          : [];
         const savedPoiIds = savedPoisBySession.get(session.session_id) || [];
-        
-        console.log(`[persist] Session ${session.session_id}: ${messages.length} messages, ${savedPoiIds.length} saved POIs`);
-        
+
+        console.log(
+          `[persist] Session ${session.session_id}: ${messages.length} messages, ${savedPoiIds.length} saved POIs`,
+        );
+
         this.mem.upsertSession(session.session_id, {
           inviteId: session.invite_id ?? undefined,
           trip: session.trip || {},
@@ -158,20 +172,20 @@ export class WriteThroughDb implements Db {
             id: m.id,
             role: m.role,
             content: m.content,
-            createdAt: m.createdAt || new Date().toISOString()
+            createdAt: m.createdAt || new Date().toISOString(),
           })),
           savedPoiIds: new Set(savedPoiIds),
         });
       }
-      
+
       console.log("[persist] Optimized hydration complete");
     } catch (error) {
-      console.error('[persist] Error during optimized hydration:', error);
+      console.error("[persist] Error during optimized hydration:", error);
       // Fallback to classic method
       return this.hydrateFromRemoteClassic();
     }
   }
-  
+
   // Fallback classic hydration method
   private async hydrateFromRemoteClassic(): Promise<void> {
     if (!this.client) return;
@@ -191,25 +205,38 @@ export class WriteThroughDb implements Db {
         .eq("session_id", s.session_id)
         .order("created_at", { ascending: true });
       if (msgError) {
-        console.error(`[persist] Failed to fetch messages for session ${s.session_id}:`, msgError);
+        console.error(
+          `[persist] Failed to fetch messages for session ${s.session_id}:`,
+          msgError,
+        );
         continue;
       }
       const { data: saved } = await this.client
         .from("saved_pois")
         .select("poi_id")
         .eq("session_id", s.session_id);
-      console.log(`[persist] Session ${s.session_id}: ${messages?.length || 0} messages, ${saved?.length || 0} saved POIs`);
+      console.log(
+        `[persist] Session ${s.session_id}: ${messages?.length || 0} messages, ${saved?.length || 0} saved POIs`,
+      );
       this.mem.upsertSession(s.session_id, {
         inviteId: s.invite_id ?? undefined,
         trip: (s.trip as any) || {},
-        messages: (messages || []).map((m: any) => ({ id: m.id, role: m.role, content: m.content, createdAt: new Date(m.created_at).toISOString() })),
+        messages: (messages || []).map((m: any) => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          createdAt: new Date(m.created_at).toISOString(),
+        })),
         savedPoiIds: new Set((saved || []).map((r: any) => r.poi_id)),
       });
     }
     console.log("[persist] Hydration complete");
   }
 
-  upsertSession(sessionId: string, data: Partial<SessionRecord>): SessionRecord {
+  upsertSession(
+    sessionId: string,
+    data: Partial<SessionRecord>,
+  ): SessionRecord {
     const rec = this.mem.upsertSession(sessionId, data);
     this.flushUpsert(sessionId, data).catch(() => {});
     return rec;
@@ -222,19 +249,23 @@ export class WriteThroughDb implements Db {
   // Performance monitoring helper
   private async withPerformanceMonitoring<T>(
     operation: string,
-    fn: () => Promise<T>
+    fn: () => Promise<T>,
   ): Promise<T> {
     const start = Date.now();
     try {
       const result = await fn();
       const duration = Date.now() - start;
-      if (duration > 1000) { // Log slow queries
+      if (duration > 1000) {
+        // Log slow queries
         console.warn(`[persist] Slow ${operation}: ${duration}ms`);
       }
       return result;
     } catch (error) {
       const duration = Date.now() - start;
-      console.error(`[persist] Failed ${operation} after ${duration}ms:`, error);
+      console.error(
+        `[persist] Failed ${operation} after ${duration}ms:`,
+        error,
+      );
       throw error;
     }
   }
@@ -242,33 +273,36 @@ export class WriteThroughDb implements Db {
   // Optimized message append with batching capability
   private messageQueue = new Map<string, SessionRecord["messages"][number][]>();
   private flushTimeout: NodeJS.Timeout | null = null;
-  
-  appendMessage(sessionId: string, msg: SessionRecord["messages"][number]): void {
+
+  appendMessage(
+    sessionId: string,
+    msg: SessionRecord["messages"][number],
+  ): void {
     this.mem.appendMessage(sessionId, msg);
-    
+
     // Add to queue for batch processing
     if (!this.messageQueue.has(sessionId)) {
       this.messageQueue.set(sessionId, []);
     }
     this.messageQueue.get(sessionId)!.push(msg);
-    
+
     // Batch flush messages for better performance
     if (this.flushTimeout) {
       clearTimeout(this.flushTimeout);
     }
-    
+
     this.flushTimeout = setTimeout(() => {
       this.flushQueuedMessages().catch((e) => {
         console.error(`[persist] Failed to flush queued messages:`, e);
       });
     }, 100); // 100ms batching window
   }
-  
+
   private async flushQueuedMessages(): Promise<void> {
     if (!this.client || this.messageQueue.size === 0) return;
-    
+
     const allMessages: any[] = [];
-    
+
     for (const [sessionId, messages] of this.messageQueue.entries()) {
       const session = this.mem.getSession(sessionId);
       for (const msg of messages) {
@@ -278,20 +312,26 @@ export class WriteThroughDb implements Db {
           role: msg.role,
           content: msg.content,
           created_at: msg.createdAt,
-          user_id: session?.userId || '00000000-0000-0000-0000-000000000000'
+          user_id: session?.userId || "00000000-0000-0000-0000-000000000000",
         });
       }
     }
-    
+
     if (allMessages.length > 0) {
-      await this.withPerformanceMonitoring('batch-insert-messages', async () => {
-        const { error } = await this.client!.from("messages").upsert(allMessages, { onConflict: "id" });
-        if (error) throw error;
-      });
-      
+      await this.withPerformanceMonitoring(
+        "batch-insert-messages",
+        async () => {
+          const { error } = await this.client!.from("messages").upsert(
+            allMessages,
+            { onConflict: "id" },
+          );
+          if (error) throw error;
+        },
+      );
+
       console.log(`[persist] Batch flushed ${allMessages.length} messages`);
     }
-    
+
     this.messageQueue.clear();
   }
 
@@ -299,9 +339,14 @@ export class WriteThroughDb implements Db {
     this.mem.patchTrip(sessionId, patch);
     // For critical data like itinerary, ensure immediate persistence
     if (patch.itinerary) {
-      console.log(`[persist] Immediate flush for itinerary update on session ${sessionId}`);
+      console.log(
+        `[persist] Immediate flush for itinerary update on session ${sessionId}`,
+      );
       this.flushPatchTrip(sessionId, patch).catch((error) => {
-        console.error(`[persist] CRITICAL: Failed to persist itinerary for session ${sessionId}:`, error);
+        console.error(
+          `[persist] CRITICAL: Failed to persist itinerary for session ${sessionId}:`,
+          error,
+        );
       });
     } else {
       this.flushPatchTrip(sessionId, patch).catch(() => {});
@@ -339,20 +384,24 @@ export class WriteThroughDb implements Db {
     if (data.inviteId !== undefined) base.invite_id = data.inviteId;
     if (data.trip !== undefined) base.trip = data.trip as any;
     if (data.userId !== undefined) base.user_id = data.userId;
-    await this.client.from("chat_sessions").upsert(base, { onConflict: "session_id" });
+    await this.client
+      .from("chat_sessions")
+      .upsert(base, { onConflict: "session_id" });
 
     if (data.messages && data.messages.length) {
       try {
-        const rows = data.messages.map((m) => ({ 
-          id: m.id, 
-          session_id: sessionId, 
-          role: m.role, 
-          content: m.content, 
+        const rows = data.messages.map((m) => ({
+          id: m.id,
+          session_id: sessionId,
+          role: m.role,
+          content: m.content,
           created_at: m.createdAt,
-          user_id: data.userId || '00000000-0000-0000-0000-000000000000'
+          user_id: data.userId || "00000000-0000-0000-0000-000000000000",
         }));
-        const { error } = await this.client.from("messages").upsert(rows, { onConflict: "id" });
-        
+        const { error } = await this.client
+          .from("messages")
+          .upsert(rows, { onConflict: "id" });
+
         if (error) {
           console.error(`[persist] Failed to bulk insert messages:`, error);
         }
@@ -361,30 +410,38 @@ export class WriteThroughDb implements Db {
       }
     }
     if (data.savedPoiIds && data.savedPoiIds.size) {
-      const rows = Array.from(data.savedPoiIds).map((poiId) => ({ session_id: sessionId, poi_id: poiId }));
-      await this.client.from("saved_pois").upsert(rows, { onConflict: "session_id,poi_id" });
+      const rows = Array.from(data.savedPoiIds).map((poiId) => ({
+        session_id: sessionId,
+        poi_id: poiId,
+      }));
+      await this.client
+        .from("saved_pois")
+        .upsert(rows, { onConflict: "session_id,poi_id" });
     }
   }
 
-  private async flushAppendMessage(sessionId: string, msg: SessionRecord["messages"][number]) {
+  private async flushAppendMessage(
+    sessionId: string,
+    msg: SessionRecord["messages"][number],
+  ) {
     if (!this.client) return;
     console.log(`[persist] Saving message ${msg.id} for session ${sessionId}`);
-    
+
     // Ensure session exists in database first
     await this.ensureSessionExists(sessionId);
-    
+
     try {
       // Save message with session_id that matches the chat_sessions.id
       const session = this.mem.getSession(sessionId);
       const { error } = await this.client.from("messages").upsert({
-        id: msg.id, 
-        session_id: sessionId, 
-        role: msg.role, 
-        content: msg.content, 
+        id: msg.id,
+        session_id: sessionId,
+        role: msg.role,
+        content: msg.content,
         created_at: msg.createdAt,
-        user_id: session?.userId || '00000000-0000-0000-0000-000000000000'
+        user_id: session?.userId || "00000000-0000-0000-0000-000000000000",
       });
-      
+
       if (error) {
         console.error(`[persist] Failed to save message ${msg.id}:`, error);
       } else {
@@ -397,39 +454,72 @@ export class WriteThroughDb implements Db {
 
   private async flushPatchTrip(sessionId: string, patch: Record<string, any>) {
     if (!this.client) {
-      console.warn(`[persist] No client available for flushing trip patch on session ${sessionId}`);
+      console.warn(
+        `[persist] No client available for flushing trip patch on session ${sessionId}`,
+      );
       return;
     }
-    
+
     try {
       const cur = this.mem.getSession(sessionId)?.trip || {};
-      console.log(`[persist] Flushing trip patch for session ${sessionId}:`, JSON.stringify(patch, null, 2));
-      
+      console.log(
+        `[persist] Flushing trip patch for session ${sessionId}:`,
+        JSON.stringify(patch, null, 2),
+      );
+
       const { error } = await this.client
         .from("chat_sessions")
-        .upsert({ session_id: sessionId, trip: cur }, { onConflict: "session_id" });
-      
+        .upsert(
+          { session_id: sessionId, trip: cur },
+          { onConflict: "session_id" },
+        );
+
       if (error) {
-        console.error(`[persist] Database error flushing trip patch for session ${sessionId}:`, error);
+        console.error(
+          `[persist] Database error flushing trip patch for session ${sessionId}:`,
+          error,
+        );
         throw error;
       }
-      
-      console.log(`[persist] Successfully flushed trip patch for session ${sessionId}`);
+
+      console.log(
+        `[persist] Successfully flushed trip patch for session ${sessionId}`,
+      );
     } catch (error) {
-      console.error(`[persist] Exception flushing trip patch for session ${sessionId}:`, error);
+      console.error(
+        `[persist] Exception flushing trip patch for session ${sessionId}:`,
+        error,
+      );
       throw error;
     }
   }
 
   private async flushSetInvite(sessionId: string, inviteId: string) {
     if (!this.client) return;
-    await this.client.from("chat_sessions").upsert({ session_id: sessionId, invite_id: inviteId }, { onConflict: "session_id" });
+    await this.client
+      .from("chat_sessions")
+      .upsert(
+        { session_id: sessionId, invite_id: inviteId },
+        { onConflict: "session_id" },
+      );
   }
 
-  private async flushSetPoiSaved(sessionId: string, poiId: string, saved: boolean) {
+  private async flushSetPoiSaved(
+    sessionId: string,
+    poiId: string,
+    saved: boolean,
+  ) {
     if (!this.client) return;
-    if (saved) await this.client.from("saved_pois").upsert({ session_id: sessionId, poi_id: poiId });
-    else await this.client.from("saved_pois").delete().eq("session_id", sessionId).eq("poi_id", poiId);
+    if (saved)
+      await this.client
+        .from("saved_pois")
+        .upsert({ session_id: sessionId, poi_id: poiId });
+    else
+      await this.client
+        .from("saved_pois")
+        .delete()
+        .eq("session_id", sessionId)
+        .eq("poi_id", poiId);
   }
 
   private async flushClearMessages(sessionId: string) {
@@ -442,7 +532,10 @@ export class WriteThroughDb implements Db {
     // Delete related rows first to avoid orphans
     await this.client.from("messages").delete().eq("session_id", sessionId);
     await this.client.from("saved_pois").delete().eq("session_id", sessionId);
-    await this.client.from("chat_sessions").delete().eq("session_id", sessionId);
+    await this.client
+      .from("chat_sessions")
+      .delete()
+      .eq("session_id", sessionId);
   }
 
   private async ensureSessionExists(sessionId: string) {
@@ -454,23 +547,33 @@ export class WriteThroughDb implements Db {
         .select("session_id")
         .eq("session_id", sessionId)
         .maybeSingle();
-      
-      if (selectError && selectError.code !== 'PGRST116') {
-        console.error(`[persist] Error checking session existence:`, selectError);
+
+      if (selectError && selectError.code !== "PGRST116") {
+        console.error(
+          `[persist] Error checking session existence:`,
+          selectError,
+        );
         return;
       }
-      
+
       if (!existingSession) {
-        console.log(`[persist] Creating session ${sessionId} in chat_sessions table`);
+        console.log(
+          `[persist] Creating session ${sessionId} in chat_sessions table`,
+        );
         const session = await this.mem.getSession(sessionId);
-        const { error: insertError } = await this.client.from("chat_sessions").insert({
-          session_id: sessionId,
-          user_id: session?.userId,
-          trip: session?.trip || {}
-        });
-        
+        const { error: insertError } = await this.client
+          .from("chat_sessions")
+          .insert({
+            session_id: sessionId,
+            user_id: session?.userId,
+            trip: session?.trip || {},
+          });
+
         if (insertError) {
-          console.error(`[persist] Failed to create session ${sessionId}:`, insertError);
+          console.error(
+            `[persist] Failed to create session ${sessionId}:`,
+            insertError,
+          );
         } else {
           console.log(`[persist] Successfully created session ${sessionId}`);
         }
