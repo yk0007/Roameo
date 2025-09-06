@@ -158,20 +158,21 @@ export default function ChatPage() {
       });
 
       // Force typing state clear if we have a recent assistant message
-      if (lastMessage.role === "assistant" && isTyping) {
+      if (lastMessage.role === "assistant" && (isTyping || isPlanning)) {
         console.log(
           "[client] Force clearing typing state due to new assistant message",
         );
         setIsTyping(false);
         setDetectedIntent(null);
         planningActiveRef.current = false;
+        setIsPlanning(false);
         if (planningTimeoutRef.current) {
           window.clearTimeout(planningTimeoutRef.current);
           planningTimeoutRef.current = null;
         }
       }
     }
-  }, [messages, isTyping]);
+  }, [messages, isTyping, isPlanning]);
 
   // Require login to access chat
   useEffect(() => {

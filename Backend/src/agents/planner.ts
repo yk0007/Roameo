@@ -409,7 +409,7 @@ async function createStructuredItinerary(
 ): Promise<Itinerary> {
   const jsonModel = (process.env.GROQ_JSON_MODEL as GroqModel) || "llama-3.1-8b-instant";
   const groq = new GroqClient({ model: jsonModel });
-  const jsonPrompt = `Create a structured JSON itinerary based on the description and available POIs. Follow this EXACT format:
+  const jsonPrompt = `Create a structured JSON itinerary that EXACTLY matches the detailed description provided. Extract activities, locations, and timings directly from the text.
 
 Description: ${description}
 
@@ -437,16 +437,19 @@ Stays: ${JSON.stringify(
   )}
 
 CRITICAL REQUIREMENTS:
-- Use ONLY POI IDs from the lists above (required for each activity)
-- Create exactly ${ctx.days || 3} days
-- Each day must have 2-4 activities minimum
-- Use realistic time slots (09:00-20:00)
-- Include accommodation for multi-day trips
+- Extract EXACT activity names, times, and locations from the description text
+- Match POI names from description to available POI IDs (use fuzzy matching for similar names)
+- If description mentions "Ooty Lake", find the POI with "Ooty Lake" in the name
+- If description mentions "Doddabetta Peak", find the POI with "Doddabetta" in the name
+- If description mentions "Government Botanical Gardens", find the POI with "Botanical" or "Garden" in the name
+- Use EXACT times mentioned in the description (e.g., "9:00 AM", "10:30 AM")
+- Create exactly ${ctx.days || 3} days as described
+- Include accommodation mentioned in the description
 - RESPOND WITH COMPLETE, VALID JSON ONLY
 - DO NOT truncate the response
 - ENSURE all braces are properly closed
- - DO NOT include comments, trailing commas, or any text outside the JSON
- - DO NOT use // or /* */ anywhere
+- DO NOT include comments, trailing commas, or any text outside the JSON
+- DO NOT use // or /* */ anywhere
 
 You MUST respond with ONLY this complete JSON structure:
 {
@@ -457,11 +460,13 @@ You MUST respond with ONLY this complete JSON structure:
     {
       "day": 1,
       "date": "2024-01-01",
-      "title": "Day title",
+      "title": "Day 1: Arrival, Lakeside Charm & Panoramic Views",
       "activities": [
-        {"name": "Activity", "start": "09:00", "end": "11:00", "location": "Address", "poiId": "poi_id_from_above"}
+        {"name": "Arrive in Ooty and check into accommodation", "start": "09:00", "end": "10:30", "location": "Sterling Ooty Fern Hill", "poiId": "matching_poi_id"},
+        {"name": "Head to Ooty Lake", "start": "10:30", "end": "11:00", "location": "Ooty Lake", "poiId": "matching_poi_id"},
+        {"name": "Enjoy boating at Ooty Lake", "start": "11:00", "end": "12:30", "location": "Ooty Lake", "poiId": "matching_poi_id"}
       ],
-      "accommodation": {"name": "Hotel", "checkIn": "15:00", "poiId": "stay_poi_id"}
+      "accommodation": {"name": "Savoy - IHCL SeleQtions", "checkIn": "15:00", "poiId": "matching_stay_poi_id"}
     }
   ]
 }`;
