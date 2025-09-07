@@ -354,6 +354,12 @@ const graph = new StateGraph<State>({ channels: graphState })
     ];
     return { events };
   })
+  .addEdge("__start__", "router")
+  .addEdge("router", "planner")
+  .addEdge("router", "destination_search")
+  .addEdge("router", "editor")
+  .addEdge("router", "map_editor")
+  .addEdge("router", "chat") 
   .addEdge("planner", END)
   .addEdge("destination_search", END)
   .addEdge("editor", END)
