@@ -77,6 +77,7 @@ export async function plannerAgent(
   destinations?: string[];
   days: number;
   destinationImageUrl?: string;
+  clarify?: boolean;
 } | null> {
   // Extract conversation context for personalized planning
   const conversationContext = extractConversationContext(history);
@@ -132,17 +133,20 @@ Also, how many days would you like to spend there?`;
       destination: _ctx.destination || newDestination || "",
       destinations: _ctx.destinations,
       days: _ctx.days || 1,
-      destinationImageUrl: undefined
+      destinationImageUrl: undefined,
+      clarify: true
     };
   }
 
   // Handle different actions
   if (action === "add" && _ctx.existingItinerary && newDestination) {
-    return await addDestinationToItinerary(_ctx.existingItinerary, newDestination, newDays || 3, _ctx.origin);
+    const res = await addDestinationToItinerary(_ctx.existingItinerary, newDestination, newDays || 3, _ctx.origin);
+    return { ...res!, clarify: false } as any;
   }
   
   if (action === "remove" && _ctx.existingItinerary && newDestination) {
-    return await removeDestinationFromItinerary(_ctx.existingItinerary, newDestination);
+    const res = await removeDestinationFromItinerary(_ctx.existingItinerary, newDestination);
+    return { ...res!, clarify: false } as any;
   }
   
   // Default to creating new itinerary

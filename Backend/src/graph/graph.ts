@@ -108,13 +108,16 @@ const graph = new StateGraph<State>({ channels: graphState })
       };
     }
 
-    const updatedTrip = { 
-      ...trip, 
-      destination: res.destination, 
-      destinations: res.destinations,
-      days: res.days,
-      destinationImageUrl: res.destinationImageUrl
-    };
+    // If this is a clarification, do NOT alter trip state yet.
+    const updatedTrip = res.clarify
+      ? { ...trip }
+      : {
+          ...trip,
+          destination: res.destination,
+          destinations: res.destinations,
+          days: res.days,
+          destinationImageUrl: res.destinationImageUrl,
+        };
     
     // Generate title with fallback handling
     let title: string;
@@ -133,18 +136,20 @@ const graph = new StateGraph<State>({ channels: graphState })
       title = res.destination ? `✨ ${res.destination} Adventure #${sessionSuffix}` : `✨ Dream Trip #${sessionSuffix}`;
     }
 
-    plannerEvents.push(
-      {
-        type: "chat.append",
-        data: {
-          id: randomUUID(),
-          role: "assistant",
-          content: res.chatResponse,
-          createdAt: new Date().toISOString(),
-        },
+    // Always send chat response
+    plannerEvents.push({
+      type: "chat.append",
+      data: {
+        id: randomUUID(),
+        role: "assistant",
+        content: res.chatResponse,
+        createdAt: new Date().toISOString(),
       },
-      // Emit navbar update with trip details
-      {
+    });
+
+    // Only update navbar when this is not a clarification
+    if (!res.clarify) {
+      plannerEvents.push({
         type: "navbar.update",
         data: {
           destination: res.destination,
@@ -153,35 +158,42 @@ const graph = new StateGraph<State>({ channels: graphState })
           title,
           destinationImageUrl: res.destinationImageUrl,
         },
-      },
-    );
+      });
+    }
 
     if (res.itinerary.daysPlan.length > 0) {
+      // Always emit itinerary update (preserves existing itinerary during clarification)
       plannerEvents.push(emitItineraryUpdate(res.itinerary));
-      // Handle POI search for multiple destinations
-      const searchDestination = res.destinations && res.destinations.length > 0 
-        ? res.destinations[0] // Use first destination for POI search
-        : res.destination;
-      
-      // Emit search status
-      plannerEvents.push({
-        type: "search.status",
-        data: { status: `Finding places in ${searchDestination}...` }
-      });
-      
-      const poiEvt = await poiAgent({ destination: searchDestination });
-      if (poiEvt) {
-        plannerEvents.push(poiEvt);
-        if (poiEvt.type === "search.results") {
-          const pois = [...poiEvt.data.stays, ...poiEvt.data.restaurants, ...poiEvt.data.attractions];
-          
-          // Emit map status
-          plannerEvents.push({
-            type: "map.status",
-            data: { status: "Calculating routes and updating map..." }
-          });
-          
-          plannerEvents.push(await mapAgent(pois));
+
+      // Only trigger POI/map updates when not clarifying
+      if (!res.clarify) {
+        const searchDestination =
+          res.destinations && res.destinations.length > 0
+            ? res.destinations[0]
+            : res.destination;
+
+        plannerEvents.push({
+          type: "search.status",
+          data: { status: `Finding places in ${searchDestination}...` },
+        });
+
+        const poiEvt = await poiAgent({ destination: searchDestination });
+        if (poiEvt) {
+          plannerEvents.push(poiEvt);
+          if (poiEvt.type === "search.results") {
+            const pois = [
+              ...poiEvt.data.stays,
+              ...poiEvt.data.restaurants,
+              ...poiEvt.data.attractions,
+            ];
+
+            plannerEvents.push({
+              type: "map.status",
+              data: { status: "Calculating routes and updating map..." },
+            });
+
+            plannerEvents.push(await mapAgent(pois));
+          }
         }
       }
     }

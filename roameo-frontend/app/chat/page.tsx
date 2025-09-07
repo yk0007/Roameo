@@ -815,13 +815,10 @@ export default function ChatPage() {
           setSearchResults(evt.data);
         }
       } else if (evt.type === "map.update") {
-        // Do not clear or change map when planning is active unless we receive real data
+        // Never clear map on null/undefined; ignore to preserve existing view
         if (evt.data === null || evt.data === undefined) {
-          if (planningActiveRef.current) {
-            console.log("[client] Skipping map clear due to active planning");
-          } else {
-            setMapData(undefined);
-          }
+          console.log("[client] Ignoring empty map.update to preserve current map state");
+          // no-op
         } else {
           setMapData(evt.data);
         }
