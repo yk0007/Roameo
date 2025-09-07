@@ -87,7 +87,7 @@ export async function plannerAgent(
     _ctx, // Pass existing trip context for better disambiguation
   );
   
-  const action = extractedDetails.action || "plan";
+  let action = extractedDetails.action || "plan";
   let newDestination = extractedDetails.destination;
   const newDestinations = extractedDetails.destinations;
   const newDays = extractedDetails.days;
@@ -95,6 +95,24 @@ export async function plannerAgent(
   // Spell-correct destination name if provided
   if (newDestination) {
     newDestination = await correctDestinationSpelling(newDestination);
+  }
+
+  // Guardrail: If an itinerary already exists and user mentions a different destination
+  // but didn't explicitly say to replace (e.g., "new trip", "instead", "replace"),
+  // force a clarification instead of overwriting the current plan.
+  if (
+    _ctx.existingItinerary &&
+    newDestination &&
+    action === "plan"
+  ) {
+    const currentDest = _ctx.existingItinerary.destination?.toLowerCase().trim();
+    const requestedDest = newDestination.toLowerCase().trim();
+    const msg = (message || "").toLowerCase();
+    const explicitReplace = /(new trip|instead|replace|start over|fresh plan|separate trip|another trip)/.test(msg);
+    if (currentDest && requestedDest && currentDest !== requestedDest && !explicitReplace) {
+      action = "clarify";
+      // fall through to clarification handler below
+    }
   }
   
   // Handle clarification needed
@@ -109,6 +127,7 @@ Also, how many days would you like to spend there?`;
 
     return {
       chatResponse: clarificationMessage,
+      // Preserve existing itinerary during clarification so UI doesn't clear
       itinerary: _ctx.existingItinerary || createDummyItinerary(_ctx),
       destination: _ctx.destination || newDestination || "",
       destinations: _ctx.destinations,
