@@ -12,15 +12,6 @@ export const TripContextSchema = z.object({
   travelers: z.number().optional(),
   budget: z.string().optional(),
   destinationImageUrl: z.string().optional(), // Add destination image URL
-  itinerarySegments: z
-    .array(
-      z.object({
-        destination: z.string(),
-        startDay: z.number(),
-        endDay: z.number(),
-      }),
-    )
-    .optional(),
 });
 export type TripContext = z.infer<typeof TripContextSchema>;
 
@@ -74,8 +65,15 @@ export const ItineraryDaySchema = z.object({
 export const ItinerarySchema = z.object({
   origin: z.string(),
   destination: z.string(),
+  destinations: z.array(z.string()).optional(), // Support multiple destinations
   days: z.number(),
   daysPlan: z.array(ItineraryDaySchema),
+  destinationSegments: z.array(z.object({
+    destination: z.string(),
+    startDay: z.number(),
+    endDay: z.number(),
+    days: z.number()
+  })).optional(), // Track which days belong to which destination
 });
 export type Itinerary = z.infer<typeof ItinerarySchema>;
 
@@ -101,7 +99,6 @@ export const WsEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("search.results"), data: SearchResultsSchema }),
   z.object({ type: z.literal("map.update"), data: MapUpdateSchema }),
   z.object({ type: z.literal("session.ready"), data: z.object({ sessionId: z.string(), inviteId: z.string() }) }),
-  z.object({ type: z.literal("session.deleted"), data: z.object({ sessionId: z.string() }) }),
   z.object({ type: z.literal("intent.detected"), data: z.object({ intent: z.enum(["PLAN_TRIP", "DESTINATION_SEARCH", "CHAT"]), message: z.string() }) }),
   z.object({ type: z.literal("planning.status"), data: z.object({ status: z.string() }) }),
   z.object({ type: z.literal("search.status"), data: z.object({ status: z.string() }) }),

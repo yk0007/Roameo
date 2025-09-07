@@ -108,23 +108,18 @@ export function ChatInterface({
     }
   }, [safeMessages.length]);
 
-  // Only auto-scroll when the user is already near the bottom
-  const isNearBottom = () => {
-    const container = scrollContainerRef.current;
-    if (!container) return true;
-    const threshold = 150; // px from bottom counts as near-bottom
-    return (
-      container.scrollHeight - container.scrollTop - container.clientHeight <
-      threshold
-    );
-  };
-
-  // Avoid force-scrolling the user when they're reading older content
+  // Force re-render when messages change to ensure assistant messages are visible
   useEffect(() => {
     if (safeMessages.length > 0) {
       const lastMessage = safeMessages[safeMessages.length - 1];
-      if (lastMessage.role === "assistant" && isNearBottom()) {
-        setTimeout(() => scrollToBottom("auto"), 50);
+      if (lastMessage.role === "assistant") {
+        console.log(
+          "[chat-interface] Assistant message detected - ensuring visibility",
+        );
+        // Scroll to show the new message
+        setTimeout(() => {
+          scrollToBottom("auto");
+        }, 50);
       }
     }
   }, [safeMessages]);
@@ -172,8 +167,8 @@ export function ChatInterface({
   };
 
   useEffect(() => {
-    // Auto-scroll on new messages only if user is near bottom
-    if (isNearBottom()) scrollToBottom("auto");
+    // Auto-scroll on new messages
+    scrollToBottom("auto");
   }, [safeMessages, isTyping]);
 
   // Reset response type when typing stops
@@ -921,17 +916,6 @@ export function ChatInterface({
           <div ref={messagesEndRef} />
         </div>
       </div>
-
-      {/* Scroll-to-bottom floating button */}
-      {showScrollToBottom && (
-        <button
-          aria-label="Scroll to bottom"
-          onClick={() => scrollToBottom("smooth")}
-          className="absolute bottom-24 right-6 z-20 rounded-full bg-black text-white shadow-md hover:bg-zinc-800 transition-colors p-2"
-        >
-          <ArrowDown className="w-5 h-5" />
-        </button>
-      )}
 
       {showScrollToBottom && (
         <Button

@@ -5,8 +5,7 @@ import { poiAgent } from "../agents/poi.js";
 import { mapAgent } from "../agents/map.js";
 import { generateSessionTitle } from "../agents/title.js";
 import { randomUUID } from "crypto";
-import type { TripContext } from "../types/schemas.js";
-import type { Message } from "../db/types.js";
+import type { TripContext, ChatMessage } from "../types/schemas.js";
 
 export class AsyncBackgroundProcessor {
   private hub: WsHub;
@@ -21,7 +20,7 @@ export class AsyncBackgroundProcessor {
     sessionId: string,
     trip: TripContext,
     message: string,
-    history: Message[],
+    history: ChatMessage[],
   ): Promise<void> {
     // Prevent duplicate processing for same session
     if (this.processingQueue.has(sessionId)) {
@@ -303,7 +302,7 @@ export class AsyncBackgroundProcessor {
     sessionId: string,
     destination: string,
     message: string,
-    history: Message[],
+    history: ChatMessage[],
   ): Promise<void> {
     if (this.processingQueue.has(sessionId)) {
       return;

@@ -249,6 +249,7 @@ export function MapView({
   );
   const [apiKeyError, setApiKeyError] = useState<boolean>(false);
   const resizeObsRef = useRef<ResizeObserver | null>(null);
+  const [forceReinitMarkers, setForceReinitMarkers] = useState(0);
 
   const pois = mapData?.pois || [];
   const filteredPois = useMemo(() => {
@@ -278,6 +279,62 @@ export function MapView({
     addedOnly,
     localItineraryPoiIds,
   ]);
+
+  // Helper: Fit the map view to currently visible POIs and rendered routes
+  const fitToContent = () => {
+    if (!mapInstance.current || !window.google?.maps) return;
+
+    const bounds = new window.google.maps.LatLngBounds();
+    let hasContent = false;
+
+    // Include filtered POIs
+    filteredPois.forEach((poi) => {
+      if (poi.lat && poi.lng) {
+        bounds.extend({ lat: poi.lat, lng: poi.lng });
+        hasContent = true;
+      }
+    });
+
+    // Include polyline overview paths (if any directions are rendered)
+    polylinesRef.current.forEach((renderer) => {
+      const directions = renderer.getDirections?.();
+      if (directions && directions.routes && directions.routes.length > 0) {
+        const route = directions.routes[0] as any;
+        if (route.overview_path) {
+          route.overview_path.forEach((latLng: any) => {
+            bounds.extend(latLng);
+            hasContent = true;
+          });
+        }
+      }
+    });
+
+    if (!hasContent) return;
+
+    const padding = filteredPois.length === 1 ? 100 : 50;
+    mapInstance.current.fitBounds(bounds, {
+      top: padding,
+      right: padding,
+      bottom: padding,
+      left: padding,
+    });
+
+    // Normalize zoom after fit to avoid extreme zoom levels
+    setTimeout(() => {
+      if (!mapInstance.current) return;
+      const currentZoom = mapInstance.current.getZoom?.();
+      if (filteredPois.length === 1) {
+        if (currentZoom && currentZoom > 16) mapInstance.current.setZoom(15);
+        else if (currentZoom && currentZoom < 10) mapInstance.current.setZoom(13);
+      } else if (filteredPois.length <= 3) {
+        if (currentZoom && currentZoom > 18) mapInstance.current.setZoom(16);
+        else if (currentZoom && currentZoom < 8) mapInstance.current.setZoom(12);
+      } else {
+        if (currentZoom && currentZoom > 20) mapInstance.current.setZoom(18);
+        else if (currentZoom && currentZoom < 6) mapInstance.current.setZoom(10);
+      }
+    }, 150);
+  };
 
   // Close filter menu on outside click / Esc
   useEffect(() => {
@@ -493,6 +550,13 @@ export function MapView({
           mapInstance.current.setZoom(2);
         }
       }, 200);
+
+      // Force re-initialization of markers when map becomes visible (fixes session restore issue)
+      if (filteredPois.length > 0) {
+        setTimeout(() => {
+          setForceReinitMarkers(prev => prev + 1);
+        }, 300);
+      }
     }
   }, [isVisible, filteredPois, mapData?.routes]);
 
@@ -777,6 +841,9 @@ export function MapView({
         markersRef.current.push(marker);
         markersByIdRef.current[poi.id] = marker;
       });
+
+      // After markers are rendered, fit to content
+      fitToContent();
     }, 100); // Small delay to ensure map is ready
 
     return () => clearTimeout(timeoutId);
@@ -788,92 +855,20 @@ export function MapView({
     onToggleSave,
     onAddPoi,
     onReplan,
+    forceReinitMarkers, // Force re-initialization when this changes
   ]);
 
   // Auto-zoom to fit markers and routes
   useEffect(() => {
     if (!mapInstance.current || !window.google?.maps) return;
-
-    const bounds = new window.google.maps.LatLngBounds();
-    let hasContent = false;
-
-    // Include filtered POIs in bounds (more responsive to visible POIs)
-    filteredPois.forEach((poi) => {
-      if (poi.lat && poi.lng) {
-        bounds.extend({ lat: poi.lat, lng: poi.lng });
-        hasContent = true;
-      }
-    });
-
-    // Include routes in bounds
-    polylinesRef.current.forEach((renderer) => {
-      const directions = renderer.getDirections();
-      if (directions && directions.routes && directions.routes.length > 0) {
-        const route = directions.routes[0];
-        if (route.overview_path) {
-          route.overview_path.forEach((latLng: any) => {
-            bounds.extend(latLng);
-            hasContent = true;
-          });
-        }
-      }
-    });
-
-    if (hasContent) {
-      console.log(
-        "Auto-zooming to",
-        filteredPois.length,
-        "POIs and",
-        polylinesRef.current.length,
-        "routes",
-      );
-
-      // Smart padding based on content
-      const padding = filteredPois.length === 1 ? 100 : 50;
-
-      mapInstance.current.fitBounds(bounds, {
-        top: padding,
-        right: padding,
-        bottom: padding,
-        left: padding,
-      });
-
-      // Improved zoom level management
-      setTimeout(() => {
-        if (mapInstance.current) {
-          const currentZoom = mapInstance.current.getZoom();
-
-          if (filteredPois.length === 1) {
-            // Single POI - moderate zoom
-            if (currentZoom && currentZoom > 16) {
-              mapInstance.current.setZoom(15);
-            } else if (currentZoom && currentZoom < 10) {
-              mapInstance.current.setZoom(13);
-            }
-          } else if (filteredPois.length <= 3) {
-            // Few POIs - closer zoom
-            if (currentZoom && currentZoom > 18) {
-              mapInstance.current.setZoom(16);
-            } else if (currentZoom && currentZoom < 8) {
-              mapInstance.current.setZoom(12);
-            }
-          } else {
-            // Many POIs - wider view
-            if (currentZoom && currentZoom > 20) {
-              mapInstance.current.setZoom(18);
-            } else if (currentZoom && currentZoom < 6) {
-              mapInstance.current.setZoom(10);
-            }
-          }
-        }
-      }, 150);
-    } else {
-      // Show world map as default when no content
-      console.log("No content - setting world view");
+    if (filteredPois.length === 0 && (!mapData?.routes || mapData.routes.length === 0)) {
+      // Show world view when no content
       mapInstance.current.setCenter({ lat: 20, lng: 0 });
       mapInstance.current.setZoom(2);
+      return;
     }
-  }, [filteredPois, mapData?.routes]);
+    fitToContent();
+  }, [filteredPois, mapData?.routes, itinerary, forceReinitMarkers]);
 
   // Additional effect to ensure world view on initial load when no data
   useEffect(() => {
@@ -891,7 +886,7 @@ export function MapView({
     }
   }, [mapInstance.current, filteredPois.length, mapData]);
 
-  // Sync polylines with routes
+  // Sync polylines with routes - support multiple destination segments
   useEffect(() => {
     if (!mapInstance.current || !window.google?.maps || !itinerary) return;
 
@@ -900,51 +895,110 @@ export function MapView({
     polylinesRef.current = [];
 
     const directionsService = new window.google.maps.DirectionsService();
-    const directionsRenderer = new window.google.maps.DirectionsRenderer({
-      map: mapInstance.current,
-      suppressMarkers: true, // We use our own markers
-      polylineOptions: {
-        strokeColor: "#0a66ff",
-        strokeOpacity: 0.9,
-        strokeWeight: 4,
-      },
-    });
-
-    polylinesRef.current.push(directionsRenderer); // Store renderer to clear it later
-
     const allPois = mapData?.pois || [];
-    const waypoints = itinerary.daysPlan
-      .flatMap((day) => day.activities)
-      .map((activity) => {
-        const poi = allPois.find((p) => p.id === activity.poiId);
-        if (!poi || !poi.lat || !poi.lng) return null;
-        return { location: { lat: poi.lat, lng: poi.lng }, stopover: true };
-      })
-      .filter(Boolean) as google.maps.DirectionsWaypoint[];
 
-    if (waypoints.length < 2) return;
+    // If multi-destination trip, create separate routes for each destination segment
+    if (itinerary.destinationSegments && itinerary.destinationSegments.length > 1) {
+      itinerary.destinationSegments.forEach((segment, index) => {
+        const segmentDays = itinerary.daysPlan.filter(
+          day => day.day >= segment.startDay && day.day <= segment.endDay
+        );
+        
+        const waypoints = segmentDays
+          .flatMap((day) => day.activities)
+          .map((activity) => {
+            const poi = allPois.find((p) => p.id === activity.poiId);
+            if (!poi || !poi.lat || !poi.lng) return null;
+            return { location: { lat: poi.lat, lng: poi.lng }, stopover: true };
+          })
+          .filter(Boolean) as google.maps.DirectionsWaypoint[];
 
-    const origin = waypoints.shift()!.location;
-    const destination = waypoints.pop()!.location;
+        if (waypoints.length < 2) return;
 
-    directionsService.route(
-      {
-        origin,
-        destination,
-        waypoints,
-        travelMode: window.google.maps.TravelMode.DRIVING,
-      },
-      (
-        response: google.maps.DirectionsResult,
-        status: google.maps.DirectionsStatus,
-      ) => {
-        if (status === "OK") {
-          directionsRenderer.setDirections(response);
-        } else {
-          console.warn("Directions request failed due to " + status);
+        // Different colors for different destination segments
+        const colors = ["#0a66ff", "#ff6b35", "#4ecdc4", "#45b7d1", "#f9ca24"];
+        const color = colors[index % colors.length];
+
+        const directionsRenderer = new window.google.maps.DirectionsRenderer({
+          map: mapInstance.current,
+          suppressMarkers: true,
+          polylineOptions: {
+            strokeColor: color,
+            strokeOpacity: 0.8,
+            strokeWeight: 4,
+          },
+        });
+
+        polylinesRef.current.push(directionsRenderer);
+
+        const origin = waypoints.shift()!.location;
+        const destination = waypoints.pop()!.location;
+
+        directionsService.route(
+          {
+            origin,
+            destination,
+            waypoints,
+            travelMode: window.google.maps.TravelMode.DRIVING,
+          },
+          (response: google.maps.DirectionsResult, status: google.maps.DirectionsStatus) => {
+            if (status === window.google.maps.DirectionsStatus.OK) {
+              directionsRenderer.setDirections(response);
+              // Fit to content after last segment is rendered
+              if (index === itinerary.destinationSegments!.length - 1) {
+                setTimeout(() => fitToContent(), 100);
+              }
+            } else {
+              console.error(`Directions request failed for segment ${index}:`, status);
+            }
+          }
+        );
+      });
+    } else {
+      // Single destination - original logic
+      const directionsRenderer = new window.google.maps.DirectionsRenderer({
+        map: mapInstance.current,
+        suppressMarkers: true,
+        polylineOptions: {
+          strokeColor: "#0a66ff",
+          strokeOpacity: 0.9,
+          strokeWeight: 4,
+        },
+      });
+
+      polylinesRef.current.push(directionsRenderer);
+
+      const waypoints = itinerary.daysPlan
+        .flatMap((day) => day.activities)
+        .map((activity) => {
+          const poi = allPois.find((p) => p.id === activity.poiId);
+          if (!poi || !poi.lat || !poi.lng) return null;
+          return { location: { lat: poi.lat, lng: poi.lng }, stopover: true };
+        })
+        .filter(Boolean) as google.maps.DirectionsWaypoint[];
+
+      if (waypoints.length < 2) return;
+
+      const origin = waypoints.shift()!.location;
+      const destination = waypoints.pop()!.location;
+
+      directionsService.route(
+        {
+          origin,
+          destination,
+          waypoints,
+          travelMode: window.google.maps.TravelMode.DRIVING,
+        },
+        (response: google.maps.DirectionsResult, status: google.maps.DirectionsStatus) => {
+          if (status === window.google.maps.DirectionsStatus.OK) {
+            directionsRenderer.setDirections(response);
+            setTimeout(() => fitToContent(), 0);
+          } else {
+            console.error("Directions request failed due to", status);
+          }
         }
-      },
-    );
+      );
+    }
   }, [itinerary, mapData?.pois, gmapsReady]);
 
   // Show error state if API key is not configured

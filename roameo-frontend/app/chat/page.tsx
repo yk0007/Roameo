@@ -158,21 +158,20 @@ export default function ChatPage() {
       });
 
       // Force typing state clear if we have a recent assistant message
-      if (lastMessage.role === "assistant" && (isTyping || isPlanning)) {
+      if (lastMessage.role === "assistant" && isTyping) {
         console.log(
           "[client] Force clearing typing state due to new assistant message",
         );
         setIsTyping(false);
         setDetectedIntent(null);
         planningActiveRef.current = false;
-        setIsPlanning(false);
         if (planningTimeoutRef.current) {
           window.clearTimeout(planningTimeoutRef.current);
           planningTimeoutRef.current = null;
         }
       }
     }
-  }, [messages, isTyping, isPlanning]);
+  }, [messages, isTyping]);
 
   // Require login to access chat
   useEffect(() => {
@@ -725,6 +724,19 @@ export default function ChatPage() {
               "[client] Planning active - message shown but keeping animation",
             );
             // Message is shown, but keep planning animation until itinerary completes
+            // SAFETY: If itinerary doesn't arrive within 8s, clear thinking states
+            if (planningTimeoutRef.current) {
+              window.clearTimeout(planningTimeoutRef.current);
+              planningTimeoutRef.current = null;
+            }
+            planningTimeoutRef.current = window.setTimeout(() => {
+              console.warn("[client] Fallback: clearing planning state due to timeout after assistant message");
+              planningActiveRef.current = false;
+              setIsTyping(false);
+              setIsPlanning(false);
+              setDetectedIntent(null);
+              planningTimeoutRef.current = null;
+            }, 8000);
           }
         }
       } else if (evt.type === "navbar.update") {
@@ -753,6 +765,9 @@ export default function ChatPage() {
           );
           setItinerary(newItin);
 
+          // Check if this was an active planning session before clearing states
+          const wasActivePlanning = planningActiveRef.current;
+
           // NOW we clear all planning states since itinerary is complete
           planningActiveRef.current = false;
           setIsPlanning(false);
@@ -764,8 +779,31 @@ export default function ChatPage() {
             window.clearTimeout(planningTimeoutRef.current);
             planningTimeoutRef.current = null;
           }
-          // Do NOT auto-inject an extra assistant confirmation here.
-          // We'll rely on the real assistant chat message to avoid out-of-order rendering.
+          // Only inject confirmation if this was an active planning session AND no recent assistant message exists
+          const recentMessages = messages.slice(-3);
+          const hasRecentAssistantMessage = recentMessages.some(msg => 
+            msg.role === 'assistant' && 
+            (msg.content.includes('itinerary') || msg.content.includes('planned'))
+          );
+          
+          if (!planningReplyInjectedRef.current && wasActivePlanning && !hasRecentAssistantMessage) {
+            const dest = (trip?.destination || "").trim();
+            const d = trip?.days;
+            const summary =
+              dest && d
+                ? `I've planned a ${d}-day itinerary for ${dest}. You can view it in the Itinerary tab. Want any adjustments?`
+                : `Your itinerary is ready. Check the Itinerary tab on the right. Want me to tweak anything?`;
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: `plan-reply-${Date.now()}`,
+                role: "assistant",
+                content: summary,
+                createdAt: new Date().toISOString(),
+              } as any,
+            ]);
+            planningReplyInjectedRef.current = true;
+          }
         } else {
           console.warn(
             "[client] Received invalid itinerary data, ignoring:",
@@ -786,6 +824,32 @@ export default function ChatPage() {
           }
         } else {
           setMapData(evt.data);
+        }
+      } else if (evt.type === "planning.status") {
+        // Backend signals planning lifecycle; keep UI in sync and avoid stuck typing
+        const status = evt.data?.status?.toLowerCase?.() || "";
+        console.log("[client] planning.status:", status);
+        if (status === "started" || status === "running" || status === "thinking" || status === "planning") {
+          planningActiveRef.current = true;
+          setIsPlanning(true);
+          setIsTyping(true);
+          if (planningTimeoutRef.current) {
+            window.clearTimeout(planningTimeoutRef.current);
+            planningTimeoutRef.current = null;
+          }
+        } else if (status === "idle" || status === "complete" || status === "completed" || status === "error" || status === "stopped") {
+          // If no itinerary is on the way, clear safely after a short delay
+          if (planningTimeoutRef.current) {
+            window.clearTimeout(planningTimeoutRef.current);
+            planningTimeoutRef.current = null;
+          }
+          planningTimeoutRef.current = window.setTimeout(() => {
+            planningActiveRef.current = false;
+            setIsPlanning(false);
+            setIsTyping(false);
+            setDetectedIntent(null);
+            planningTimeoutRef.current = null;
+          }, 400);
         }
       } else if (evt.type === "intent.detected") {
         // Set detected intent when server classifies user message

@@ -92,41 +92,11 @@ export function buildApiRouter(
       const { sessionId } = req.params;
       if (!sessionId)
         return res.status(400).json({ error: "sessionId required" });
-      // Delete from memory/cache first
       db.deleteSession(sessionId);
-      try { opts?.onDeleteSession?.(sessionId); } catch {}
-
-      // Best-effort: delete from Supabase persistent store
+      // Also clear any parallel in-memory cache, if provided
       try {
-        const { createClient } = await import("@supabase/supabase-js");
-        const supabaseUrl = process.env.SUPABASE_URL;
-        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-        if (supabaseUrl && supabaseKey && req.userId) {
-          const supabase = createClient(supabaseUrl, supabaseKey);
-          // Delete messages first to avoid FK issues (if any)
-          const { error: mErr } = await supabase
-            .from("messages")
-            .delete()
-            .eq("session_id", sessionId)
-            .eq("user_id", req.userId);
-          if (mErr) console.warn("[delete] messages delete error:", mErr.message);
-
-          const { error: sErr } = await supabase
-            .from("chat_sessions")
-            .delete()
-            .eq("session_id", sessionId)
-            .eq("user_id", req.userId);
-          if (sErr) console.warn("[delete] chat_sessions delete error:", sErr.message);
-        }
-      } catch (e) {
-        console.warn("[delete] Supabase cleanup failed:", (e as any)?.message || e);
-      }
-
-      // Inform connected clients to close this session
-      try {
-        hub.emit(sessionId, { type: "session.deleted", data: { sessionId } as any });
+        opts?.onDeleteSession?.(sessionId);
       } catch {}
-
       res.json({ ok: true });
     },
   );
@@ -199,12 +169,6 @@ export function buildApiRouter(
     }
 
     const sid = sessionId as string;
-
-    // IMPORTANT: If the caller is authenticated, ensure the session is linked to this user
-    // This guarantees the trip appears in /trips/list which filters by user_id
-    if (req.userId) {
-      db.upsertSession(sid, { userId: req.userId });
-    }
     db.appendMessage(sid, {
       id: randomUUID(),
       role: "user",
@@ -243,10 +207,6 @@ export function buildApiRouter(
               destinationImageUrl: e.data.destinationImageUrl,
             };
             db.patchTrip(sid, tripUpdate);
-            // Also ensure user linkage when we first get structured trip data
-            if (req.userId) {
-              db.upsertSession(sid, { userId: req.userId });
-            }
           }
           // Persist itinerary updates with better error handling
           if (e.type === "itinerary.update") {
@@ -364,8 +324,8 @@ export function buildApiRouter(
           return res.json({ trips: [] });
         }
 
-        // Do not cache on dashboard to ensure new/deleted trips reflect immediately
-        res.set("Cache-Control", "no-store");
+        // Set cache headers for better performance
+        res.set("Cache-Control", "private, max-age=300"); // Cache for 5 minutes
 
         // Query sessions from database with optimized fields
         const { createClient } = await import("@supabase/supabase-js");
@@ -446,16 +406,44 @@ export function buildApiRouter(
 
         const supabase = createClient(supabaseUrl, supabaseKey);
 
-        // Delete related messages first (if present), then the session
-        const { error: mErr } = await supabase
+        // Delete related data in correct order (foreign key constraints)
+        // 1. Delete messages
+        const { error: messagesError } = await supabase
           .from("messages")
           .delete()
           .eq("session_id", sessionId)
           .eq("user_id", req.userId);
-        if (mErr) {
-          console.warn("Error deleting messages for trip:", mErr);
+
+        if (messagesError) {
+          console.error("Error deleting messages:", messagesError);
+          return res.status(500).json({ error: "Failed to delete trip messages" });
         }
 
+        // 2. Delete saved POIs
+        const { error: poisError } = await supabase
+          .from("saved_pois")
+          .delete()
+          .eq("session_id", sessionId)
+          .eq("user_id", req.userId);
+
+        if (poisError) {
+          console.error("Error deleting saved POIs:", poisError);
+          return res.status(500).json({ error: "Failed to delete saved POIs" });
+        }
+
+        // 3. Delete from sessions table (compatibility)
+        const { error: sessionsError } = await supabase
+          .from("sessions")
+          .delete()
+          .eq("session_id", sessionId)
+          .eq("user_id", req.userId);
+
+        if (sessionsError) {
+          console.error("Error deleting from sessions:", sessionsError);
+          // Don't fail here as this table might not exist in all deployments
+        }
+
+        // 4. Finally delete the chat session
         const { error } = await supabase
           .from("chat_sessions")
           .delete()
@@ -463,14 +451,9 @@ export function buildApiRouter(
           .eq("user_id", req.userId);
 
         if (error) {
-          console.error("Error deleting trip:", error);
+          console.error("Error deleting chat session:", error);
           return res.status(500).json({ error: "Failed to delete trip" });
         }
-
-        // Also delete from memory/cache and notify clients
-        try { db.deleteSession(sessionId); } catch {}
-        try { opts?.onDeleteSession?.(sessionId); } catch {}
-        try { hub.emit(sessionId, { type: "session.deleted", data: { sessionId } as any }); } catch {}
 
         console.log("Deleted trip session:", sessionId);
         res.json({ ok: true });

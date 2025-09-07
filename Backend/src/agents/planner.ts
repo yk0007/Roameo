@@ -1,10 +1,64 @@
-import type { Itinerary, WsEvent, POI, Activity } from "../types/schemas.js";
-import type { Message } from "../db/types.js";
-import { GroqClient } from "../tools/groq.js";
-import { GeminiClient } from "../tools/gemini.js";
-import type { GroqModel } from "../tools/groq.js";
+import { randomUUID } from "crypto";
+import type { Itinerary, ChatMessage, WsEvent, POI, Activity } from "../types/schemas.js";
 import { GoogleMapsClient } from "../tools/maps.js";
+import { GeminiClient } from "../tools/gemini.js";
 import { DestinationImageService } from "../tools/destination-images.js";
+
+const TRIP_DETAIL_EXTRACTION_PROMPT = `
+You are a travel planning assistant. Extract trip details from the user's message and determine their intent.
+
+IMPORTANT: Analyze the context carefully to determine if the user wants to:
+1. "plan" - Create a completely new trip (replace existing)
+2. "add" - Add a destination to their existing trip 
+3. "remove" - Remove a destination from their existing trip
+4. "clarify" - Intent is ambiguous, need clarification
+
+Look for keywords like:
+- "add", "also visit", "include", "extend", "then go to" → action: "add"
+- "remove", "skip", "cancel", "drop", "don't go to" → action: "remove"  
+- "plan", "trip to", "visit", "go to" with clear new trip context → action: "plan"
+- Ambiguous cases (e.g., "plan for Mysore" when existing trip exists) → action: "clarify"
+
+CONTEXT CLUES for disambiguation:
+- If user says "plan trip to X" and there's an EXISTING TRIP to a different destination → "clarify" 
+- If user says "plan for X" and there's an EXISTING TRIP to a different destination → "clarify"
+- If user mentions specific days for a new destination → likely "add"
+- If user says "instead of" or "change to" → likely "plan" (new trip)
+- If no days mentioned for new destination → likely needs clarification
+- If user says "add X" but current trip is for Y, ask about X not Y
+- IMPORTANT: Always check EXISTING TRIP context before deciding action
+
+Extract the following information:
+- action: "plan" | "add" | "remove" | "clarify"
+- destination: string (primary destination mentioned)
+- destinations: string[] (if multiple destinations mentioned)
+- days: number (total trip days or days for this destination)
+- origin: string (departure city)
+- budget: number (if mentioned)
+- travellers: number (if mentioned)
+- clarificationNeeded: string (what needs to be clarified, only if action is "clarify")
+
+Return valid JSON only.
+
+Examples:
+User: "Plan a 5-day trip to Ooty from Bangalore"
+{"action": "plan", "destination": "Ooty", "days": 5, "origin": "Bangalore"}
+
+User: "Add Mysore for 3 days to my trip"  
+{"action": "add", "destination": "Mysore", "days": 3}
+
+User: "Remove Mysore from my trip"
+{"action": "remove", "destination": "Mysore"}
+
+User: "Plan trip to Mysore" (when existing trip to Ooty exists)
+{"action": "clarify", "destination": "Mysore", "clarificationNeeded": "Do you want to add Mysore to your existing Ooty trip, or plan a completely new trip to Mysore instead?"}
+
+User: "Plan trip to Mysore for 2 days" (when existing trip to Ooty exists)
+{"action": "clarify", "destination": "Mysore", "clarificationNeeded": "Do you want to add Mysore for 2 days to your existing Ooty trip, or plan a completely new 2-day trip to Mysore instead?"}
+
+User: "add ooty too" (when existing trip is for Mysore)
+{"action": "clarify", "destination": "Ooty", "clarificationNeeded": "Do you want to add Ooty to your existing Mysore trip? How many days would you like to spend in Ooty?"}
+`;
 
 export async function plannerAgent(
   _ctx: {
@@ -12,9 +66,10 @@ export async function plannerAgent(
     destination?: string;
     destinations?: string[];
     days?: number;
+    existingItinerary?: Itinerary;
   },
   message: string,
-  history: Message[] = [],
+  history: ChatMessage[] = [],
 ): Promise<{
   chatResponse: string;
   itinerary: Itinerary;
@@ -29,10 +84,52 @@ export async function plannerAgent(
   const extractedDetails = await extractTripDetails(
     message,
     conversationContext,
+    _ctx, // Pass existing trip context for better disambiguation
   );
-  const destination = extractedDetails.destination || _ctx.destination;
-  const destinations = extractedDetails.destinations || _ctx.destinations;
-  const days = extractedDetails.days || _ctx.days;
+  
+  const action = extractedDetails.action || "plan";
+  let newDestination = extractedDetails.destination;
+  const newDestinations = extractedDetails.destinations;
+  const newDays = extractedDetails.days;
+
+  // Spell-correct destination name if provided
+  if (newDestination) {
+    newDestination = await correctDestinationSpelling(newDestination);
+  }
+  
+  // Handle clarification needed
+  if (action === "clarify") {
+    const clarificationMessage = extractedDetails.clarificationNeeded || 
+      `I need clarification about "${newDestination}". Do you want to:
+      
+1. Add ${newDestination} to your existing trip${_ctx.destination ? ` (currently planning for ${_ctx.destination})` : ''}
+2. Plan a completely new trip to ${newDestination} instead
+
+Also, how many days would you like to spend there?`;
+
+    return {
+      chatResponse: clarificationMessage,
+      itinerary: _ctx.existingItinerary || createDummyItinerary(_ctx),
+      destination: _ctx.destination || newDestination || "",
+      destinations: _ctx.destinations,
+      days: _ctx.days || 1,
+      destinationImageUrl: undefined
+    };
+  }
+
+  // Handle different actions
+  if (action === "add" && _ctx.existingItinerary && newDestination) {
+    return await addDestinationToItinerary(_ctx.existingItinerary, newDestination, newDays || 3, _ctx.origin);
+  }
+  
+  if (action === "remove" && _ctx.existingItinerary && newDestination) {
+    return await removeDestinationFromItinerary(_ctx.existingItinerary, newDestination);
+  }
+  
+  // Default to creating new itinerary
+  const destination = newDestination || _ctx.destination;
+  const destinations = newDestinations || _ctx.destinations;
+  const days = newDays || _ctx.days;
   const origin =
     _ctx.origin || conversationContext.preferredOrigin || "Current location";
   const maps = new GoogleMapsClient();
@@ -62,7 +159,7 @@ export async function plannerAgent(
         contextInfo += `They have previously planned trips of ${conversationContext.previousDurations.join(", ")} days. `;
       }
 
-      chatPrompt = `You are a friendly travel planning assistant. ${contextInfo}The user wants to plan a trip to ${destinationText}. Ask them for the number of days they want to stay. Be enthusiastic and suggest some popular attraction types like coffee plantations, waterfalls, and viewpoints. ${contextInfo ? 'Use any relevant context from our conversation.' : ''}`;
+      chatPrompt = `You are a friendly travel planning assistant with conversation memory. ${contextInfo}The user wants to plan a trip to ${destinationText}. Ask them for the number of days they want to stay. Be enthusiastic and suggest some popular attraction types like coffee plantations, waterfalls, and viewpoints. Reference their previous conversations when relevant.`;
     } else {
       // Build comprehensive context-aware planning prompt
       let contextualInfo = "";
@@ -82,18 +179,7 @@ export async function plannerAgent(
         contextualInfo += "Incorporate these insights into your planning.\n\n";
       }
 
-      // Decide whether we need deeper follow-up questions based on missing context
-      const needDeepFollowUps =
-        (conversationContext.travelPreferences?.length || 0) === 0 ||
-        (conversationContext.budgetPreferences?.length || 0) === 0 ||
-        !conversationContext.groupType ||
-        !origin;
-
-      const followUpSpec = needDeepFollowUps
-        ? `5. **Follow-up Questions** → Provide 4–7 highly context-aware questions (each in quotes, one per line) targeting only missing preferences or constraints (budget, pace, group type, mobility needs, season/weather, must-see POIs, hotel class).`
-        : `5. **Next-Step Questions (Optional)** → If refinements would meaningfully improve the trip, ask 1–2 concise questions in quotes (e.g., tweak pace, swap a POI, dietary needs). If nothing crucial is missing, omit this section entirely.`;
-
-      chatPrompt = `You are an expert travel planning assistant. Your goal is to create a beautifully formatted travel itinerary in **Markdown** for a ${days}-day trip to ${destinationText} from ${origin}.
+      chatPrompt = `You are an expert travel planning assistant with conversation memory. Your goal is to create a beautifully formatted travel itinerary in **Markdown** for a ${days}-day trip to ${destinationText} from ${origin}.
 
 ${contextualInfo}**CRITICAL**: You MUST create the itinerary for "${destinationText}" ONLY. Do NOT substitute with any other destination like Goa, Mumbai, or Delhi. The user specifically requested "${destinationText}".
 
@@ -118,9 +204,7 @@ ${finalDestinations.length > 1 ? `**MULTI-DESTINATION TRIP**: This is a multi-de
 2. **Daily Plan** → Morning, Afternoon, Evening with activities & timings
 3. **Accommodation & Meals** → Hotels, restaurants with price ranges
 4. **Estimated Budget** → Accommodation, Food, Transport, Activities, Misc.
-${followUpSpec}
-
-If you include a questions section, each question must be on its own line and wrapped in quotes. If nothing important is missing, omit the entire questions section.
+5. **Follow-up Questions** → 3–5 questions in quotes
 
 **EXACT STRUCTURE EXAMPLE**:
 
@@ -174,7 +258,7 @@ If you include a questions section, each question must be on its own line and wr
 
 Make the itinerary **engaging, structured, and easy to follow** with ample spacing between sections.`;
     }
-    let chatResponse = await gemini.chat(chatPrompt, "flash");
+    let chatResponse = await gemini.chat(chatPrompt);
 
     // Programmatically remove horizontal rules from the response.
     chatResponse = chatResponse.replace(/^\s*---+\s*$/gm, "");
@@ -188,7 +272,7 @@ Make the itinerary **engaging, structured, and easy to follow** with ample spaci
       chatResponse.includes("error 429")
     ) {
       console.warn(
-        `[planner] Groq returned an empty or invalid response: ${chatResponse}. Using fallback.`,
+        `[planner] Gemini returned an empty or invalid response: ${chatResponse}. Using fallback.`,
       );
 
       // Create a basic fallback response based on available information
@@ -244,7 +328,7 @@ Make the itinerary **engaging, structured, and easy to follow** with ample spaci
       poiPromises.push(
         maps
           .searchPlaces({ q: `tourist attractions in ${dest}` }, "attraction")
-          .catch((e) => {
+          .catch((e: any) => {
             console.warn(
               `[planner] Attractions search failed for ${dest}:`,
               e.message,
@@ -253,14 +337,14 @@ Make the itinerary **engaging, structured, and easy to follow** with ample spaci
           }),
         maps
           .searchPlaces({ q: `restaurants in ${dest}` }, "restaurant")
-          .catch((e) => {
+          .catch((e: any) => {
             console.warn(
               `[planner] Restaurants search failed for ${dest}:`,
               e.message,
             );
             return [];
           }),
-        maps.searchPlaces({ q: `hotels in ${dest}` }, "stay").catch((e) => {
+        maps.searchPlaces({ q: `hotels in ${dest}` }, "stay").catch((e: any) => {
           console.warn(
             `[planner] Hotels search failed for ${dest}:`,
             e.message,
@@ -320,7 +404,7 @@ Make the itinerary **engaging, structured, and easy to follow** with ample spaci
       destinationImageUrl,
     };
   } catch (e: any) {
-    console.warn("[planner] LLM or Maps failed:", e);
+    console.warn("[planner] Gemini or Maps failed:", e);
 
     // Handle API configuration issues
     if (e.message && e.message.includes("API configuration")) {
@@ -407,51 +491,23 @@ async function createStructuredItinerary(
   ctx: { origin?: string; destination?: string; days?: number },
   pois: { attractions: POI[]; restaurants: POI[]; stays: POI[] },
 ): Promise<Itinerary> {
-  const jsonModel = (process.env.GROQ_JSON_MODEL as GroqModel) || "llama-3.1-8b-instant";
-  const groq = new GroqClient({ model: jsonModel });
-  const jsonPrompt = `Create a structured JSON itinerary that EXACTLY matches the detailed description provided. Extract activities, locations, and timings directly from the text.
+  const gemini = new GeminiClient({ model: "flash" });
+  
+  // Reduce POI lists to minimize token usage
+  const compactPois = {
+    attractions: pois.attractions.slice(0, 8).map(p => ({ id: p.id, name: p.name })),
+    restaurants: pois.restaurants.slice(0, 6).map(p => ({ id: p.id, name: p.name })),
+    stays: pois.stays.slice(0, 3).map(p => ({ id: p.id, name: p.name }))
+  };
 
-Description: ${description}
+  const jsonPrompt = `Create JSON itinerary for ${ctx.destination}, ${ctx.days || 3} days.
 
-Available POIs (use these IDs in your response):
-Attractions: ${JSON.stringify(
-    pois.attractions
-      .slice(0, 15)
-      .map((p) => ({ id: p.id, name: p.name, address: p.address })),
-    null,
-    2,
-  )}
-Restaurants: ${JSON.stringify(
-    pois.restaurants
-      .slice(0, 10)
-      .map((p) => ({ id: p.id, name: p.name, address: p.address })),
-    null,
-    2,
-  )}
-Stays: ${JSON.stringify(
-    pois.stays
-      .slice(0, 5)
-      .map((p) => ({ id: p.id, name: p.name, address: p.address })),
-    null,
-    2,
-  )}
+POIs:
+A: ${JSON.stringify(compactPois.attractions)}
+R: ${JSON.stringify(compactPois.restaurants)}  
+S: ${JSON.stringify(compactPois.stays)}
 
-CRITICAL REQUIREMENTS:
-- Extract EXACT activity names, times, and locations from the description text
-- Match POI names from description to available POI IDs (use fuzzy matching for similar names)
-- If description mentions "Ooty Lake", find the POI with "Ooty Lake" in the name
-- If description mentions "Doddabetta Peak", find the POI with "Doddabetta" in the name
-- If description mentions "Government Botanical Gardens", find the POI with "Botanical" or "Garden" in the name
-- Use EXACT times mentioned in the description (e.g., "9:00 AM", "10:30 AM")
-- Create exactly ${ctx.days || 3} days as described
-- Include accommodation mentioned in the description
-- RESPOND WITH COMPLETE, VALID JSON ONLY
-- DO NOT truncate the response
-- ENSURE all braces are properly closed
-- DO NOT include comments, trailing commas, or any text outside the JSON
-- DO NOT use // or /* */ anywhere
-
-You MUST respond with ONLY this complete JSON structure:
+JSON format:
 {
   "origin": "${ctx.origin || "Current location"}",
   "destination": "${ctx.destination}",
@@ -459,157 +515,463 @@ You MUST respond with ONLY this complete JSON structure:
   "daysPlan": [
     {
       "day": 1,
-      "date": "2024-01-01",
-      "title": "Day 1: Arrival, Lakeside Charm & Panoramic Views",
+      "date": "2024-01-01", 
+      "title": "Day 1 Title",
       "activities": [
-        {"name": "Arrive in Ooty and check into accommodation", "start": "09:00", "end": "10:30", "location": "Sterling Ooty Fern Hill", "poiId": "matching_poi_id"},
-        {"name": "Head to Ooty Lake", "start": "10:30", "end": "11:00", "location": "Ooty Lake", "poiId": "matching_poi_id"},
-        {"name": "Enjoy boating at Ooty Lake", "start": "11:00", "end": "12:30", "location": "Ooty Lake", "poiId": "matching_poi_id"}
-      ],
-      "accommodation": {"name": "Savoy - IHCL SeleQtions", "checkIn": "15:00", "poiId": "matching_stay_poi_id"}
+        {"name": "Activity", "start": "09:00", "end": "11:00", "poiId": "poi_id"}
+      ]
     }
   ]
-}`;
+}
 
-  try {
-    const jsonResponse = await groq.chat(jsonPrompt);
-    console.log("[planner] Raw JSON response length:", jsonResponse.length);
-    console.log(
-      "[planner] Raw response preview:",
-      jsonResponse.substring(0, 200) + "...",
-    );
+Requirements:
+- Use POI IDs from above lists
+- ${ctx.days || 3} days exactly
+- 2-4 activities per day
+- Times 09:00-20:00
+- Valid JSON only`;
 
-    // Better JSON extraction and cleaning
-    let cleanedJson = jsonResponse
-      .replace(/^```json\s*/i, "")
-      .replace(/\s*```\s*$/i, "")
-      .trim();
-
-    // Remove any markdown or extra text before/after JSON
-    const jsonStart = cleanedJson.indexOf("{");
-    const jsonEnd = cleanedJson.lastIndexOf("}");
-
-    if (jsonStart === -1 || jsonEnd === -1) {
-      throw new Error(
-        `JSON structure not found. Response: ${cleanedJson.substring(0, 500)}`,
-      );
-    }
-
-    if (jsonEnd <= jsonStart) {
-      throw new Error(
-        `Invalid JSON structure: end position ${jsonEnd} <= start position ${jsonStart}`,
-      );
-    }
-
-    cleanedJson = cleanedJson.substring(jsonStart, jsonEnd + 1);
-    // Strip line and block comments that models sometimes add
-    cleanedJson = cleanedJson
-      .replace(/\/\/.*$/gm, "") // remove // comments
-      .replace(/\/\*[\s\S]*?\*\//g, ""); // remove /* */ comments
-    console.log("[planner] Cleaned JSON length:", cleanedJson.length);
-    console.log(
-      "[planner] JSON preview:",
-      cleanedJson.substring(0, 300) + "...",
-    );
-
-    // Validate basic JSON structure
-    if (!cleanedJson.startsWith("{") || !cleanedJson.endsWith("}")) {
-      throw new Error(
-        `Invalid JSON structure: doesn't start/end with braces. Got: ${cleanedJson.substring(0, 50)}...${cleanedJson.substring(-50)}`,
-      );
-    }
-
-    // Additional validation for common JSON issues
-    if (cleanedJson.length < 50) {
-      throw new Error(
-        `JSON too short (${cleanedJson.length} chars): ${cleanedJson}`,
-      );
-    }
-
-    // Check for truncated JSON (common AI issue)
-    const openBraces = (cleanedJson.match(/\{/g) || []).length;
-    const closeBraces = (cleanedJson.match(/\}/g) || []).length;
-    if (openBraces !== closeBraces) {
-      throw new Error(
-        `Mismatched braces: ${openBraces} open, ${closeBraces} close`,
-      );
-    }
-
-    let parsed: Itinerary;
+  // Retry logic for JSON generation
+  let lastError: Error | null = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      parsed = JSON.parse(cleanedJson) as Itinerary;
-    } catch (parseError: any) {
-      console.error("[planner] JSON parse error:", parseError);
-      console.error("[planner] Problematic JSON:", cleanedJson);
-      throw new Error(
-        `JSON parsing failed: ${parseError?.message || parseError}. JSON length: ${cleanedJson.length}`,
+      console.log(`[planner] JSON generation attempt ${attempt}/3`);
+      const jsonResponse = await gemini.chat(jsonPrompt);
+      console.log("[planner] Raw JSON response length:", jsonResponse.length);
+      console.log(
+        "[planner] Raw response preview:",
+        jsonResponse.substring(0, 200) + "...",
       );
-    }
 
-    // Validate required fields with detailed error messages
-    if (!parsed) {
-      throw new Error("Parsed result is null or undefined");
-    }
+      // Better JSON extraction and cleaning
+      let cleanedJson = jsonResponse
+        .replace(/^```json\s*/i, "")
+        .replace(/\s*```\s*$/i, "")
+        .trim();
 
-    if (!parsed.daysPlan) {
-      throw new Error("Invalid itinerary structure: daysPlan is missing");
-    }
+      // Remove any markdown or extra text before/after JSON
+      const jsonStart = cleanedJson.indexOf("{");
+      const jsonEnd = cleanedJson.lastIndexOf("}");
 
-    if (!Array.isArray(parsed.daysPlan)) {
-      throw new Error(
-        `Invalid itinerary structure: daysPlan is not an array, got: ${typeof parsed.daysPlan}`,
+      if (jsonStart === -1 || jsonEnd === -1) {
+        throw new Error(
+          `JSON structure not found. Response: ${cleanedJson.substring(0, 500)}`,
+        );
+      }
+
+      if (jsonEnd <= jsonStart) {
+        throw new Error(
+          `Invalid JSON structure: end position ${jsonEnd} <= start position ${jsonStart}`,
+        );
+      }
+
+      cleanedJson = cleanedJson.substring(jsonStart, jsonEnd + 1);
+      console.log("[planner] Cleaned JSON length:", cleanedJson.length);
+      console.log(
+        "[planner] JSON preview:",
+        cleanedJson.substring(0, 300) + "...",
       );
+
+      // Validate basic JSON structure
+      if (!cleanedJson.startsWith("{") || !cleanedJson.endsWith("}")) {
+        throw new Error(
+          `Invalid JSON structure: doesn't start/end with braces. Got: ${cleanedJson.substring(0, 50)}...${cleanedJson.substring(-50)}`,
+        );
+      }
+
+      // Additional validation for common JSON issues
+      if (cleanedJson.length < 50) {
+        throw new Error(
+          `JSON too short (${cleanedJson.length} chars): ${cleanedJson}`,
+        );
+      }
+
+      // Check for truncated JSON (common AI issue)
+      const openBraces = (cleanedJson.match(/\{/g) || []).length;
+      const closeBraces = (cleanedJson.match(/\}/g) || []).length;
+      if (openBraces !== closeBraces) {
+        throw new Error(
+          `Mismatched braces: ${openBraces} open, ${closeBraces} close`,
+        );
+      }
+
+      let parsed: Itinerary;
+      try {
+        parsed = JSON.parse(cleanedJson) as Itinerary;
+      } catch (parseError) {
+        console.error("[planner] JSON parse error:", parseError);
+        console.error("[planner] Problematic JSON:", cleanedJson);
+        throw new Error(
+          `JSON parsing failed: ${parseError instanceof Error ? parseError.message : String(parseError)}. JSON length: ${cleanedJson.length}`,
+        );
+      }
+
+      // Validate required fields with detailed error messages
+      if (!parsed) {
+        throw new Error("Parsed result is null or undefined");
+      }
+
+      if (!parsed.daysPlan) {
+        throw new Error("Invalid itinerary structure: daysPlan is missing");
+      }
+
+      if (!Array.isArray(parsed.daysPlan)) {
+        throw new Error(
+          `Invalid itinerary structure: daysPlan is not an array, got: ${typeof parsed.daysPlan}`,
+        );
+      }
+
+      if (parsed.daysPlan.length === 0) {
+        throw new Error("Invalid itinerary structure: daysPlan is empty");
+      }
+
+      // Validate each day has required fields
+      parsed.daysPlan.forEach((day, index) => {
+        if (!day.day && day.day !== 0) {
+          throw new Error(`Day ${index} missing 'day' field`);
+        }
+        if (!day.activities || !Array.isArray(day.activities)) {
+          throw new Error(`Day ${index} missing or invalid 'activities' field`);
+        }
+      });
+
+      // Enrich activities with full POI data
+      parsed.daysPlan.forEach((day) => {
+        if (day.activities && Array.isArray(day.activities)) {
+          day.activities.forEach((act) => {
+            const allPois = [
+              ...pois.attractions,
+              ...pois.restaurants,
+              ...pois.stays,
+            ];
+            const poi = allPois.find((p) => p.id === act.poiId);
+            if (poi) {
+              act.name = poi.name;
+              act.location = poi.address;
+              act.photoUrl = poi.photoUrl;
+              act.rating = poi.rating;
+              act.lat = poi.lat;
+              act.lng = poi.lng;
+            }
+          });
+        }
+      });
+
+      console.log(
+        "[planner] Successfully created structured itinerary with",
+        parsed.daysPlan.length,
+        "days",
+      );
+      return parsed;
+    } catch (e) {
+      lastError = e as Error;
+      console.log(
+        `[planner] Attempt ${attempt} failed:`,
+        e,
+      );
+      
+      // If Gemini is overloaded (503) or MAX_TOKENS, try a different approach
+      const errorMsg = (e as Error).message || '';
+      if (errorMsg.includes('503') || errorMsg.includes('MAX_TOKENS') || errorMsg.includes('overloaded')) {
+        console.log('[planner] Gemini overloaded, trying simplified generation...');
+        try {
+          return await createSimplifiedItinerary(ctx, pois);
+        } catch (fallbackError) {
+          console.log('[planner] Simplified generation also failed:', fallbackError);
+        }
+      }
+      
+      // If this isn't the last attempt, wait a bit before retrying
+      if (attempt < 3) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
     }
-
-    if (parsed.daysPlan.length === 0) {
-      throw new Error("Invalid itinerary structure: daysPlan is empty");
-    }
-
-    // Validate each day has required fields
-    parsed.daysPlan.forEach((day, index) => {
-      if (!day.day && day.day !== 0) {
-        throw new Error(`Day ${index} missing 'day' field`);
-      }
-      if (!day.activities || !Array.isArray(day.activities)) {
-        throw new Error(`Day ${index} missing or invalid 'activities' field`);
-      }
-    });
-
-    // Enrich activities with full POI data
-    parsed.daysPlan.forEach((day) => {
-      if (day.activities && Array.isArray(day.activities)) {
-        day.activities.forEach((act) => {
-          const allPois = [
-            ...pois.attractions,
-            ...pois.restaurants,
-            ...pois.stays,
-          ];
-          const poi = allPois.find((p) => p.id === act.poiId);
-          if (poi) {
-            act.name = poi.name;
-            act.location = poi.address;
-            act.photoUrl = poi.photoUrl;
-            act.rating = poi.rating;
-            act.lat = poi.lat;
-            act.lng = poi.lng;
-          }
-        });
-      }
-    });
-
-    console.log(
-      "[planner] Successfully created structured itinerary with",
-      parsed.daysPlan.length,
-      "days",
-    );
-    return parsed;
-  } catch (e) {
-    console.log(
-      "[planner] Failed to create structured itinerary, using fallback.",
-      e,
-    );
   }
+  
+  console.error("[planner] All JSON generation attempts failed, using fallback. Last error:", lastError);
   return createDummyItinerary(ctx);
+}
+
+// --- Multi-destination Trip Management --- //
+async function addDestinationToItinerary(
+  existingItinerary: Itinerary,
+  newDestination: string,
+  days: number,
+  origin?: string
+): Promise<{
+  chatResponse: string;
+  itinerary: Itinerary;
+  destination: string;
+  destinations?: string[];
+  days: number;
+  destinationImageUrl?: string;
+} | null> {
+  try {
+    const maps = new GoogleMapsClient();
+    const destinationImageService = new DestinationImageService();
+    
+    // Get POIs for the new destination
+    console.log(`[planner] Adding ${newDestination} (${days} days) to existing itinerary`);
+    const [attractions, restaurants, stays] = await Promise.all([
+      maps.searchPlaces({ q: `tourist attractions in ${newDestination}` }, "attraction"),
+      maps.searchPlaces({ q: `restaurants in ${newDestination}` }, "restaurant"),
+      maps.searchPlaces({ q: `hotels in ${newDestination}` }, "stay")
+    ]);
+    const pois = { attractions, restaurants, stays };
+    
+    // Create itinerary for the new destination
+    const newDestinationItinerary = await createStructuredItinerary(
+      `Create a ${days}-day itinerary for ${newDestination}`,
+      { origin: existingItinerary.destination, destination: newDestination, days },
+      pois
+    );
+    
+    // Merge with existing itinerary
+    const totalDays = existingItinerary.days + days;
+    const mergedDaysPlan = [
+      ...existingItinerary.daysPlan,
+      ...newDestinationItinerary.daysPlan.map(day => ({
+        ...day,
+        day: day.day + existingItinerary.days,
+        date: new Date(new Date(existingItinerary.daysPlan[existingItinerary.daysPlan.length - 1].date).getTime() + day.day * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+      }))
+    ];
+    
+    // Create destination segments
+    const destinationSegments = [
+      {
+        destination: existingItinerary.destination,
+        startDay: 1,
+        endDay: existingItinerary.days,
+        days: existingItinerary.days
+      },
+      {
+        destination: newDestination,
+        startDay: existingItinerary.days + 1,
+        endDay: totalDays,
+        days: days
+      }
+    ];
+    
+    const mergedItinerary: Itinerary = {
+      origin: existingItinerary.origin,
+      destination: existingItinerary.destination, // Keep primary destination
+      destinations: [existingItinerary.destination, newDestination],
+      days: totalDays,
+      daysPlan: mergedDaysPlan,
+      destinationSegments
+    };
+    
+    // Get destination image
+    let destinationImageUrl: string | undefined;
+    try {
+      const imageResult = await destinationImageService.getDestinationImage(newDestination);
+      destinationImageUrl = imageResult?.imageUrl;
+    } catch (e) {
+      console.log(`[planner] Could not fetch destination image for ${newDestination}:`, e);
+    }
+    
+    const chatResponse = `Great! I've added ${newDestination} (${days} days) to your existing trip. Your journey will now continue from ${existingItinerary.destination} to ${newDestination}, making it a ${totalDays}-day multi-destination adventure!`;
+    
+    return {
+      chatResponse,
+      itinerary: mergedItinerary,
+      destination: existingItinerary.destination,
+      destinations: [existingItinerary.destination, newDestination],
+      days: totalDays,
+      destinationImageUrl
+    };
+  } catch (e) {
+    console.error("[planner] Error adding destination:", e);
+    return null;
+  }
+}
+
+async function removeDestinationFromItinerary(
+  existingItinerary: Itinerary,
+  destinationToRemove: string
+): Promise<{
+  chatResponse: string;
+  itinerary: Itinerary;
+  destination: string;
+  destinations?: string[];
+  days: number;
+  destinationImageUrl?: string;
+} | null> {
+  try {
+    if (!existingItinerary.destinationSegments) {
+      return {
+        chatResponse: `I can only remove destinations from multi-destination trips. Your current trip appears to be a single destination.`,
+        itinerary: existingItinerary,
+        destination: existingItinerary.destination,
+        days: existingItinerary.days
+      };
+    }
+    
+    const segmentToRemove = existingItinerary.destinationSegments.find(
+      seg => seg.destination.toLowerCase().includes(destinationToRemove.toLowerCase())
+    );
+    
+    if (!segmentToRemove) {
+      return {
+        chatResponse: `I couldn't find ${destinationToRemove} in your current trip itinerary.`,
+        itinerary: existingItinerary,
+        destination: existingItinerary.destination,
+        destinations: existingItinerary.destinations,
+        days: existingItinerary.days
+      };
+    }
+    
+    // Remove the destination segment and associated days
+    const remainingSegments = existingItinerary.destinationSegments.filter(
+      seg => seg.destination !== segmentToRemove.destination
+    );
+    
+    const remainingDaysPlan = existingItinerary.daysPlan.filter(
+      day => day.day < segmentToRemove.startDay || day.day > segmentToRemove.endDay
+    );
+    
+    // Adjust day numbers for remaining days
+    const adjustedDaysPlan = remainingDaysPlan.map(day => {
+      if (day.day > segmentToRemove.endDay) {
+        return {
+          ...day,
+          day: day.day - segmentToRemove.days
+        };
+      }
+      return day;
+    });
+    
+    // Update remaining segments
+    const adjustedSegments = remainingSegments.map(seg => {
+      if (seg.startDay > segmentToRemove.endDay) {
+        return {
+          ...seg,
+          startDay: seg.startDay - segmentToRemove.days,
+          endDay: seg.endDay - segmentToRemove.days
+        };
+      }
+      return seg;
+    });
+    
+    const updatedItinerary: Itinerary = {
+      ...existingItinerary,
+      days: existingItinerary.days - segmentToRemove.days,
+      daysPlan: adjustedDaysPlan,
+      destinationSegments: adjustedSegments.length > 1 ? adjustedSegments : undefined,
+      destinations: adjustedSegments.length > 1 ? adjustedSegments.map(seg => seg.destination) : undefined
+    };
+    
+    const chatResponse = `I've removed ${destinationToRemove} from your trip. Your itinerary is now ${updatedItinerary.days} days focusing on ${adjustedSegments.map(seg => seg.destination).join(" and ")}.`;
+    
+    return {
+      chatResponse,
+      itinerary: updatedItinerary,
+      destination: updatedItinerary.destination,
+      destinations: updatedItinerary.destinations,
+      days: updatedItinerary.days
+    };
+  } catch (e) {
+    console.error("[planner] Error removing destination:", e);
+    return null;
+  }
+}
+
+// --- Simplified Itinerary Generator (when AI is overloaded) --- //
+async function createSimplifiedItinerary(
+  ctx: { origin?: string; destination?: string; days?: number },
+  pois: { attractions: POI[]; restaurants: POI[]; stays: POI[] }
+): Promise<Itinerary> {
+  const today = new Date();
+  const totalDays = ctx.days || 3;
+  
+  const daysPlan = Array.from({ length: totalDays }, (_, i) => {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    const dateStr = d.toISOString().slice(0, 10);
+    
+    const activities: Activity[] = [];
+    
+    // Morning attraction
+    if (pois.attractions[i % pois.attractions.length]) {
+      const poi = pois.attractions[i % pois.attractions.length];
+      activities.push({
+        name: poi.name,
+        start: "09:00",
+        end: "11:00",
+        location: poi.address,
+        poiId: poi.id,
+        lat: poi.lat,
+        lng: poi.lng,
+        photoUrl: poi.photoUrl,
+        rating: poi.rating
+      });
+    }
+    
+    // Lunch
+    if (pois.restaurants[i % pois.restaurants.length]) {
+      const poi = pois.restaurants[i % pois.restaurants.length];
+      activities.push({
+        name: poi.name,
+        start: "12:30",
+        end: "14:00",
+        location: poi.address,
+        poiId: poi.id,
+        lat: poi.lat,
+        lng: poi.lng,
+        photoUrl: poi.photoUrl,
+        rating: poi.rating
+      });
+    }
+    
+    // Afternoon attraction
+    if (pois.attractions[(i + 1) % pois.attractions.length]) {
+      const poi = pois.attractions[(i + 1) % pois.attractions.length];
+      activities.push({
+        name: poi.name,
+        start: "15:00",
+        end: "17:00",
+        location: poi.address,
+        poiId: poi.id,
+        lat: poi.lat,
+        lng: poi.lng,
+        photoUrl: poi.photoUrl,
+        rating: poi.rating
+      });
+    }
+    
+    // Dinner
+    if (pois.restaurants[(i + 1) % pois.restaurants.length]) {
+      const poi = pois.restaurants[(i + 1) % pois.restaurants.length];
+      activities.push({
+        name: poi.name,
+        start: "19:00",
+        end: "21:00",
+        location: poi.address,
+        poiId: poi.id,
+        lat: poi.lat,
+        lng: poi.lng,
+        photoUrl: poi.photoUrl,
+        rating: poi.rating
+      });
+    }
+    
+    return {
+      day: i + 1,
+      date: dateStr,
+      title: i === 0 ? `Arrival in ${ctx.destination}` : 
+             i === totalDays - 1 ? `Farewell ${ctx.destination}` : 
+             `Explore ${ctx.destination}`,
+      activities
+    };
+  });
+  
+  return {
+    origin: ctx.origin || "Current location",
+    destination: ctx.destination!,
+    days: ctx.days!,
+    daysPlan,
+  };
 }
 
 // --- Fallback Itinerary Generator --- //
@@ -654,55 +1016,45 @@ function createDummyItinerary(ctx: {
 async function extractTripDetails(
   message: string,
   context?: any,
-): Promise<{ destination?: string; destinations?: string[]; days?: number }> {
-  const groq = new GroqClient({ model: "llama-3.1-8b-instant" });
+  existingTrip?: any,
+): Promise<{ destination?: string; destinations?: string[]; days?: number; action?: string; clarificationNeeded?: string }> {
+  const gemini = new GeminiClient({ model: "flash" });
 
   // Include context in extraction prompt if available
   let contextPrompt = "";
-  if (
-    context &&
-    context.previousDestinations &&
-    context.previousDestinations.length > 0
-  ) {
-    contextPrompt = `\n\nCONVERSATION CONTEXT: The user has previously mentioned these destinations: ${context.previousDestinations.join(", ")}. Use this context to better understand location references.`;
+  if (context && context.previousDestinations.length > 0) {
+    contextPrompt = `\nCONTEXT: Previous destinations discussed: ${context.previousDestinations.join(", ")}`;
+  }
+  
+  // Include existing trip context for better disambiguation
+  if (existingTrip && existingTrip.destination) {
+    contextPrompt += `\nEXISTING TRIP: Currently planning for ${existingTrip.destination}${existingTrip.days ? ` (${existingTrip.days} days)` : ''}`;
+  } else if (context && context.currentDestination) {
+    contextPrompt += `\nCURRENT TRIP: Active trip planning for ${context.currentDestination}`;
   }
 
-  const prompt = `You are an extraction tool. Output STRICT JSON ONLY.
-Do not include any explanation, code fences, or markdown. ${contextPrompt}
+  const prompt = `${TRIP_DETAIL_EXTRACTION_PROMPT}
 
-USER_MESSAGE: "${message}"
+User message: "${message}"${contextPrompt}`;
 
-REQUIREMENTS:
-- Extract destination names faithfully. If a destination looks misspelled (e.g., "delgi"), correct it to the most likely real place ("Delhi"). Do not substitute with a different place.
-- If multiple destinations are mentioned (e.g., "ooty and coonoor"), return a "destinations" array.
-- If one destination, return a single "destination" string.
-- Include "days" if present (number). Omit keys that are not present.
-
-Respond with ONLY one JSON object: {"destination"?: string, "destinations"?: string[], "days"?: number}`;
-  const jsonResponse = await groq.chat(prompt, { temperature: 0 });
+  const jsonResponse = await gemini.chat(prompt);
   console.log(`[planner] Trip details extraction response: ${jsonResponse}`);
-  // Robust cleaning: strip code fences, prose, and take the first top-level JSON object
-  let cleanedJson = jsonResponse
-    .replace(/```json/gi, "")
-    .replace(/```/g, "")
+  const cleanedJson = jsonResponse
+    .replace(/^```json\s*/i, "")
+    .replace(/\s*```\s*$/i, "")
     .trim();
   const jsonMatch = cleanedJson.match(/\{[\s\S]*\}/);
 
   if (jsonMatch) {
     try {
       const result = JSON.parse(jsonMatch[0]);
-      // Light post-processing: correct common misspellings
-      const correctName = (name: string) => normalizeDestinationName(name);
-      if (result.destination && typeof result.destination === 'string') {
-        result.destination = correctName(result.destination);
-      }
-      if (Array.isArray(result.destinations)) {
-        result.destinations = result.destinations.map((d: string) => correctName(d));
-      }
       console.log(`[planner] Extracted trip details:`, result);
       return result;
     } catch (e) {
-      console.warn("[planner] Failed to parse trip details JSON from Groq.", e);
+      console.warn(
+        "[planner] Failed to parse trip details JSON from Gemini.",
+        e,
+      );
     }
   }
   return {};
@@ -712,34 +1064,84 @@ export function emitItineraryUpdate(it: Itinerary): WsEvent {
   return { type: "itinerary.update", data: it };
 }
 
-// Heuristic normalizer for common destination misspellings/variants
-function normalizeDestinationName(name: string): string {
-  const n = (name || "").trim();
-  if (!n) return n;
-  const lower = n.toLowerCase();
-  const map: Record<string, string> = {
-    delgi: "Delhi",
-    delhi: "Delhi",
-    mumbay: "Mumbai",
-    bombay: "Mumbai",
-    cochin: "Kochi",
-    kochi: "Kochi",
-    banglore: "Bangalore",
-    bengaluru: "Bangalore",
-    ooti: "Ooty",
-    udhagamandalam: "Ooty",
-    kunoor: "Coonoor",
-    coonur: "Coonoor",
-    kodaikannal: "Kodaikanal",
-    udaypur: "Udaipur",
-  };
-  if (map[lower]) return map[lower];
-  // Title-case fallback
-  return lower.charAt(0).toUpperCase() + lower.slice(1);
+// Spell correction for destination names using Google Places API
+async function correctDestinationSpelling(destination: string): Promise<string> {
+  try {
+    const maps = new GoogleMapsClient();
+    
+    // Use Google Places Text Search to find the best match
+    const searchResults = await maps.searchPlaces({ q: destination }, "attraction");
+    
+    if (searchResults && searchResults.length > 0) {
+      // Extract city/location name from the first result's address
+      const firstResult = searchResults[0];
+      if (firstResult.address) {
+        // Try to extract city name from address components
+        const addressParts = firstResult.address.split(',').map((part: string) => part.trim());
+        
+        // Look for the main city/destination name (usually first or second part)
+        for (const part of addressParts) {
+          // Skip country codes, postal codes, and state abbreviations
+          if (part.length > 2 && !part.match(/^\d+/) && !part.match(/^[A-Z]{2,3}$/)) {
+            // If this part contains the original destination (fuzzy match), use it
+            const similarity = calculateSimilarity(destination.toLowerCase(), part.toLowerCase());
+            if (similarity > 0.6) {
+              console.log(`[planner] Corrected "${destination}" to "${part}" (similarity: ${similarity})`);
+              return part;
+            }
+          }
+        }
+      }
+      
+      // Fallback: use the POI name if it's a place name
+      if (firstResult.name && firstResult.name.length > 2) {
+        const similarity = calculateSimilarity(destination.toLowerCase(), firstResult.name.toLowerCase());
+        if (similarity > 0.5) {
+          console.log(`[planner] Corrected "${destination}" to "${firstResult.name}" (similarity: ${similarity})`);
+          return firstResult.name;
+        }
+      }
+    }
+    
+    // If no good match found, return original
+    console.log(`[planner] No spelling correction found for "${destination}"`);
+    return destination;
+  } catch (error) {
+    console.error(`[planner] Error correcting spelling for "${destination}":`, error);
+    return destination; // Return original on error
+  }
+}
+
+// Calculate string similarity using Levenshtein distance
+function calculateSimilarity(str1: string, str2: string): number {
+  const len1 = str1.length;
+  const len2 = str2.length;
+  
+  if (len1 === 0) return len2 === 0 ? 1 : 0;
+  if (len2 === 0) return 0;
+  
+  const matrix = Array(len1 + 1).fill(null).map(() => Array(len2 + 1).fill(null));
+  
+  for (let i = 0; i <= len1; i++) matrix[i][0] = i;
+  for (let j = 0; j <= len2; j++) matrix[0][j] = j;
+  
+  for (let i = 1; i <= len1; i++) {
+    for (let j = 1; j <= len2; j++) {
+      const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,     // deletion
+        matrix[i][j - 1] + 1,     // insertion
+        matrix[i - 1][j - 1] + cost // substitution
+      );
+    }
+  }
+  
+  const maxLen = Math.max(len1, len2);
+  return (maxLen - matrix[len1][len2]) / maxLen;
 }
 
 // Helper function to extract conversation context
-function extractConversationContext(history: Message[]) {
+function extractConversationContext(history: ChatMessage[]) {
   const context = {
     previousDestinations: new Set<string>(),
     travelPreferences: new Set<string>(),
@@ -747,6 +1149,7 @@ function extractConversationContext(history: Message[]) {
     previousDurations: new Set<number>(),
     groupType: undefined as string | undefined,
     preferredOrigin: undefined as string | undefined,
+    currentDestination: undefined as string | undefined,
   };
 
   if (!history || history.length === 0) {
@@ -757,6 +1160,7 @@ function extractConversationContext(history: Message[]) {
       previousDurations: [],
       groupType: undefined,
       preferredOrigin: undefined,
+      currentDestination: undefined,
     };
   }
 
@@ -766,7 +1170,7 @@ function extractConversationContext(history: Message[]) {
   recentHistory.forEach((msg) => {
     const content = msg.content.toLowerCase();
 
-    // Extract destinations mentioned
+    // Extract destinations mentioned and track current destination
     const destPatterns = [
       /(?:to|visit|visiting|in|plan.*trip.*to)\s+([A-Za-z][A-Za-z\s]{2,20}?)(?:\s|$|[,.!?])/g,
       /([A-Za-z][A-Za-z\s]{2,20}?)\s+(?:trip|travel|vacation|itinerary)/g,
@@ -777,9 +1181,13 @@ function extractConversationContext(history: Message[]) {
       while ((match = pattern.exec(content)) !== null) {
         const dest = match[1].trim();
         if (dest.length > 2 && dest.length < 20 && !isCommonWord(dest)) {
-          context.previousDestinations.add(
-            dest.charAt(0).toUpperCase() + dest.slice(1),
-          );
+          const formattedDest = dest.charAt(0).toUpperCase() + dest.slice(1);
+          context.previousDestinations.add(formattedDest);
+          
+          // Track most recent destination as current
+          if (msg.role === 'assistant' && content.includes('itinerary')) {
+            context.currentDestination = formattedDest;
+          }
         }
       }
     });
@@ -880,6 +1288,7 @@ function extractConversationContext(history: Message[]) {
     previousDurations: Array.from(context.previousDurations),
     groupType: context.groupType,
     preferredOrigin: context.preferredOrigin,
+    currentDestination: context.currentDestination,
   };
 }
 
