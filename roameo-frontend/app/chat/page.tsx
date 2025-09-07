@@ -110,6 +110,29 @@ export default function ChatPage() {
     }
   }, [mapData]);
 
+  // Hydrate itinerary and map from sessionStorage to avoid losing UI state on reconnects or clarifications
+  useEffect(() => {
+    if (!sessionId) return;
+    try {
+      const itinRaw = sessionStorage.getItem(`itin:${sessionId}`);
+      if (itinRaw && !itinerary) {
+        const parsed = JSON.parse(itinRaw);
+        if (parsed?.daysPlan?.length) {
+          console.log("[client] Hydrating itinerary from sessionStorage");
+          setItinerary(parsed);
+        }
+      }
+      const mapRaw = sessionStorage.getItem(`map:${sessionId}`);
+      if (mapRaw && !mapData) {
+        const parsed = JSON.parse(mapRaw);
+        if (parsed?.pois) {
+          console.log("[client] Hydrating mapData from sessionStorage");
+          setMapData(parsed);
+        }
+      }
+    } catch {}
+  }, [sessionId]);
+
   useEffect(() => {
     console.log(
       "[client] Search results state updated:",
@@ -747,23 +770,14 @@ export default function ChatPage() {
           "[client] Itinerary received - planning should be complete",
         );
         const data = evt.data;
-        if (data === null) {
-          // Avoid flicker: if a new planning cycle is active, keep showing previous itinerary until new one arrives
-          if (!planningActiveRef.current) {
-            console.log("[client] Clearing itinerary as requested");
-            setItinerary(undefined);
-          } else {
-            console.log(
-              "[client] Skipping itinerary clear due to active planning",
-            );
-          }
-        } else if (data && typeof data === "object" && (data as any).daysPlan) {
+        if (data && typeof data === "object" && (data as any).daysPlan) {
           // Valid itinerary arrived – set it and NOW clear all planning UI
           const newItin = data as Itinerary;
           console.log(
             `[client] Itinerary complete with ${newItin.daysPlan?.length || 0} days - clearing all planning states`,
           );
           setItinerary(newItin);
+          try { sessionStorage.setItem(`itin:${sessionId}`, JSON.stringify(newItin)); } catch {}
 
           // Check if this was an active planning session before clearing states
           const wasActivePlanning = planningActiveRef.current;
@@ -805,10 +819,8 @@ export default function ChatPage() {
             planningReplyInjectedRef.current = true;
           }
         } else {
-          console.warn(
-            "[client] Received invalid itinerary data, ignoring:",
-            data,
-          );
+          // Never clear on null/invalid; preserve existing state
+          console.warn("[client] Ignoring empty/invalid itinerary.update to preserve state");
         }
       } else if (evt.type === "search.results") {
         if (evt.data !== null && evt.data !== undefined) {
@@ -821,10 +833,11 @@ export default function ChatPage() {
           // no-op
         } else {
           setMapData(evt.data);
+          try { sessionStorage.setItem(`map:${sessionId}`, JSON.stringify(evt.data)); } catch {}
         }
-      } else if (evt.type === "planning.status") {
+      } else if ((evt as any).type === "planning.status") {
         // Backend signals planning lifecycle; keep UI in sync and avoid stuck typing
-        const status = evt.data?.status?.toLowerCase?.() || "";
+        const status = (evt as any).data?.status?.toLowerCase?.() || "";
         console.log("[client] planning.status:", status);
         if (status === "started" || status === "running" || status === "thinking" || status === "planning") {
           planningActiveRef.current = true;
