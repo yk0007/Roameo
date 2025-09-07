@@ -793,31 +793,8 @@ export default function ChatPage() {
             window.clearTimeout(planningTimeoutRef.current);
             planningTimeoutRef.current = null;
           }
-          // Only inject confirmation if this was an active planning session AND no recent assistant message exists
-          const recentMessages = messages.slice(-3);
-          const hasRecentAssistantMessage = recentMessages.some(msg => 
-            msg.role === 'assistant' && 
-            (msg.content.includes('itinerary') || msg.content.includes('planned'))
-          );
-          
-          if (!planningReplyInjectedRef.current && wasActivePlanning && !hasRecentAssistantMessage) {
-            const dest = (trip?.destination || "").trim();
-            const d = trip?.days;
-            const summary =
-              dest && d
-                ? `I've planned a ${d}-day itinerary for ${dest}. You can view it in the Itinerary tab. Want any adjustments?`
-                : `Your itinerary is ready. Check the Itinerary tab on the right. Want me to tweak anything?`;
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: `plan-reply-${Date.now()}`,
-                role: "assistant",
-                content: summary,
-                createdAt: new Date().toISOString(),
-              } as any,
-            ]);
-            planningReplyInjectedRef.current = true;
-          }
+          // Do not auto-inject any assistant confirmation message here.
+          // The backend will send its own appropriate chat response.
         } else {
           // Never clear on null/invalid; preserve existing state
           console.warn("[client] Ignoring empty/invalid itinerary.update to preserve state");

@@ -98,6 +98,43 @@ export async function plannerAgent(
     newDestination = await correctDestinationSpelling(newDestination);
   }
 
+  // Helper: infer destination/days from recent conversation when user replies with just "add"
+  const inferPendingFromHistory = (hist: ChatMessage[]): { dest?: string; days?: number } => {
+    // Look back up to last 8 messages for the assistant clarification
+    const N = 8;
+    const recent = hist.slice(-N).reverse();
+    const result: { dest?: string; days?: number } = {};
+    for (const m of recent) {
+      if (m.role === "assistant") {
+        // Pattern: Do you want to add Mysore for 2 days to your existing Ooty trip
+        const addMatch = /add\s+([A-Za-z\s]+?)\s+for\s+(\d+)\s+day/i.exec(m.content || "");
+        if (addMatch) {
+          result.dest = addMatch[1].trim();
+          result.days = parseInt(addMatch[2], 10);
+          break;
+        }
+        const addNoDays = /add\s+([A-Za-z\s]+?)\s+to\s+your\s+existing/i.exec(m.content || "");
+        if (addNoDays) {
+          result.dest = addNoDays[1].trim();
+          // keep searching for days in earlier user message
+        }
+      }
+      if (m.role === "user") {
+        // Pattern: plan trip to mysore for 2 days
+        const userMatch = /to\s+([A-Za-z\s]+?)\s+for\s+(\d+)\s+day/i.exec(m.content || "");
+        if (userMatch) {
+          result.dest = result.dest || userMatch[1].trim();
+          result.days = result.days || parseInt(userMatch[2], 10);
+          // do not break; prefer assistant clarification if found afterwards
+        } else {
+          const userNoDays = /to\s+([A-Za-z\s]+)/i.exec(m.content || "");
+          if (userNoDays && !result.dest) result.dest = userNoDays[1].trim();
+        }
+      }
+    }
+    return result;
+  };
+
   // Guardrail: If an itinerary already exists and user mentions a different destination
   // but didn't explicitly say to replace (e.g., "new trip", "instead", "replace"),
   // force a clarification instead of overwriting the current plan.
@@ -118,13 +155,13 @@ export async function plannerAgent(
   
   // Handle clarification needed
   if (action === "clarify") {
-    const clarificationMessage = extractedDetails.clarificationNeeded || 
-      `I need clarification about "${newDestination}". Do you want to:
-      
-1. Add ${newDestination} to your existing trip${_ctx.destination ? ` (currently planning for ${_ctx.destination})` : ''}
-2. Plan a completely new trip to ${newDestination} instead
-
-Also, how many days would you like to spend there?`;
+    // Build a concise, contextual clarification using any inferred values
+    const currentLabel = _ctx.destination ? ` after your ${_ctx.destination} plan` : " to your trip";
+    const inferred = { days: extractedDetails.days, dest: newDestination };
+    const destPart = inferred.dest ? `${inferred.dest}` : "the new destination";
+    const daysPart = inferred.days ? `${inferred.days} day${inferred.days === 1 ? "" : "s"}` : "# days";
+    const clarificationMessage = extractedDetails.clarificationNeeded ||
+      `Should I add ${daysPart} in ${destPart}${currentLabel}, or start a separate ${daysPart} ${destPart} trip?`;
 
     return {
       chatResponse: clarificationMessage,
@@ -139,8 +176,34 @@ Also, how many days would you like to spend there?`;
   }
 
   // Handle different actions
-  if (action === "add" && _ctx.existingItinerary && newDestination) {
-    const res = await addDestinationToItinerary(_ctx.existingItinerary, newDestination, newDays || 3, _ctx.origin);
+  if (action === "add" && _ctx.existingItinerary) {
+    // If destination not extracted from this short reply (e.g., "add"), infer from history
+    if (!newDestination) {
+      const inferred = inferPendingFromHistory(history);
+      if (inferred.dest) newDestination = inferred.dest;
+      if (!newDays && inferred.days) (extractedDetails as any).days = inferred.days;
+    }
+
+    if (!newDestination) {
+      // Still unknown — ask once more with explicit example
+      return {
+        chatResponse:
+          "Got it — to add a destination, please say something like 'Add Mysore for 2 days'.",
+        itinerary: _ctx.existingItinerary,
+        destination: _ctx.destination || "",
+        destinations: _ctx.destinations,
+        days: _ctx.days || 1,
+        destinationImageUrl: undefined,
+        clarify: true,
+      };
+    }
+
+    const res = await addDestinationToItinerary(
+      _ctx.existingItinerary,
+      newDestination,
+      newDays || (extractedDetails as any).days || 3,
+      _ctx.origin,
+    );
     return { ...res!, clarify: false } as any;
   }
   
