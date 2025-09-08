@@ -67,7 +67,7 @@ function summarizeConversation(messages: Message[], itinerary?: any): string {
 const graph = new StateGraph<State>({ channels: graphState })
   .addNode("router", async (state: State) => {
     const { message } = state.input;
-    const recent = state.messages.slice(-30);
+    const recent = state.messages.slice(-80);
     const intent = await intentAgent(message, recent);
     console.log(`[router] Intent detected: ${intent} for message: "${message}"`);
     
@@ -89,7 +89,7 @@ const graph = new StateGraph<State>({ channels: graphState })
   })
   .addNode("planner", async (state: State) => {
     const { trip, message } = state.input;
-    const recent = state.messages.slice(-30);
+    const recent = state.messages.slice(-80);
     const conversationSummary = summarizeConversation(recent, state.itinerary);
     
     // Emit planning start event
@@ -216,7 +216,7 @@ const graph = new StateGraph<State>({ channels: graphState })
   })
   .addNode("destination_search", async (state: State) => {
     const { message, trip } = state.input;
-    const recent = state.messages.slice(-30);
+    const recent = state.messages.slice(-80);
     const events: WsEvent[] = [];
     
     // OPTIMIZATION: Run destination extraction and intent re-classification in parallel

@@ -11,10 +11,12 @@ IMPORTANT: Analyze the context carefully to determine if the user wants to:
 1. "plan" - Create a completely new trip (replace existing)
 2. "add" - Add a destination to their existing trip 
 3. "remove" - Remove a destination from their existing trip
-4. "clarify" - Intent is ambiguous, need clarification
+4. "extend" - Increase the duration of the current trip (add more days)
+5. "clarify" - Intent is ambiguous, need clarification
 
 Look for keywords like:
-- "add", "also visit", "include", "extend", "then go to" → action: "add"
+- "add", "also visit", "include", "then go to" → action: "add"
+- "extend", "add X more days", "make it X days", "increase to X days" → action: "extend"
 - "remove", "skip", "cancel", "drop", "don't go to" → action: "remove"  
 - "plan", "trip to", "visit", "go to" with clear new trip context → action: "plan"
 - Ambiguous cases (e.g., "plan for Mysore" when existing trip exists) → action: "clarify"
@@ -29,7 +31,7 @@ CONTEXT CLUES for disambiguation:
 - IMPORTANT: Always check EXISTING TRIP context before deciding action
 
 Extract the following information:
-- action: "plan" | "add" | "remove" | "clarify"
+- action: "plan" | "add" | "remove" | "extend" | "clarify"
 - destination: string (primary destination mentioned)
 - destinations: string[] (if multiple destinations mentioned)
 - days: number (total trip days or days for this destination)
@@ -100,8 +102,8 @@ export async function plannerAgent(
 
   // Helper: infer destination/days from recent conversation when user replies with just "add"
   const inferPendingFromHistory = (hist: ChatMessage[]): { dest?: string; days?: number } => {
-    // Look back up to last 8 messages for the assistant clarification
-    const N = 8;
+    // Look back up to last 12 messages for the assistant clarification
+    const N = 12;
     const recent = hist.slice(-N).reverse();
     const result: { dest?: string; days?: number } = {};
     for (const m of recent) {
@@ -209,6 +211,37 @@ export async function plannerAgent(
   
   if (action === "remove" && _ctx.existingItinerary && newDestination) {
     const res = await removeDestinationFromItinerary(_ctx.existingItinerary, newDestination);
+    return { ...res!, clarify: false } as any;
+  }
+ 
+  // New: handle extend by adding days to the current destination
+  if (action === "extend" && _ctx.existingItinerary) {
+    // newDays may be either delta days ("extend by 2") or absolute ("make it 6") —
+    // if the value is <= current days, ask for clarification; otherwise treat as delta if small.
+    const currentDays = _ctx.existingItinerary.days || _ctx.days || 0;
+    let extraDays = newDays || 0;
+    if (!extraDays || extraDays <= 0) {
+      return {
+        chatResponse: "How many more days should I add? You can say 'extend by 2 days' or 'make it 6 days'.",
+        itinerary: _ctx.existingItinerary,
+        destination: _ctx.destination || _ctx.existingItinerary.destination || "",
+        destinations: _ctx.destinations,
+        days: currentDays,
+        destinationImageUrl: undefined,
+        clarify: true,
+      } as any;
+    }
+    // If user said a small number (<=5), assume it's delta. If larger than current days, assume absolute total.
+    if (extraDays > currentDays && extraDays - currentDays <= 5) {
+      extraDays = extraDays - currentDays;
+    }
+    const baseDest = _ctx.existingItinerary.destination || _ctx.destination || "";
+    const res = await addDestinationToItinerary(
+      _ctx.existingItinerary,
+      baseDest,
+      extraDays,
+      _ctx.origin,
+    );
     return { ...res!, clarify: false } as any;
   }
   
