@@ -324,8 +324,8 @@ export function buildApiRouter(
           return res.json({ trips: [] });
         }
 
-        // Set cache headers for better performance
-        res.set("Cache-Control", "private, max-age=300"); // Cache for 5 minutes
+        // Disable caching so dashboard reflects deletes immediately
+        res.set("Cache-Control", "no-store");
 
         // Query sessions from database with optimized fields
         const { createClient } = await import("@supabase/supabase-js");
@@ -411,8 +411,7 @@ export function buildApiRouter(
         const { error: messagesError } = await supabase
           .from("messages")
           .delete()
-          .eq("session_id", sessionId)
-          .eq("user_id", req.userId);
+          .eq("session_id", sessionId);
 
         if (messagesError) {
           console.error("Error deleting messages:", messagesError);
@@ -423,20 +422,18 @@ export function buildApiRouter(
         const { error: poisError } = await supabase
           .from("saved_pois")
           .delete()
-          .eq("session_id", sessionId)
-          .eq("user_id", req.userId);
+          .eq("session_id", sessionId);
 
         if (poisError) {
           console.error("Error deleting saved POIs:", poisError);
           return res.status(500).json({ error: "Failed to delete saved POIs" });
         }
 
-        // 3. Delete from sessions table (compatibility)
+        // 3. Delete from chat_sessions table (compatibility)
         const { error: sessionsError } = await supabase
-          .from("sessions")
+          .from("chat_sessions")
           .delete()
-          .eq("session_id", sessionId)
-          .eq("user_id", req.userId);
+          .eq("session_id", sessionId);
 
         if (sessionsError) {
           console.error("Error deleting from sessions:", sessionsError);
@@ -447,8 +444,7 @@ export function buildApiRouter(
         const { error } = await supabase
           .from("chat_sessions")
           .delete()
-          .eq("session_id", sessionId)
-          .eq("user_id", req.userId);
+          .eq("session_id", sessionId);
 
         if (error) {
           console.error("Error deleting chat session:", error);
@@ -456,6 +452,9 @@ export function buildApiRouter(
         }
 
         console.log("Deleted trip session:", sessionId);
+        try {
+          opts?.onDeleteSession?.(sessionId);
+        } catch {}
         res.json({ ok: true });
       } catch (error) {
         console.error("Error in DELETE /trip:", error);

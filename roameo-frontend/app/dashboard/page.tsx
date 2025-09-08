@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { motion, AnimatePresence } from "framer-motion"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -26,6 +27,7 @@ export default function Dashboard() {
   })
   const [quickMessage, setQuickMessage] = useState('')
   const [activeInput, setActiveInput] = useState('none') // 'form', 'chat', or 'none'
+  const [activeSection, setActiveSection] = useState<'form' | 'chat'>('form')
   
   // Animation states - only enable if not coming from chat
   const [isFromChat, setIsFromChat] = useState(false)
@@ -287,7 +289,7 @@ export default function Dashboard() {
           }
         `}</style>
       </div>
-    )
+    );
   }
 
   return (
@@ -393,17 +395,25 @@ export default function Dashboard() {
         </div>
 
         {/* Trip Planning Form - Dynamic Position */}
-        <div className={`absolute left-1/2 transform -translate-x-1/2 ${
-          isFromChat 
-            ? 'translate-y-0 opacity-100' // No animation if from chat
-            : `transition-all duration-1000 ${
-                formVisible ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0'
-              }`
-        }`} style={{
-          top: activeInput === 'form' ? 'calc(400px + 24px - 40px)' : activeInput === 'none' ? 'calc(400px + 24px - 40px)' : 'calc(400px + 80px)',
-          width: activeInput === 'form' ? '844px' : activeInput === 'none' ? '844px' : '600px',
-          zIndex: activeInput === 'form' ? 20 : activeInput === 'none' ? 10 : 10
-        }}>
+        <motion.div 
+          layout
+          className={`absolute left-0 right-0 mx-auto ${
+            isFromChat
+              ? 'translate-y-0 opacity-100'
+              : (formVisible ? 'transition-all duration-1000 translate-y-0 opacity-100' : 'transition-all duration-1000 translate-y-20 opacity-0')
+          }`} 
+          animate={{
+            scale: activeSection === 'form' ? 1 : 0.95,
+            y: activeSection === 'form' ? 0 : 20,
+          }}
+          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          style={{
+            top: activeInput === 'form' ? 'calc(400px + 24px - 40px)' : activeInput === 'none' ? 'calc(400px + 24px - 40px)' : 'calc(400px + 80px)',
+            width: activeInput === 'form' ? '844px' : activeInput === 'none' ? '844px' : '600px',
+            zIndex: activeSection === 'form' ? 20 : (activeInput === 'form' ? 20 : activeInput === 'none' ? 10 : 10)
+          }}
+          onClick={() => setActiveSection('form')}
+        >
           <div className="relative">
             {/* Form Pill */}
             <div 
@@ -502,14 +512,13 @@ export default function Dashboard() {
             >
               <ArrowRight className="w-5 h-5 text-white group-hover/btn:translate-x-0.5 transition-transform duration-300" />
             </Button>
-              </div>
-
-
-            </div>
           </div>
-        
-        {/* Caption between form and chat when activeInput is 'none' */}
-        {activeInput === 'none' && (
+
+        </div>
+      </motion.div>
+
+      {/* Caption between form and chat when activeInput is 'none' */}
+      {activeInput === 'none' && (
           <div className="absolute left-1/2 transform -translate-x-1/2" style={{
             top: 'calc(400px + 67px)',
             zIndex: 15
@@ -524,17 +533,27 @@ export default function Dashboard() {
         )}
 
         {/* Chat Input - Dynamic Position */}
-        <div className={`absolute left-1/2 transform -translate-x-1/2 ${
+        <motion.div 
+          layout
+          className={`absolute left-0 right-0 mx-auto ${
           isFromChat 
             ? 'translate-y-0 opacity-100' // No animation if from chat
             : `transition-all duration-1000 ${
                 formVisible ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0'
               }`
-        }`} style={{
-          top: activeInput === 'chat' ? 'calc(400px + 24px - 40px)' : activeInput === 'none' ? 'calc(400px + 100px)' : 'calc(400px + 80px)',
-          width: activeInput === 'chat' ? '844px' : activeInput === 'none' ? '844px' : '600px',
-          zIndex: activeInput === 'chat' ? 20 : activeInput === 'none' ? 10 : 10
-        }}>
+        }`} 
+          animate={{
+            scale: activeSection === 'chat' ? 1 : 0.95,
+            y: activeSection === 'chat' ? 0 : 20,
+          }}
+          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          style={{
+            top: activeInput === 'chat' ? 'calc(400px + 24px - 40px)' : activeInput === 'none' ? 'calc(400px + 100px)' : 'calc(400px + 80px)',
+            width: activeInput === 'chat' ? '844px' : activeInput === 'none' ? '844px' : '600px',
+            zIndex: activeSection === 'chat' ? 20 : (activeInput === 'chat' ? 20 : activeInput === 'none' ? 10 : 10)
+          }}
+          onClick={() => setActiveSection('chat')}
+        >
           <div 
             className="flex items-center bg-white border border-black/5 px-8 py-6 transition-all duration-500 cursor-pointer hover:shadow-2xl hover:scale-[1.02] group" 
             style={{
@@ -561,7 +580,7 @@ export default function Dashboard() {
               <ArrowRight className="w-5 h-5 text-white group-hover/btn:translate-x-0.5 transition-transform duration-300" />
             </Button>
           </div>
-        </div>
+        </motion.div>
       </section>
 
       {/* Your Trips Section */}
@@ -699,5 +718,5 @@ export default function Dashboard() {
         }
       `}</style>
     </div>
-  )
+  );
 }

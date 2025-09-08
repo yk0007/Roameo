@@ -1042,11 +1042,11 @@ export default function ChatPage() {
       await apiDeleteTrip(sessionId);
       setShowDeleteDialog(false);
       toast({ title: "Trip deleted" });
-      // Navigate to dashboard
+      // Navigate to dashboard with refresh parameter
       try {
         await supabase.auth.getSession();
       } catch {}
-      window.location.replace("/dashboard");
+      window.location.replace("/dashboard?refresh=true");
     } catch (e: any) {
       toast({
         title: "Failed to delete",
