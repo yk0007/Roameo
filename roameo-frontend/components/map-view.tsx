@@ -248,6 +248,7 @@ export function MapView({
     !!(typeof window !== "undefined" && (window as any).google?.maps),
   );
   const [apiKeyError, setApiKeyError] = useState<boolean>(false);
+  const [billingError, setBillingError] = useState<boolean>(false);
   const resizeObsRef = useRef<ResizeObserver | null>(null);
   const [forceReinitMarkers, setForceReinitMarkers] = useState(0);
 
@@ -376,6 +377,24 @@ export function MapView({
 
   // Load Google Maps script (and notify when ready)
   useEffect(() => {
+    // Set up global error handler for Google Maps API errors
+    (window as any).gm_authFailure = () => {
+      console.error("Google Maps API authentication failed");
+      setApiKeyError(true);
+    };
+
+    // Listen for Google Maps JavaScript API errors
+    const originalConsoleError = console.error;
+    console.error = (...args) => {
+      const message = args.join(' ');
+      if (message.includes('BillingNotEnabledMapError') || 
+          message.includes('Google Maps JavaScript API error') ||
+          message.includes('billing')) {
+        setBillingError(true);
+      }
+      originalConsoleError.apply(console, args);
+    };
+
     // Only mark ready when the Map constructor exists
     if (window.google?.maps?.Map) {
       setGmapsReady(true);
@@ -420,6 +439,12 @@ export function MapView({
           setApiKeyError(true);
         });
     }
+
+    // Clean up on unmount
+    return () => {
+      console.error = originalConsoleError;
+      delete (window as any).gm_authFailure;
+    };
   }, []);
 
   // Listen for hover events from chat to focus a POI on the map
@@ -1001,8 +1026,8 @@ export function MapView({
     }
   }, [itinerary, mapData?.pois, gmapsReady]);
 
-  // Show error state if API key is not configured
-  if (apiKeyError) {
+  // Show error state if API key is not configured or billing limit reached
+  if (apiKeyError || billingError) {
     return (
       <div className="relative h-full overflow-hidden bg-gray-50 flex items-center justify-center">
         <div className="text-center p-8">
@@ -1025,10 +1050,14 @@ export function MapView({
             Map Unavailable
           </h3>
           <p className="text-sm text-gray-600 mb-4">
-            Google Maps API key not configured
+            {billingError 
+              ? "Google Maps API has reached its billing limit" 
+              : "Google Maps API key not configured"}
           </p>
           <div className="text-xs text-gray-500">
-            Please set GOOGLE_MAPS_API_KEY environment variable
+            {billingError 
+              ? "Please check your Google Cloud billing settings" 
+              : "Please set GOOGLE_MAPS_API_KEY environment variable"}
           </div>
         </div>
       </div>

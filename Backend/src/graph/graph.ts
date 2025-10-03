@@ -101,8 +101,10 @@ const graph = new StateGraph<State>({ channels: graphState })
     
     const res = await plannerAgent(plannerContext, message, recent);
     
-    // Only emit planning status if we're actually going to plan (not clarifying)
+    // Initialize events array
     const plannerEvents: WsEvent[] = [];
+    
+    // Only emit planning status if we're actually going to plan (not clarifying)
     if (res && !res.clarify && res.itinerary.daysPlan.length > 0) {
       plannerEvents.push({
         type: "planning.status",
