@@ -269,33 +269,33 @@ export async function plannerAgent(
       // Build context-aware prompt for missing information
       let contextInfo = "";
       if (conversationContext.previousDestinations.length > 0) {
-        contextInfo += `The user has previously discussed trips to: ${conversationContext.previousDestinations.join(", ")}. `;
+        contextInfo += `In this conversation, you have discussed trips to: ${conversationContext.previousDestinations.join(", ")}. `;
       }
       if (conversationContext.travelPreferences.length > 0) {
-        contextInfo += `Their travel preferences include: ${conversationContext.travelPreferences.join(", ")}. `;
+        contextInfo += `Their stated preferences in this session include: ${conversationContext.travelPreferences.join(", ")}. `;
       }
       if (conversationContext.previousDurations.length > 0) {
-        contextInfo += `They have previously planned trips of ${conversationContext.previousDurations.join(", ")} days. `;
+        contextInfo += `In this conversation, they have mentioned trips of ${conversationContext.previousDurations.join(", ")} days. `;
       }
 
-      chatPrompt = `You are a friendly travel planning assistant with conversation memory. ${contextInfo}The user wants to plan a trip to ${destinationText}. Ask them for the number of days they want to stay. Be enthusiastic and suggest some popular attraction types like coffee plantations, waterfalls, and viewpoints. Reference their previous conversations when relevant.`;
+      chatPrompt = `You are a friendly travel planning assistant. ${contextInfo}The user wants to plan a trip to ${destinationText}. Ask them for the number of days they want to stay. Be enthusiastic and suggest some popular attraction types like coffee plantations, waterfalls, and viewpoints. Only reference what has been discussed in this current conversation.`;
     } else {
       // Build comprehensive context-aware planning prompt
       let contextualInfo = "";
       if (conversationContext.previousDestinations.length > 0) {
-        contextualInfo += `**CONVERSATION CONTEXT**: The user has previously discussed trips to: ${conversationContext.previousDestinations.join(", ")}. `;
+        contextualInfo += `**CURRENT SESSION CONTEXT**: In this conversation, you have discussed trips to: ${conversationContext.previousDestinations.join(", ")}. `;
       }
       if (conversationContext.travelPreferences.length > 0) {
-        contextualInfo += `Their stated preferences include: ${conversationContext.travelPreferences.join(", ")}. `;
+        contextualInfo += `Their stated preferences in this session include: ${conversationContext.travelPreferences.join(", ")}. `;
       }
       if (conversationContext.budgetPreferences.length > 0) {
-        contextualInfo += `Budget considerations mentioned: ${conversationContext.budgetPreferences.join(", ")}. `;
+        contextualInfo += `Budget considerations mentioned in this conversation: ${conversationContext.budgetPreferences.join(", ")}. `;
       }
       if (conversationContext.groupType) {
-        contextualInfo += `This appears to be a ${conversationContext.groupType} trip. `;
+        contextualInfo += `Based on this conversation, this appears to be a ${conversationContext.groupType} trip. `;
       }
       if (contextualInfo) {
-        contextualInfo += "Incorporate these insights into your planning.\n\n";
+        contextualInfo += "Incorporate these insights from the current conversation into your planning.\n\n";
       }
 
       chatPrompt = `You are an expert travel planning assistant with conversation memory. Your goal is to create a beautifully formatted travel itinerary in **Markdown** for a ${days}-day trip to ${destinationText} from ${origin}.
@@ -1142,7 +1142,7 @@ async function extractTripDetails(
   // Include context in extraction prompt if available
   let contextPrompt = "";
   if (context && context.previousDestinations.length > 0) {
-    contextPrompt = `\nCONTEXT: Previous destinations discussed: ${context.previousDestinations.join(", ")}`;
+    contextPrompt = `\nCURRENT SESSION CONTEXT: Destinations discussed in this conversation: ${context.previousDestinations.join(", ")}`;
   }
   
   // Include existing trip context for better disambiguation
