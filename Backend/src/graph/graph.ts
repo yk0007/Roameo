@@ -180,8 +180,9 @@ const graph = new StateGraph<State>({ channels: graphState })
       });
     }
 
-    if (res.itinerary.daysPlan.length > 0 && !res.clarify) {
-      // Always emit itinerary update (preserves existing itinerary during clarification)
+    if (res.itinerary.daysPlan.length > 0) {
+      // Always emit itinerary update when we have a valid itinerary
+      console.log(`[graph] Emitting itinerary with ${res.itinerary.daysPlan.length} days, clarify: ${res.clarify}`);
       plannerEvents.push(emitItineraryUpdate(res.itinerary));
 
       // Only trigger POI/map updates when not clarifying
