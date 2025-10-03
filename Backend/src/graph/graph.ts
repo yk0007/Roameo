@@ -92,12 +92,6 @@ const graph = new StateGraph<State>({ channels: graphState })
     const recent = state.messages.slice(-80);
     const conversationSummary = summarizeConversation(recent, state.itinerary);
     
-    // Emit planning start event
-    const plannerEvents: WsEvent[] = [{
-      type: "planning.status",
-      data: { status: "Analyzing your request..." }
-    }];
-    
     // Pass existing itinerary context to planner for multi-destination support
     const plannerContext = {
       ...trip,
@@ -106,6 +100,15 @@ const graph = new StateGraph<State>({ channels: graphState })
     };
     
     const res = await plannerAgent(plannerContext, message, recent);
+    
+    // Only emit planning status if we're actually going to plan (not clarifying)
+    const plannerEvents: WsEvent[] = [];
+    if (res && !res.clarify && res.itinerary.daysPlan.length > 0) {
+      plannerEvents.push({
+        type: "planning.status",
+        data: { status: "Creating your itinerary..." }
+      });
+    }
     if (!res) {
       return {
         events: [
@@ -175,7 +178,7 @@ const graph = new StateGraph<State>({ channels: graphState })
       });
     }
 
-    if (res.itinerary.daysPlan.length > 0) {
+    if (res.itinerary.daysPlan.length > 0 && !res.clarify) {
       // Always emit itinerary update (preserves existing itinerary during clarification)
       plannerEvents.push(emitItineraryUpdate(res.itinerary));
 
