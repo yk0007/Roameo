@@ -52,6 +52,12 @@ User: "Add Mysore for 3 days to my trip"
 User: "Remove Mysore from my trip"
 {"action": "remove", "destination": "Mysore"}
 
+User: "3 days" (when previously asked about Ooty trip duration)
+{"action": "plan", "days": 3}
+
+User: "5 days" (when context shows Ooty was discussed)
+{"action": "plan", "days": 5}
+
 User: "Plan trip to Mysore" (when existing trip to Ooty exists)
 {"action": "clarify", "destination": "Mysore", "clarificationNeeded": "Do you want to add Mysore to your existing Ooty trip, or plan a completely new trip to Mysore instead?"}
 
@@ -245,6 +251,14 @@ export async function plannerAgent(
     return { ...res!, clarify: false } as any;
   }
   
+  // Handle case where user provides just days (e.g., "3 days") - infer destination from context
+  if (!newDestination && !newDestinations && newDays && conversationContext.previousDestinations.length > 0) {
+    // User likely provided days for the previously discussed destination
+    const inferredDestination = conversationContext.previousDestinations[conversationContext.previousDestinations.length - 1];
+    console.log(`[planner] Inferring destination "${inferredDestination}" from context for "${message}"`);
+    newDestination = inferredDestination;
+  }
+
   // Default to creating new itinerary
   const destination = newDestination || _ctx.destination;
   const destinations = newDestinations || _ctx.destinations;
