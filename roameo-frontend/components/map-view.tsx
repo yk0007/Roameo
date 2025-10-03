@@ -25,7 +25,16 @@ export interface MapViewProps {
   onAddPoi?: (poi: POI) => void;
   onReplan?: (poi: POI) => void;
   isVisible?: boolean;
+  hasBillingError?: boolean;
 }
+
+// Add effect to log mapData changes
+const MapViewDebug = ({ mapData }: { mapData?: MapData }) => {
+  useEffect(() => {
+    console.log('[map-view] MapData prop updated:', mapData);
+  }, [mapData]);
+  return null;
+};
 
 // Custom Google Maps style provided by the user
 const CUSTOM_MAP_STYLE: any[] = [
@@ -190,7 +199,7 @@ declare global {
   }
 }
 
-export function MapView({
+export default function MapView({
   mapData,
   savedIds,
   itinerary,
@@ -199,6 +208,7 @@ export function MapView({
   onAddPoi,
   onReplan,
   isVisible = true,
+  hasBillingError = false,
 }: MapViewProps) {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const mapInstance = useRef<any | null>(null);
@@ -254,22 +264,17 @@ export function MapView({
 
   const pois = mapData?.pois || [];
   const filteredPois = useMemo(() => {
+    console.log(`[map-view] Processing POIs: ${pois.length} total, mapData:`, mapData);
     const list = pois.filter((p) => {
       if (!filterAll) {
         if (p.type === "stay" && !filterTypes.stay) return false;
         if (p.type === "restaurant" && !filterTypes.restaurant) return false;
         if (p.type === "attraction" && !filterTypes.attraction) return false;
       }
-      if (savedOnly) {
-        if (!savedIds) return false;
-        if (!savedIds.has(p.id)) return false;
-      }
-      if (addedOnly) {
-        if (!localItineraryPoiIds) return false;
-        if (!localItineraryPoiIds.has(p.id)) return false;
-      }
+      if (addedOnly && !localItineraryPoiIds?.has(p.id)) return false;
       return true;
     });
+    console.log(`[map-view] Filtered POIs: ${list.length} after filtering`);
     return list;
   }, [
     pois,
@@ -1027,13 +1032,13 @@ export function MapView({
   }, [itinerary, mapData?.pois, gmapsReady]);
 
   // Show error state if API key is not configured or billing limit reached
-  if (apiKeyError || billingError) {
+  if (apiKeyError || billingError || hasBillingError) {
     return (
       <div className="relative h-full overflow-hidden bg-gray-50 flex items-center justify-center">
-        <div className="text-center p-8">
-          <div className="w-16 h-16 mx-auto mb-4 bg-gray-200 rounded-full flex items-center justify-center">
+        <div className="text-center p-8 max-w-md">
+          <div className="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
             <svg
-              className="w-8 h-8 text-gray-400"
+              className="w-8 h-8 text-red-500"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -1042,23 +1047,54 @@ export function MapView({
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeWidth={2}
-                d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 4m0 13V4m-6 3l6-3"
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.732 15.5c-.77.833.192 2.5 1.732 2.5z"
               />
             </svg>
           </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">
-            Map Unavailable
+          <h3 className="text-lg font-medium text-gray-900 mb-3">
+            {(billingError || hasBillingError) ? "Maps Features Limited" : "Map Unavailable"}
           </h3>
-          <p className="text-sm text-gray-600 mb-4">
-            {billingError 
-              ? "Google Maps API has reached its billing limit" 
-              : "Google Maps API key not configured"}
-          </p>
-          <div className="text-xs text-gray-500">
-            {billingError 
-              ? "Please check your Google Cloud billing settings" 
-              : "Please set GOOGLE_MAPS_API_KEY environment variable"}
-          </div>
+          
+          {(billingError || hasBillingError) ? (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600 mb-4">
+                Google Maps API has reached its billing limit. The following features are currently unavailable:
+              </p>
+              <div className="bg-white rounded-lg p-4 border border-gray-200">
+                <ul className="text-sm text-gray-700 space-y-2 text-left">
+                  <li className="flex items-center">
+                    <span className="w-2 h-2 bg-red-400 rounded-full mr-3"></span>
+                    Interactive map with location markers
+                  </li>
+                  <li className="flex items-center">
+                    <span className="w-2 h-2 bg-red-400 rounded-full mr-3"></span>
+                    Searching places and attractions
+                  </li>
+                  <li className="flex items-center">
+                    <span className="w-2 h-2 bg-red-400 rounded-full mr-3"></span>
+                    Restaurant and hotel recommendations
+                  </li>
+                  <li className="flex items-center">
+                    <span className="w-2 h-2 bg-red-400 rounded-full mr-3"></span>
+                    Customized map styles and routing
+                  </li>
+                </ul>
+              </div>
+              <div className="text-xs text-gray-500 bg-blue-50 p-3 rounded-lg">
+                <strong>Note:</strong> Your trip itinerary and chat features continue to work normally. 
+                Only map-related features are affected.
+              </div>
+            </div>
+          ) : (
+            <div>
+              <p className="text-sm text-gray-600 mb-4">
+                Google Maps API key not configured
+              </p>
+              <div className="text-xs text-gray-500">
+                Please set GOOGLE_MAPS_API_KEY environment variable
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -1066,6 +1102,7 @@ export function MapView({
 
   return (
     <div className="relative h-full overflow-hidden">
+      <MapViewDebug mapData={mapData} />
       {/* Loading Overlay */}
       {(isMapLoading || mapSearchStatus) && (
         <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-center justify-center">

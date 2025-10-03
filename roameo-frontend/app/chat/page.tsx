@@ -53,7 +53,26 @@ export default function ChatPage() {
   const [activeRightView, setActiveRightView] = useState<"map" | "itinerary">(
     "map",
   );
-  const [isRightPanelVisible, setIsRightPanelVisible] = useState(true);
+  const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const [hasBillingError, setHasBillingError] = useState(false);
+
+  // Listen for Google Maps billing errors
+  useEffect(() => {
+    const originalConsoleError = console.error;
+    console.error = (...args) => {
+      const message = args.join(' ');
+      if (message.includes('BillingNotEnabledMapError') || 
+          message.includes('Google Maps JavaScript API error') ||
+          message.includes('billing')) {
+        setHasBillingError(true);
+      }
+      originalConsoleError.apply(console, args);
+    };
+
+    return () => {
+      console.error = originalConsoleError;
+    };
+  }, []);
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -1288,6 +1307,7 @@ export default function ChatPage() {
                   onAddPoi={handleAddPoi}
                   onToggleSave={handleToggleSave}
                   onReplan={handleReplan}
+                  hasBillingError={hasBillingError}
                 />
               )}
               {activeLeftView === "saved" && (
@@ -1300,6 +1320,7 @@ export default function ChatPage() {
                   onAddPoi={handleAddPoi}
                   onToggleSave={handleToggleSave}
                   onReplan={handleReplan}
+                  hasBillingError={hasBillingError}
                 />
               )}
             </div>
@@ -1330,6 +1351,7 @@ export default function ChatPage() {
             onToggleSave={handleToggleSave}
             onAddPoi={handleAddPoi}
             onReplan={handleReplan}
+            hasBillingError={hasBillingError}
           />
         </div>
       </div>

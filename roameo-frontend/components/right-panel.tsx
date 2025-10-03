@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { MapView } from "./map-view"
+import MapView from "./map-view"
 import { ItineraryPanel } from "./itinerary-panel"
 import { ShareButton } from "./share-button"
 import { CachedImage } from "./cached-image"
@@ -26,6 +26,7 @@ interface RightPanelProps {
   onToggleSave?: (poi: POI, nextSaved: boolean) => void
   onAddPoi?: (poi: POI) => void
   onReplan?: (poi: POI) => void
+  hasBillingError?: boolean
 }
 
 export function RightPanel({
@@ -40,6 +41,7 @@ export function RightPanel({
   onToggleSave,
   onAddPoi,
   onReplan,
+  hasBillingError = false,
 }: RightPanelProps) {
 
   // Nudge Google Maps to render when the Map tab becomes visible
@@ -106,6 +108,7 @@ export function RightPanel({
             onAddPoi={onAddPoi}
             onReplan={onReplan}
             isVisible={activeView === "map"}
+            hasBillingError={hasBillingError}
           />
         </div>
 

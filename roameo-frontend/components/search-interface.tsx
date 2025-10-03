@@ -20,9 +20,10 @@ interface SearchInterfaceProps {
   onReplan?: (poi?: POI) => void
   isLoading?: boolean
   searchStatus?: string
+  hasBillingError?: boolean
 }
 
-export const SearchInterface = memo(function SearchInterface({ activeView, onViewChange, results, savedIds, itineraryPoiIds, onAddPoi, onToggleSave, onReplan, isLoading = false, searchStatus }: SearchInterfaceProps) {
+export const SearchInterface = memo(function SearchInterface({ activeView, onViewChange, results, savedIds, itineraryPoiIds, onAddPoi, onToggleSave, onReplan, isLoading = false, searchStatus, hasBillingError = false }: SearchInterfaceProps) {
   const [activeTab, setActiveTab] = useState("Stays")
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedQuery, setDebouncedQuery] = useState("")
@@ -123,7 +124,25 @@ export const SearchInterface = memo(function SearchInterface({ activeView, onVie
           scrollPosRef.current[activeTab] = el.scrollTop
         }}
       >
-        {!results ? (
+        {hasBillingError ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center p-8 max-w-md">
+              <div className="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
+                <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.732 15.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-3">Search Features Limited</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                Google Maps API has reached its billing limit. Place search and recommendations are currently unavailable.
+              </p>
+              <div className="text-xs text-gray-500 bg-blue-50 p-3 rounded-lg">
+                <strong>Note:</strong> Your trip planning and chat features continue to work normally. 
+                Only place search is affected.
+              </div>
+            </div>
+          </div>
+        ) : !results ? (
           <div className="text-sm text-gray-500">No results yet. Ask Roameo to search for places.</div>
         ) : allResults.length === 0 ? (
           <div className="text-sm text-gray-500">No matches for your filters.</div>
