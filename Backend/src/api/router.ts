@@ -152,16 +152,24 @@ export function buildApiRouter(
     if (!sessionId) {
       sessionId = randomUUID();
       inviteId = randomUUID().slice(0, 8);
-      opts.onNewSession?.(sessionId, inviteId, { sessionId });
-      db.upsertSession(sessionId, {
-        inviteId,
-        trip: { sessionId },
-        userId: req.userId,
-      });
-      hub.emit(sessionId, {
-        type: "session.ready",
-        data: { sessionId: sessionId, inviteId: inviteId! },
-      });
+      console.log(`[chat] Creating new session: ${sessionId} with inviteId: ${inviteId}`);
+      
+      try {
+        opts.onNewSession?.(sessionId, inviteId, { sessionId });
+        db.upsertSession(sessionId, {
+          inviteId,
+          trip: { sessionId },
+          userId: req.userId,
+        });
+        hub.emit(sessionId, {
+          type: "session.ready",
+          data: { sessionId: sessionId, inviteId: inviteId! },
+        });
+        console.log(`[chat] Successfully created session: ${sessionId}`);
+      } catch (error) {
+        console.error(`[chat] Failed to create session ${sessionId}:`, error);
+        return res.status(500).json({ error: "Failed to create session" });
+      }
     }
 
     if (!message || typeof message !== "string") {

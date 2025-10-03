@@ -14,8 +14,32 @@ import { CachedDb } from "./cache/cached-db.js";
 import { SimpleRateLimiter } from "./utils/rateLimiter.js";
 
 const app = express();
-app.use(cors());
+
+// Configure CORS to allow frontend domains
+const corsOptions = {
+  origin: [
+    'http://localhost:3000',
+    'https://roameo-app.vercel.app',
+    'https://roameo.onrender.com',
+    /^https:\/\/.*\.vercel\.app$/,
+    /^https:\/\/.*\.onrender\.com$/
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id']
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
+
+// Add health check endpoint
+app.get('/health', (req: Request, res: Response) => {
+  res.status(200).json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    cors: 'configured'
+  });
+});
 
 const httpServer = createServer(app);
 const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
