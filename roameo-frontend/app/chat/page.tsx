@@ -53,7 +53,7 @@ export default function ChatPage() {
   const [activeRightView, setActiveRightView] = useState<"map" | "itinerary">(
     "map",
   );
-  const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const [isRightPanelVisible, setIsRightPanelVisible] = useState(true);
   const [hasBillingError, setHasBillingError] = useState(false);
 
   // Listen for Google Maps billing errors
