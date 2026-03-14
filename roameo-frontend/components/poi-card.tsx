@@ -4,7 +4,7 @@ import { Heart, Plus, Hotel, MapPin, Star, RefreshCw, X, Check, Bookmark } from 
 import { Button } from "@/components/ui/button"
 import Image from "next/image"
 import { motion } from "framer-motion"
-import { memo, useCallback } from "react"
+import { memo, useCallback, useState } from "react"
 import type { POI } from "@/lib/types"
 
 interface PoiCardProps {
@@ -19,6 +19,8 @@ interface PoiCardProps {
 
 // Compact version for map hover cards
 export const CompactPoiCard = memo(function CompactPoiCard({ poi, isSaved, isItineraryItem, onToggleSave, onAddPoi, onReplan }: PoiCardProps) {
+  const [imgError, setImgError] = useState(false)
+
   const handleToggleSave = useCallback(() => {
     onToggleSave(poi, !isSaved)
   }, [poi, isSaved, onToggleSave])
@@ -45,7 +47,7 @@ export const CompactPoiCard = memo(function CompactPoiCard({ poi, isSaved, isIti
     >
       <div className="relative">
         <Image 
-          src={poi.photoUrl || '/placeholder.svg'} 
+          src={imgError || !poi.photoUrl ? '/placeholder.svg' : poi.photoUrl} 
           alt={poi.name} 
           width={400}
           height={160}
@@ -53,8 +55,7 @@ export const CompactPoiCard = memo(function CompactPoiCard({ poi, isSaved, isIti
           quality={90}
           priority={true}
           sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-          placeholder="blur"
-          blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q=="
+          onError={() => setImgError(true)}
         />
         
         {/* Top right love button */}

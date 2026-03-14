@@ -80,13 +80,13 @@ const nextConfig = {
         protocol: 'http',
         hostname: 'localhost',
         port: '4000',
-        pathname: '/api/proxy/photo/**',
+        pathname: '/api/proxy/photo',
       },
       {
         protocol: 'https',
         hostname: 'roameo.onrender.com',
         port: '',
-        pathname: '/api/proxy/photo/**',
+        pathname: '/api/proxy/photo',
       },
     ],
     // Disable image optimization for faster loading

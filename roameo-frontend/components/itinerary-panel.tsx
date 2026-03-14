@@ -29,6 +29,24 @@ interface ItineraryPanelProps {
   planningStatus?: string
 }
 
+function ActivityImage({ src, alt }: { src?: string; alt: string }) {
+  const [imgError, setImgError] = useState(false)
+  return (
+    <Image
+      width={60}
+      height={60}
+      src={imgError || !src ? '/placeholder.svg' : src}
+      alt={alt}
+      className="h-14 w-14 rounded-lg object-cover object-top"
+      quality={90}
+      priority={true}
+      placeholder="empty"
+      sizes="60px"
+      onError={() => setImgError(true)}
+    />
+  )
+}
+
 export function ItineraryPanel({ 
   itinerary, 
   trip, 
@@ -116,23 +134,26 @@ export function ItineraryPanel({
     })
   }, [])
 
-  // Get days for active destination
+  // Get days for active destination, sorted by day number
   const getActiveDays = useCallback(() => {
     if (!itinerary?.daysPlan) return []
     
-    if (!itinerary.destinationSegments || itinerary.destinationSegments.length <= 1) {
-      return itinerary.daysPlan
+    let days = itinerary.daysPlan
+    
+    if (itinerary.destinationSegments && itinerary.destinationSegments.length > 1) {
+      const activeSegment = itinerary.destinationSegments.find(
+        seg => seg.destination === activeDestinationTab
+      )
+      
+      if (!activeSegment) return []
+      
+      days = itinerary.daysPlan.filter(
+        day => day.day >= activeSegment.startDay && day.day <= activeSegment.endDay
+      )
     }
     
-    const activeSegment = itinerary.destinationSegments.find(
-      seg => seg.destination === activeDestinationTab
-    )
-    
-    if (!activeSegment) return []
-    
-    return itinerary.daysPlan.filter(
-      day => day.day >= activeSegment.startDay && day.day <= activeSegment.endDay
-    )
+    // Sort days by day number to ensure correct order
+    return [...days].sort((a, b) => a.day - b.day)
   }, [itinerary?.daysPlan, itinerary?.destinationSegments, activeDestinationTab])
   
   return (
@@ -337,7 +358,11 @@ export function ItineraryPanel({
               </div>
 
               <div className="space-y-3 pl-4 border-l-2 border-zinc-200 ml-4 p-4">
-                {day.activities?.length > 0 && day.activities.map((activity, index) => {
+                {day.activities?.length > 0 && [...day.activities].sort((a, b) => {
+                  const aTime = a.start || '00:00'
+                  const bTime = b.start || '00:00'
+                  return aTime.localeCompare(bTime)
+                }).map((activity, index) => {
                   if (!activity || !activity.name) return null;
                   
                   const poi = activityToPoi(activity)
@@ -354,17 +379,7 @@ export function ItineraryPanel({
                         className="p-4 flex items-center gap-4 hover:bg-neutral-50 dark:hover:bg-neutral-800 rounded-xl cursor-pointer border border-gray-200 mb-3 transition-all"
                       >
                         <motion.div layoutId={`image-${activity.name}-${id}`}>
-                          <Image
-                            width={60}
-                            height={60}
-                            src={activity.photoUrl || '/placeholder.svg'}
-                            alt={activity.name}
-                            className="h-14 w-14 rounded-lg object-cover object-top"
-                            quality={90}
-                            priority={true}
-                            placeholder="empty"
-                            sizes="60px"
-                          />
+                          <ActivityImage src={activity.photoUrl} alt={activity.name} />
                         </motion.div>
                         <div className="flex-1">
                           <motion.h3
