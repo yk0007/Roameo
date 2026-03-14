@@ -71,8 +71,8 @@ export class DestinationImageService {
         return {};
       }
 
-      // Generate high-quality image URL using the backend proxy to avoid CORS issues
-      const imageUrl = `http://localhost:4000/api/proxy/photo?` +
+      // Generate high-quality image URL directly from Google Photos endpoint
+      const imageUrl = `https://maps.googleapis.com/maps/api/place/photo?` +
         `maxwidth=800&` +
         `photo_reference=${photo.photo_reference}&` +
         `key=${env.GOOGLE_MAPS_API_KEY}`;

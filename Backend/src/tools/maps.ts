@@ -1,20 +1,9 @@
 import { env } from "../config/env.js";
 import type { POI } from "../types/schemas.js";
 
-// Helper function to get the backend base URL
-function getBackendBaseUrl(): string {
-  // In production, use the deployed backend URL
-  if (process.env.NODE_ENV === 'production') {
-    return process.env.BACKEND_URL || 'https://roameo.onrender.com';
-  }
-  // In development, use localhost
-  return process.env.BACKEND_URL || 'http://localhost:4000';
-}
-
-// Helper function to generate absolute photo proxy URLs
+// Generate a Google Places photo URL directly so image requests don't depend on backend domain configuration
 function createPhotoProxyUrl(photoReference: string): string {
-  const baseUrl = getBackendBaseUrl();
-  return `${baseUrl}/api/proxy/photo?photo_reference=${encodeURIComponent(photoReference)}&maxwidth=800&key=${encodeURIComponent(env.GOOGLE_MAPS_API_KEY!)}`;
+  return `https://maps.googleapis.com/maps/api/place/photo?photo_reference=${encodeURIComponent(photoReference)}&maxwidth=800&key=${encodeURIComponent(env.GOOGLE_MAPS_API_KEY!)}`;
 }
 
 export interface PlaceQuery {
