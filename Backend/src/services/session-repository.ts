@@ -332,6 +332,29 @@ export class SessionRepository {
       .eq("id", sessionId);
   }
 
+  async savePoiCatalog(sessionId: string, poiCatalog: PoiCatalog): Promise<void> {
+    const snapshot = this.memorySessions.get(sessionId);
+    if (snapshot) {
+      snapshot.poiCatalog = poiCatalog;
+      snapshot.updatedAt = now();
+    }
+
+    if (!this.client) {
+      return;
+    }
+
+    await this.client.from("session_poi_catalogs").upsert(
+      {
+        session_id: sessionId,
+        catalog: poiCatalog,
+        updated_at: now()
+      },
+      { onConflict: "session_id" }
+    );
+
+    await this.touchSession(sessionId);
+  }
+
   async updateSession(
     sessionId: string,
     mutation: SessionMutation

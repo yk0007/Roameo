@@ -446,7 +446,7 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="relative flex h-[100dvh] flex-col overflow-hidden bg-white text-[#1f1b16]">
+    <div className="relative flex h-[100dvh] flex-col overflow-hidden bg-[white] text-[#1f1b16]">
       <TopNavigation
         trip={{
           id: trip.id,
@@ -491,8 +491,8 @@ export default function ChatPage() {
         onPopulateInput={setDraftInput}
       />
 
-      <div className="flex min-h-0 flex-1 overflow-hidden bg-white lg:flex-row">
-        <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
+      <div className="flex min-h-0 flex-1 overflow-hidden bg-transparent lg:flex-row">
+        <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent">
           <LeftPanelTabs
             activeView={activeLeftView}
             onViewChange={setActiveLeftView}
@@ -524,6 +524,7 @@ export default function ChatPage() {
                 planningActive={isStreaming}
                 planningState={planningState}
                 savedIds={savedIds}
+                itineraryPoiIds={itineraryPoiIds}
                 onToggleSave={(poi, nextSaved) => {
                   void handleToggleSave(poi, nextSaved);
                 }}
@@ -563,9 +564,9 @@ export default function ChatPage() {
         </section>
 
         <aside
-          className={`min-h-0 w-full flex-col overflow-hidden bg-white transition-[width,opacity,transform] duration-300 ease-out ${
+          className={`min-h-0 w-full flex-col overflow-hidden bg-transparent transition-[width,opacity,transform] duration-300 ease-out ${
             isRightPanelVisible
-              ? "flex lg:flex lg:w-[44%] lg:translate-x-0 lg:opacity-100 lg:rounded-tl-[24px] lg:shadow-[-20px_0_60px_rgba(15,23,42,0.18),_-6px_0_20px_rgba(15,23,42,0.1)]"
+              ? "flex lg:flex lg:w-1/2 lg:translate-x-0 lg:opacity-100 lg:rounded-l-[24px]"
               : "hidden lg:flex lg:w-0 lg:translate-x-4 lg:opacity-0 lg:pointer-events-none"
           }`}
         >

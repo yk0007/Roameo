@@ -55,6 +55,7 @@ interface ChatInterfaceProps {
   planningActive?: boolean;
   planningState?: SessionPlanningState;
   savedIds?: Set<string>;
+  itineraryPoiIds?: Set<string>;
   onToggleSave?: (poi: POI, nextSaved: boolean) => void;
   onAddPoi?: (poi: POI) => void;
   onReplan?: (poi: POI) => void;
@@ -78,6 +79,7 @@ export function ChatInterface({
   planningActive,
   planningState,
   savedIds,
+  itineraryPoiIds,
   onToggleSave,
   onAddPoi,
   onReplan,
@@ -726,7 +728,7 @@ export function ChatInterface({
   };
 
   return (
-    <div className="relative flex h-full flex-col bg-white">
+    <div className="relative flex h-full flex-col bg-transparent">
       {planningState?.status === "unavailable" ? (
         <div className="border-b border-amber-200 bg-amber-50 px-6 py-3 text-sm text-amber-900">
           AI planning is temporarily unavailable. Roameo kept your last accepted trip visible until the provider recovers.
@@ -735,7 +737,7 @@ export function ChatInterface({
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className={`flex-1 overflow-y-auto ${isRightPanelVisible ? "px-6 pb-5 pt-20" : "w-full px-10 pb-8 pt-20 sm:px-16 lg:px-24"}`}
+        className={`flex-1 overflow-y-auto ${isRightPanelVisible ? "px-6 pb-32 pt-20" : "w-full px-10 pb-32 pt-20 sm:px-16 lg:px-24"}`}
       >
         <div className={`w-full ${isRightPanelVisible ? "max-w-full" : "mx-auto max-w-[760px]"}`}>
           {visibleMessages.map((message, i) => (
@@ -772,15 +774,15 @@ export function ChatInterface({
                 }`}
               >
                 <div
-                  className={`max-w-none rounded-[20px] border backdrop-blur-xl ${
+                  className={`max-w-none rounded-[20px] border ${
                     message.role === "user"
-                      ? `ml-auto w-fit min-w-[72px] border-[#a5b4fc]/40 bg-[#a5b4fc]/60 px-[21px] py-[17px] text-[#1e293b] shadow-[0_8px_32px_rgba(99,102,241,0.25),0_2px_8px_rgba(99,102,241,0.1)] ${
+                      ? `ml-auto w-fit min-w-[72px] border-[#d9d9d9] bg-[#e5e5e5] px-[21px] py-[17px] text-[#1a1a1a] shadow-[0_8px_24px_rgba(0,0,0,0.10),0_2px_8px_rgba(0,0,0,0.06)] ${
                           isRightPanelVisible ? "max-w-[400px]" : "max-w-[430px]"
                         }`
-                      : `${isRightPanelVisible ? "max-w-[78%]" : "max-w-[75%]"} border-white/60 bg-white/70 px-5 py-4 shadow-[0_12px_40px_rgba(15,23,42,0.15),0_4px_12px_rgba(15,23,42,0.08)]`
+                      : `${isRightPanelVisible ? "max-w-[76%]" : "max-w-[72%]"} border-[#e5e5e5] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(0,0,0,0.10),0_2px_8px_rgba(0,0,0,0.06)]`
                   }`}
                 >
-                  <div className="text-sm leading-[1.75]">
+                  <div className="text-[14.875px] font-normal leading-[27px]">
                     {message.role === "user" ? (
                       <ReactMarkdown>
                         {String(message.content)
@@ -791,9 +793,14 @@ export function ChatInterface({
                       <StructuredResponseBlocks
                         message={message}
                         pois={pois}
+                        savedIds={savedIds}
+                        itineraryPoiIds={itineraryPoiIds}
                         onQuickAction={(prompt) => {
                           onPopulateInput?.(prompt);
                         }}
+                        onToggleSave={onToggleSave}
+                        onAddPoi={(poi) => onAddPoi?.(poi)}
+                        onReplan={onReplan}
                       />
                     ) : (
                       renderFormattedContent(
@@ -986,14 +993,14 @@ export function ChatInterface({
         </Button>
       )}
 
-      <div className={`relative z-10 w-full bg-transparent ${isRightPanelVisible ? "px-6 pb-4 pt-3" : "px-10 pb-5 pt-4 sm:px-16 lg:px-24"}`}>
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[100px] [mask-image:linear-gradient(to_bottom,transparent,black_60%)] backdrop-blur-xl" />
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[72px] bg-gradient-to-t from-white/80 via-white/40 to-transparent" />
+      <div className="absolute bottom-6 left-0 right-0 z-20 flex justify-center pointer-events-none px-6 w-full">
+
+
         <form
           onSubmit={handleSubmit}
-          className={`relative z-10 ${isRightPanelVisible ? "mx-auto max-w-[85%]" : "mx-auto max-w-[760px]"}`}
+          className={`pointer-events-auto w-full ${isRightPanelVisible ? "max-w-[85%]" : "max-w-[760px]"}`}
         >
-          <div className="h-[56px] rounded-[999px] border border-white/60 bg-white/70 px-[21px] shadow-[0_12px_40px_rgba(15,23,42,0.15),0_4px_12px_rgba(15,23,42,0.08)] backdrop-blur-xl">
+          <div className="h-[64px] rounded-[999px] border border-gray-200/60 bg-white/70 backdrop-blur-xl px-[24px] shadow-[0_8px_32px_rgba(0,0,0,0.08)]">
             <div className="flex h-full flex-row items-center gap-3">
               <Button
                 type="button"
@@ -1007,7 +1014,7 @@ export function ChatInterface({
                 value={inputValue}
                 onChange={(e) => handleInputChange(e.target.value)}
                 placeholder="Ask anything..."
-                className="flex-1 border-0 bg-transparent px-0 text-[14px] text-[#374151] placeholder:text-[#9ca3af] focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
+                className="flex-1 border-0 bg-transparent px-0 text-[16px] font-medium text-[#1a1a1a] placeholder:text-[#9ca3af] focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
               />
               <div className="flex items-center gap-2 flex-shrink-0">
                 <Button

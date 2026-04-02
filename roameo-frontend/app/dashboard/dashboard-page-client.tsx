@@ -299,9 +299,29 @@ export default function Dashboard() {
           background: "radial-gradient(125% 125% at 50% 90%, #fff 40%, #475569 100%)",
         }}
       />
-      <div className="absolute inset-0 z-[1]">
+      <div 
+        className="absolute inset-0 z-[1]"
+        style={{
+          WebkitMaskImage: "radial-gradient(ellipse 100% 80% at 50% 100%, transparent 50%, #000 90%)",
+          maskImage: "radial-gradient(ellipse 100% 80% at 50% 100%, transparent 50%, #000 90%)",
+        }}
+      >
         <DotDistortionShaderBg />
       </div>
+      {/* Diagonal Cross Grid Bottom Background Overlay */}
+      <div
+        className="absolute inset-0 z-[2]"
+        style={{
+          backgroundImage: `
+            linear-gradient(45deg, transparent 49%, #e5e7eb 49%, #e5e7eb 51%, transparent 51%),
+            linear-gradient(-45deg, transparent 49%, #e5e7eb 49%, #e5e7eb 51%, transparent 51%)
+          `,
+          backgroundSize: "40px 40px",
+          WebkitMaskImage: "radial-gradient(ellipse 100% 80% at 50% 100%, #000 50%, transparent 90%)",
+          maskImage: "radial-gradient(ellipse 100% 80% at 50% 100%, #000 50%, transparent 90%)",
+          opacity: 0.6,
+        }}
+      />
       <div className="relative z-10">
       <AnimatePresence>
         {validationDialog ? (

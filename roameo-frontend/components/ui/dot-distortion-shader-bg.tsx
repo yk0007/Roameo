@@ -13,23 +13,32 @@ export function DotDistortionShaderBg() {
     if (!ctx) return;
 
     let particles: { x: number; y: number; baseX: number; baseY: number; size: number }[] = [];
-    const spacing = 24; // Distance between dots
-    const radius = 1.5; // Base dot radius
-    const mouseRadius = 250; // How far the distortion reaches
+    const spacing = 16; // Tighter grid = more dots
+    const radius = 1.2; // Base dot radius
+    const mouseRadius = 200; // How far the distortion reaches
+    const pushStrength = 40; // How far dots get pushed
 
     let mouse = { x: -1000, y: -1000 };
+    let dpr = 1;
 
     const init = () => {
-      // Ensure we fetch the client parent size, fallback to window
+      dpr = window.devicePixelRatio || 1;
       const parent = canvas.parentElement;
-      canvas.width = parent ? parent.clientWidth : window.innerWidth;
-      canvas.height = parent ? parent.clientHeight : window.innerHeight;
-      
+      const w = parent ? parent.clientWidth : window.innerWidth;
+      const h = parent ? parent.clientHeight : window.innerHeight;
+
+      // Set the canvas resolution to match DPR for sharp rendering
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      canvas.style.width = w + "px";
+      canvas.style.height = h + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
       particles = [];
 
-      // Create a grid of particles
-      const cols = Math.floor(canvas.width / spacing) + 1;
-      const rows = Math.floor(canvas.height / spacing) + 1;
+      // Create a grid of particles across the full area
+      const cols = Math.ceil(w / spacing) + 1;
+      const rows = Math.ceil(h / spacing) + 1;
 
       for (let i = 0; i < cols; i++) {
         for (let j = 0; j < rows; j++) {
@@ -43,45 +52,47 @@ export function DotDistortionShaderBg() {
     let animationFrameId: number;
 
     const animate = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const w = canvas.width / dpr;
+      const h = canvas.height / dpr;
+      ctx.clearRect(0, 0, w, h);
 
       for (let i = 0; i < particles.length; i++) {
         const p = particles[i];
 
-        // Core physics / distortion logic
         const dx = mouse.x - p.baseX;
         const dy = mouse.y - p.baseY;
-        const distance = Math.sqrt(dx * dx + dy * dy);
+        const distSq = dx * dx + dy * dy;
+        const mouseRadiusSq = mouseRadius * mouseRadius;
 
         let targetX = p.baseX;
         let targetY = p.baseY;
         let targetSize = radius;
-        let opacity = 0.4;
+        let opacity = 0.25;
 
-        if (distance < mouseRadius) {
-          // Calculate repulsion force
+        if (distSq < mouseRadiusSq) {
+          const distance = Math.sqrt(distSq);
           const force = (mouseRadius - distance) / mouseRadius;
-          // Calculate how far to push the dot (vector normalized)
-          const pushX = (dx / (distance || 1)) * force * 50; 
-          const pushY = (dy / (distance || 1)) * force * 50;
+          const normX = dx / (distance || 1);
+          const normY = dy / (distance || 1);
 
-          targetX -= pushX;
-          targetY -= pushY;
-          
-          // Make dots closer to the mouse slightly larger and more opaque
-          targetSize = radius + (force * 1.5);
-          opacity = 0.4 + (force * 0.6);
+          // Push dots away from mouse
+          targetX -= normX * force * pushStrength;
+          targetY -= normY * force * pushStrength;
+
+          // Scale up and brighten dots near the cursor
+          targetSize = radius + force * 2;
+          opacity = 0.25 + force * 0.75;
         }
 
-        // Lerp strictly towards target for smooth animation
-        p.x += (targetX - p.x) * 0.1;
-        p.y += (targetY - p.y) * 0.1;
-        p.size += (targetSize - p.size) * 0.1;
+        // Smooth interpolation towards target
+        p.x += (targetX - p.x) * 0.15;
+        p.y += (targetY - p.y) * 0.15;
+        p.size += (targetSize - p.size) * 0.15;
 
-        // Draw dot
+        // Draw
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(148, 163, 184, ${opacity})`; // slate-400 equivalent RGB with dynamic opacity
+        ctx.fillStyle = `rgba(120, 140, 165, ${opacity})`;
         ctx.fill();
       }
 
@@ -89,14 +100,14 @@ export function DotDistortionShaderBg() {
     };
 
     const handleMouseMove = (e: MouseEvent) => {
-      // Get correct mouse coords relative to the canvas
+      // Use pageX/pageY and subtract the canvas offset to get correct
+      // coordinates even when the page is scrolled.
       const rect = canvas.getBoundingClientRect();
       mouse.x = e.clientX - rect.left;
       mouse.y = e.clientY - rect.top;
     };
 
     const handleMouseLeave = () => {
-      // Move mouse far away to let dots settle
       mouse.x = -1000;
       mouse.y = -1000;
     };
@@ -105,17 +116,17 @@ export function DotDistortionShaderBg() {
       init();
     };
 
-    // Initialization
     init();
     animate();
 
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseleave", handleMouseLeave);
+    // Listen on the document so we capture moves even over elements above the canvas
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseleave", handleMouseLeave);
     window.addEventListener("resize", handleResize);
 
     return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseleave", handleMouseLeave);
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseleave", handleMouseLeave);
       window.removeEventListener("resize", handleResize);
       cancelAnimationFrame(animationFrameId);
     };

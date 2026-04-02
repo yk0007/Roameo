@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
-import { Clock, ExternalLink, Heart, Star } from "lucide-react";
+import { Clock, ExternalLink, Heart, MapPin, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ShareButton } from "./share-button";
 import { useOutsideClick } from "@/hooks/use-outside-click";
@@ -269,25 +269,27 @@ export function ItineraryPanel({
         onToggleSave={onToggleSave}
       />
 
-      <div className="border-b border-gray-100 bg-white">
-        <div className="flex items-center justify-between px-4 pb-4 pt-16">
-          <h3 className="font-semibold">Itinerary</h3>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-500">{itinerary?.days ?? 0} days</span>
-            <ShareButton tripId={trip.id} tripTitle={trip.title} itinerary={itinerary} />
+      <div className="border-b border-white/20 bg-transparent shrink-0">
+        <div className="flex flex-col gap-2 px-5 pb-5 pt-[88px] text-black">
+          <div className="flex items-center justify-between">
+            <h3 className="text-2xl font-bold tracking-tight">Itinerary</h3>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-slate-600">{itinerary?.days ?? 0} days</span>
+              <ShareButton tripId={trip.id} tripTitle={trip.title} itinerary={itinerary} />
+            </div>
           </div>
         </div>
 
         {itinerary?.destinationSegments && itinerary.destinationSegments.length > 1 && (
-          <div className="flex border-b border-gray-200 bg-gray-50">
+          <div className="flex border-b border-white/20 bg-transparent">
             {itinerary.destinationSegments.map((segment) => (
               <button
                 key={segment.destination}
                 onClick={() => setActiveDestinationTab(segment.destination)}
                 className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
                   activeDestinationTab === segment.destination
-                    ? "border-b-2 border-blue-600 bg-white text-blue-600"
-                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                    ? "border-b-2 border-blue-600 bg-white/40 text-blue-800 font-bold"
+                    : "text-slate-800 hover:bg-white/20 hover:text-black"
                 }`}
               >
                 <div className="flex flex-col items-center">
@@ -311,36 +313,44 @@ export function ItineraryPanel({
           itinerary.daysPlan.length > 0 &&
           getActiveDays().map((day) => (
             <div key={day.day} className="relative">
-              <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-gray-100 bg-white/95 p-3 shadow-sm backdrop-blur-md">
-                <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-zinc-800 text-sm font-bold text-white">
+              <div className="sticky top-0 z-20 flex items-center gap-3 border-b border-white/20 bg-white/70 p-3.5 shadow-sm backdrop-blur-xl">
+                <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-zinc-900 text-sm font-bold text-white shadow-sm">
                   {day.day}
                 </span>
-                <h4 className="text-md font-semibold italic">
+                <h4 className="text-md font-bold text-slate-800">
                   {day.title || `Day ${day.day}`}
                 </h4>
               </div>
 
-              <div className="ml-4 space-y-3 border-l-2 border-zinc-200 p-4 pl-4">
+              <div className="ml-4 space-y-3 border-l-[2px] border-dashed border-blue-400/40 p-4 pl-6">
                 {day.activities?.map((activity, index) => (
                   <div key={`${activity.name}-${index}`} className="relative">
-                    <div className="absolute left-[-26px] top-5 z-10 h-3 w-3 rounded-full border-4 border-white bg-zinc-300" />
+                    <div className="absolute left-[-35px] top-[32px] z-10 flex h-[22px] w-[22px] items-center justify-center rounded-full border-[3px] border-white/80 bg-blue-500 shadow-sm backdrop-blur-md">
+                      <div className="h-1.5 w-1.5 rounded-full bg-white shadow-sm" />
+                    </div>
 
                     <motion.div
                       onClick={() => setActiveCard(activity)}
                       whileHover={{ y: -1 }}
                       transition={{ duration: 0.16, ease: "easeOut" }}
-                      className="mb-3 flex cursor-pointer items-center gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-[0_8px_20px_rgba(15,23,42,0.04)] transition-[border-color,box-shadow,background-color] hover:border-slate-300 hover:bg-slate-50/70 hover:shadow-[0_12px_26px_rgba(15,23,42,0.06)]"
+                      className="mb-4 flex cursor-pointer items-center gap-4 rounded-2xl border border-white/60 bg-white/50 px-4 py-4 shadow-[0_8px_20px_rgba(15,23,42,0.04)] backdrop-blur-md transition-[border-color,box-shadow,background-color] hover:border-white/80 hover:bg-white/70 hover:shadow-[0_12px_26px_rgba(15,23,42,0.06)]"
                     >
-                      <Image
-                        width={60}
-                        height={60}
-                        src={activity.photoUrl || "/placeholder.svg"}
-                        alt={activity.name}
-                        className="h-14 w-14 rounded-lg object-cover object-top"
-                        quality={90}
-                        priority
-                        sizes="60px"
-                      />
+                      {activity.photoUrl && activity.photoUrl !== "/placeholder.svg" ? (
+                        <Image
+                          width={60}
+                          height={60}
+                          src={activity.photoUrl}
+                          alt={activity.name}
+                          className="h-14 w-14 rounded-xl object-cover object-top border border-white/40 shadow-sm"
+                          quality={90}
+                          priority
+                          sizes="60px"
+                        />
+                      ) : (
+                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-white/60 bg-blue-50/60 text-blue-500 shadow-sm backdrop-blur-md">
+                          <MapPin className="h-6 w-6 stroke-[1.5]" />
+                        </div>
+                      )}
                       <div className="flex-1">
                         <h3 className="font-medium text-neutral-800">{activity.name}</h3>
                         <p className="text-sm text-neutral-600">{activity.location}</p>

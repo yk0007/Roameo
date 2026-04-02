@@ -50,8 +50,8 @@ export function RightPanel({
   }, [activeView])
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden bg-white lg:rounded-tl-[24px]">
-      <div className="pointer-events-none absolute left-1/2 top-4 z-20 flex -translate-x-1/2 items-center gap-2">
+    <div className="relative flex h-full flex-col overflow-hidden bg-transparent lg:rounded-l-[24px]">
+      <div className="pointer-events-none absolute left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-2">
         <div className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-white/40 bg-white/50 p-[5px] shadow-[0_8px_32px_rgba(15,23,42,0.12),0_2px_8px_rgba(15,23,42,0.06)] backdrop-blur-2xl">
           <Button
             variant={activeView === "map" ? "default" : "ghost"}
@@ -92,13 +92,13 @@ export function RightPanel({
       </div>
 
       {planningState?.status === "unavailable" ? (
-        <div className="absolute left-4 top-16 z-20 rounded-full border border-amber-200 bg-amber-50/95 px-3 py-1 text-xs font-medium text-amber-800 shadow-sm">
+        <div className="absolute left-4 top-16 z-50 rounded-full border border-amber-200 bg-amber-50/95 px-3 py-1 text-xs font-medium text-amber-800 shadow-sm">
           AI unavailable
         </div>
       ) : null}
 
-      <div className="h-full flex-1 overflow-hidden rounded-tl-[24px] bg-white">
-        <div className={`h-full ${activeView === "map" ? "block" : "hidden"}`}>
+      <div className="relative h-full flex-1 overflow-hidden rounded-l-[24px] bg-transparent">
+        <div className="h-full">
           <MapView
             mapData={mapData || { pois: [], routes: [] }}
             savedIds={savedIds}
@@ -113,7 +113,7 @@ export function RightPanel({
         </div>
 
         {activeView === "itinerary" && (
-          <div className="h-full overflow-y-auto bg-white">
+          <div className="absolute inset-0 z-40 overflow-y-auto bg-white/40 backdrop-blur-xl border-l border-white/20">
             <ItineraryPanel 
               itinerary={itinerary} 
               trip={trip}

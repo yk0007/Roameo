@@ -48,6 +48,16 @@ export const planningStateStatusSchema = z.enum([
 ]);
 export type PlanningStateStatus = z.infer<typeof planningStateStatusSchema>;
 
+export const planningStateStageSchema = z.enum([
+  "understanding",
+  "researching",
+  "building_plan",
+  "refining",
+  "ready",
+  "unavailable"
+]);
+export type PlanningStateStage = z.infer<typeof planningStateStageSchema>;
+
 export const planningStateSourceSchema = z.enum([
   "provider",
   "places",
@@ -57,6 +67,7 @@ export type PlanningStateSource = z.infer<typeof planningStateSourceSchema>;
 
 export const planningStateSchema = z.object({
   status: planningStateStatusSchema.default("ready"),
+  stage: planningStateStageSchema.default("ready"),
   source: planningStateSourceSchema.optional(),
   reason: z.string().optional(),
   retryable: z.boolean().default(true),
@@ -71,6 +82,7 @@ export const sessionMemorySchema = z.object({
   lastPlanVersion: z.number().default(0),
   planningState: planningStateSchema.default({
     status: "ready",
+    stage: "ready",
     retryable: true
   }),
   preferences: userPreferenceSchema.default({
@@ -224,13 +236,59 @@ export type MessagePhase = z.infer<typeof messagePhaseSchema>;
 
 export const assistantResponseBlockSchema = z.discriminatedUnion("type", [
   z.object({
+    type: z.literal("trip_intro"),
+    eyebrow: z.string().optional(),
+    title: z.string(),
+    body: z.string(),
+    moodEmoji: z.string().optional()
+  }),
+  z.object({
     type: z.literal("lead"),
     text: z.string()
+  }),
+  z.object({
+    type: z.literal("itinerary_template"),
+    title: z.string(),
+    subtitle: z.string().optional(),
+    budgetLabel: z.string().optional(),
+    days: z.array(
+      z.object({
+        day: z.number().int().positive(),
+        date: z.string().optional(),
+        title: z.string(),
+        summary: z.string().optional(),
+        destination: z.string(),
+        accent: z.string().optional(),
+        periods: z.array(
+          z.object({
+            key: z.enum(["morning", "afternoon", "evening", "flex"]),
+            label: z.string(),
+            emoji: z.string().optional(),
+            entries: z.array(
+              z.object({
+                title: z.string(),
+                poiId: z.string().optional(),
+                timeLabel: z.string().optional(),
+                description: z.string().optional()
+              })
+            ).default([])
+          })
+        ).default([]),
+        stayPoiId: z.string().optional(),
+        footer: z.string().optional()
+      })
+    ).min(1)
   }),
   z.object({
     type: z.literal("clarifying_questions"),
     title: z.string().optional(),
     questions: z.array(z.string()).min(1)
+  }),
+  z.object({
+    type: z.literal("place_card_row"),
+    title: z.string().optional(),
+    poiIds: z.array(z.string()).default([]),
+    display: z.enum(["inline", "carousel"]).default("inline")
   }),
   z.object({
     type: z.literal("recommendation_cards"),
@@ -249,6 +307,16 @@ export const assistantResponseBlockSchema = z.discriminatedUnion("type", [
     )
   }),
   z.object({
+    type: z.literal("assistant_prompt_chips"),
+    title: z.string().optional(),
+    prompts: z.array(
+      z.object({
+        label: z.string(),
+        prompt: z.string()
+      })
+    ).min(1)
+  }),
+  z.object({
     type: z.literal("quick_actions"),
     title: z.string().optional(),
     actions: z.array(
@@ -261,6 +329,7 @@ export const assistantResponseBlockSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("planning_status"),
     state: planningStateStatusSchema,
+    stage: planningStateStageSchema,
     label: z.string(),
     detail: z.string().optional()
   })

@@ -139,24 +139,36 @@ export class TurnRunner {
       this.streamHub.emit(session.id, { type: "trace.updated", data: trace });
     };
 
-    try {
-      let nextSession =
-        (await this.repository.updateSession(session.id, {
-          providerSettings: settings,
-          memory: {
-            ...session.memory,
-            planningState: createPlanningState(session.memory.planningState, {
-              status: "running",
-              source: "provider",
-              reason: undefined,
-              retryable: true
-            })
-          }
-        })) || session;
+    const persistPlanningState = async (
+      baseSession: SessionSnapshot,
+      next: Partial<PlanningState>
+    ) => {
+      const updated = await this.repository.updateSession(session.id, {
+        providerSettings: settings,
+        memory: {
+          ...baseSession.memory,
+          planningState: createPlanningState(baseSession.memory.planningState, next)
+        }
+      });
 
-      this.streamHub.emit(session.id, {
-        type: "session.snapshot",
-        data: nextSession
+      if (updated) {
+        this.streamHub.emit(session.id, {
+          type: "session.snapshot",
+          data: updated
+        });
+        return updated;
+      }
+
+      return baseSession;
+    };
+
+    try {
+      let nextSession = await persistPlanningState(session, {
+        status: "running",
+        stage: "understanding",
+        source: "provider",
+        reason: undefined,
+        retryable: true
       });
 
       await emitTrace("lead", "running", "Resolving intent");
@@ -179,6 +191,13 @@ export class TurnRunner {
 
       let research;
       if (shouldResearch) {
+        nextSession = await persistPlanningState(nextSession, {
+          status: "running",
+          stage: "researching",
+          source: "places",
+          reason: undefined,
+          retryable: true
+        });
         await emitTrace(
           "destination-research-agent",
           "running",
@@ -190,9 +209,22 @@ export class TurnRunner {
           "completed",
           `Fetched ${Object.keys(research.catalog.items).length} POIs`
         );
+
+        if (!(resolution.intent === "plan_trip" || resolution.intent === "refine_trip")) {
+          await this.repository.savePoiCatalog(session.id, research.catalog);
+          nextSession = (await this.repository.getSession(session.id, userId)) || nextSession;
+        }
       }
 
       if (research && (resolution.intent === "plan_trip" || resolution.intent === "refine_trip")) {
+        nextSession = await persistPlanningState(nextSession, {
+          status: "running",
+          stage:
+            resolution.intent === "refine_trip" ? "refining" : "building_plan",
+          source: "provider",
+          reason: undefined,
+          retryable: true
+        });
         await emitTrace("itinerary-synthesis-agent", "running", "Building plan");
         let plan = await synthesizePlan(
           this.providerService,
@@ -219,17 +251,18 @@ export class TurnRunner {
         nextSession = (await this.repository.getSession(session.id, userId)) || nextSession;
       }
 
-      reply = await answerConversationally(
+      const narrative = await answerConversationally(
         this.providerService,
         resolvedProvider,
         nextSession,
         resolution,
         research
       );
+      reply = [narrative.introBody, narrative.leadText].filter(Boolean).join(" ");
       const responseBlocks = buildResponseBlocks({
         session: nextSession,
         resolution,
-        reply,
+        narrative,
         research,
         plan: latestPlan
       });
@@ -280,6 +313,7 @@ export class TurnRunner {
         nextSession.memory.planningState,
         {
           status: "ready",
+          stage: "ready",
           source: undefined,
           reason: undefined,
           retryable: true
@@ -315,16 +349,18 @@ export class TurnRunner {
         error instanceof PlanningToolError
           ? {
               status: "unavailable",
+              stage: "unavailable",
               source: error.source,
               reason: message,
               retryable: error.retryable
             }
           : {
               status: "unavailable",
+              stage: "unavailable",
               source: "provider",
               reason: message,
               retryable: true
-            }
+          }
       );
       const updated = await this.repository.updateSession(session.id, {
         providerSettings: settings,
@@ -339,6 +375,54 @@ export class TurnRunner {
           data: updated
         });
       }
+
+      const assistantMessage: ConversationMessage = {
+        id: randomUUID(),
+        sessionId: session.id,
+        role: "assistant",
+        content:
+          "I hit a temporary planning issue, so I kept your current trip unchanged. You can retry in a moment and I’ll pick it back up.",
+        createdAt: new Date().toISOString(),
+        phase: "final",
+        meta: {
+          provider: resolvedProvider.provider,
+          turnId,
+          responseBlocks: [
+            {
+              type: "trip_intro",
+              title: "I kept your current trip safe",
+              body: "Planning hit a temporary issue, so I left your accepted itinerary exactly as it was.",
+              moodEmoji: "⚠️"
+            },
+            {
+              type: "lead",
+              text: "You can retry in a moment, or tell me what you want to adjust and I’ll continue from the last accepted plan."
+            },
+            {
+              type: "planning_status",
+              state: "unavailable",
+              stage: "unavailable",
+              label: "Planning is temporarily unavailable",
+              detail: message
+            },
+            {
+              type: "assistant_prompt_chips",
+              title: "Try next",
+              prompts: [
+                {
+                  label: "Retry now",
+                  prompt: "Please try building the plan again."
+                }
+              ]
+            }
+          ]
+        }
+      };
+      await this.repository.saveMessage(assistantMessage);
+      this.streamHub.emit(session.id, {
+        type: "message.committed",
+        data: assistantMessage
+      });
       await emitTrace("lead", "failed", "Turn failed", message);
       this.streamHub.emit(session.id, {
         type: "turn.failed",

@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  assistantResponseBlockSchema,
   planMutationInputSchema,
   planSnapshotSchema,
+  planningStateSchema,
   sessionMutationSchema,
   sessionSnapshotSchema
 } from "./index.js";
@@ -19,6 +21,7 @@ test("session snapshot fills canonical defaults", () => {
   assert.equal(snapshot.title, "Untitled trip");
   assert.deepEqual(snapshot.savedPoiIds, []);
   assert.equal(snapshot.memory.preferences.currency, "INR");
+  assert.equal(snapshot.memory.planningState.stage, "ready");
 });
 
 test("plan snapshot keeps schema version and day structure", () => {
@@ -88,4 +91,66 @@ test("plan mutation accepts direct structured actions", () => {
   assert.equal(add.type, "add_poi");
   assert.equal(overview.type, "update_overview");
   assert.equal(overview.destination, "Kyoto");
+});
+
+test("planning state accepts stage-aware canonical progress", () => {
+  const state = planningStateSchema.parse({
+    status: "running",
+    stage: "researching",
+    source: "places",
+    retryable: true
+  });
+
+  assert.equal(state.status, "running");
+  assert.equal(state.stage, "researching");
+});
+
+test("assistant response blocks accept canonical itinerary presentation blocks", () => {
+  const intro = assistantResponseBlockSchema.parse({
+    type: "trip_intro",
+    title: "Kerala is shaping up beautifully",
+    body: "I pulled together a relaxed first draft you can keep refining.",
+    moodEmoji: "🌴"
+  });
+  const itinerary = assistantResponseBlockSchema.parse({
+    type: "itinerary_template",
+    title: "3-day Kerala escape",
+    subtitle: "Relaxed pace with scenic stops",
+    days: [
+      {
+        day: 1,
+        title: "Fort Kochi by the water",
+        destination: "Kochi",
+        periods: [
+          {
+            key: "morning",
+            label: "Morning",
+            emoji: "☀️",
+            entries: [
+              {
+                title: "Fort Kochi walk",
+                poiId: "poi-1",
+                timeLabel: "9:00 AM"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  });
+
+  assert.equal(intro.type, "trip_intro");
+  assert.equal(itinerary.type, "itinerary_template");
+});
+
+test("assistant response blocks fail fast on invalid itinerary template payloads", () => {
+  assert.throws(
+    () =>
+      assistantResponseBlockSchema.parse({
+        type: "itinerary_template",
+        title: "Missing day payload",
+        days: []
+      }),
+    /Too small|at least 1/
+  );
 });
