@@ -411,38 +411,62 @@ export default function MapView({
     if (!window.__gmapsLoading) {
       window.__gmapsLoading = true;
 
-      // Fetch API key from backend and load script
-      const BACKEND_URL =
-        process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:4000";
-      fetch(`${BACKEND_URL}/api/maps/api-key`)
-        .then((response) => response.json())
-        .then((data) => {
-          const script = document.createElement("script");
-          // Use async loading without callback parameter for better performance
-          script.src = `https://maps.googleapis.com/maps/api/js?key=${data.apiKey}&libraries=geometry,marker&v=weekly&loading=async`;
-          script.async = true;
-
-          script.addEventListener("load", () => {
+      const loadMapScript = (apiKey: string) => {
+        // Create global callback for Google Maps
+        (window as any).__initGoogleMaps = () => {
+          if (window.google?.maps?.Map) {
+            setGmapsReady(true);
+            window.__gmapsInitCallbacks?.forEach((cb) => cb());
+            window.__gmapsInitCallbacks = [];
+          } else {
+            // Fallback interval if callback fires before Map is assigned
             const ensureReady = () => {
               if (window.google?.maps?.Map) {
-                // Mark as ready and flush callbacks
                 setGmapsReady(true);
                 window.__gmapsInitCallbacks?.forEach((cb) => cb());
                 window.__gmapsInitCallbacks = [];
               } else {
-                // Retry shortly until constructor is available
                 setTimeout(ensureReady, 50);
               }
             };
             ensureReady();
-          });
+          }
+        };
 
-          document.body.appendChild(script);
-        })
-        .catch((error) => {
-          console.error("Failed to load Google Maps API key:", error);
+        const script = document.createElement("script");
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geometry,marker&v=weekly&callback=__initGoogleMaps`;
+        script.async = true;
+        script.defer = true;
+
+        script.onerror = () => {
+          console.error("Failed to load Google Maps script");
           setApiKeyError(true);
-        });
+        };
+
+        document.body.appendChild(script);
+      };
+
+      // Prefer env var to avoid backend cold-start delays
+      if (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) {
+        loadMapScript(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY);
+      } else {
+        // Fetch API key from backend as fallback
+        const BACKEND_URL =
+          process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:4000";
+        fetch(`${BACKEND_URL}/api/maps/api-key`)
+          .then((response) => response.json())
+          .then((data) => {
+            if (data?.apiKey) {
+              loadMapScript(data.apiKey);
+            } else {
+              throw new Error("No API key returned");
+            }
+          })
+          .catch((error) => {
+            console.error("Failed to fetch Google Maps API key:", error);
+            setApiKeyError(true);
+          });
+      }
     }
 
     // Clean up on unmount
@@ -511,7 +535,7 @@ export default function MapView({
       // Set world view again after map is idle (ensures it takes effect)
       const idleListener = mapInstance.current.addListener("idle", () => {
         ensureWorldView();
-        google.maps.event.removeListener(idleListener); // Remove listener after first idle
+        window.google.maps.event.removeListener(idleListener); // Remove listener after first idle
       });
 
       setIsMapLoading(false);
@@ -679,8 +703,8 @@ export default function MapView({
           const mapWidth = mapDiv.clientWidth;
           const mapHeight = mapDiv.clientHeight;
 
-          const cardWidth = 240;
-          const cardHeight = 180; // Compact card height
+          const cardWidth = 248;
+          const cardHeight = 218;
           const markerSize = 12;
           const padding = 10;
 
@@ -759,7 +783,8 @@ export default function MapView({
                 iwContainer.style.borderRadius = "0";
                 iwContainer.style.boxShadow = "none";
                 iwContainer.style.background = "transparent";
-                iwContainer.style.maxWidth = "240px";
+                iwContainer.style.maxWidth = "248px";
+                iwContainer.style.minWidth = "248px";
                 iwContainer.style.outline = "none";
               }
 
@@ -776,6 +801,7 @@ export default function MapView({
                 iwContent.style.background = "transparent";
                 iwContent.style.overflow = "visible";
                 iwContent.style.outline = "none";
+                iwContent.style.maxWidth = "248px";
               }
 
               // Remove any parent container borders
@@ -806,7 +832,9 @@ export default function MapView({
 
               // Add mouse listener only for non-persistent info windows
               if (!isPersistent) {
-                const iwWrapperEl = content.closest(".gm-style-iw-wrapper");
+                const iwWrapperEl =
+                  (content.closest(".gm-style-iw") as HTMLElement | null) ||
+                  (content.parentElement as HTMLElement | null);
                 if (iwWrapperEl) {
                   let hoverTimeout: NodeJS.Timeout | null = null;
 
@@ -843,6 +871,11 @@ export default function MapView({
 
         marker.addListener("mouseover", (e: google.maps.MapMouseEvent) => {
           // Don't show hover card if there's already a persistent one
+          if (persistentInfoWindowRef.current) return;
+          showInfoWindow(e, false);
+        });
+
+        marker.addListener("mousemove", (e: google.maps.MapMouseEvent) => {
           if (persistentInfoWindowRef.current) return;
           showInfoWindow(e, false);
         });
@@ -1101,7 +1134,7 @@ export default function MapView({
   }
 
   return (
-    <div className="relative h-full overflow-hidden">
+    <div className="relative h-full overflow-hidden rounded-tl-[24px] bg-transparent">
       <MapViewDebug mapData={mapData} />
       {/* Loading Overlay */}
       {(isMapLoading || mapSearchStatus) && (
@@ -1115,14 +1148,14 @@ export default function MapView({
         </div>
       )}
 
-      <div ref={mapRef} className="w-full h-full" />
+      <div ref={mapRef} className="h-full w-full rounded-tl-[24px] overflow-hidden" />
 
       {/* Map Controls - bottom right */}
-      <div className="absolute bottom-4 right-4 flex flex-col gap-2 z-20">
+      <div className="absolute bottom-4 right-4 z-20 flex flex-col gap-2">
         <Button
           size="sm"
           variant="secondary"
-          className="w-10 h-10 p-0 bg-white shadow-md hover:bg-gray-50"
+          className="h-10 w-10 rounded-[10px] bg-white p-0 shadow-[0_4px_12px_rgba(0,0,0,0.12)] hover:bg-white"
           onClick={() => {
             if (!mapInstance.current) return;
             const z = mapInstance.current.getZoom?.() ?? 2;
@@ -1134,7 +1167,7 @@ export default function MapView({
         <Button
           size="sm"
           variant="secondary"
-          className="w-10 h-10 p-0 bg-white shadow-md hover:bg-gray-50"
+          className="h-10 w-10 rounded-[10px] bg-white p-0 shadow-[0_4px_12px_rgba(0,0,0,0.12)] hover:bg-white"
           onClick={() => {
             if (!mapInstance.current) return;
             const z = mapInstance.current.getZoom?.() ?? 2;
@@ -1146,7 +1179,7 @@ export default function MapView({
         <Button
           size="sm"
           variant="secondary"
-          className="w-10 h-10 p-0 bg-white shadow-md hover:bg-gray-50"
+          className="h-10 w-10 rounded-[10px] bg-white p-0 shadow-[0_4px_12px_rgba(0,0,0,0.12)] hover:bg-white"
           onClick={() => {
             if (!mapInstance.current) return;
             const centerTo = userMarkerRef.current?.getPosition?.();
@@ -1171,13 +1204,13 @@ export default function MapView({
 
       {/* Filter toggle button + Pop menu */}
       <div
-        className="absolute top-16 right-4 z-20 flex flex-col items-end gap-2"
+        className="absolute right-4 top-16 z-20 flex flex-col items-end gap-2"
         ref={filterMenuRef}
       >
         <Button
           size="sm"
           variant={showFilterMenu ? "default" : "secondary"}
-          className={`w-auto h-10 px-3 bg-white shadow-md hover:bg-gray-50 rounded-full ${showFilterMenu ? "bg-black/80 text-white hover:bg-black/90" : ""}`}
+          className={`h-[39px] w-auto rounded-full border border-[rgba(255,255,255,0.7)] bg-[rgba(255,255,255,0.9)] px-4 text-[13px] shadow-[0_4px_16px_rgba(0,0,0,0.12)] backdrop-blur-xl hover:bg-white ${showFilterMenu ? "bg-black/80 text-white hover:bg-black/90" : "text-[#1f1b16]"}`}
           onClick={() => setShowFilterMenu((v) => !v)}
           title="Map filters"
         >
@@ -1292,7 +1325,7 @@ export default function MapView({
       </div>
 
       {/* Google Maps Attribution */}
-      <div className="absolute bottom-2 right-2 text-xs text-gray-500 bg-white/80 px-2 py-1 rounded">
+      <div className="absolute bottom-4 left-4 rounded bg-white/80 px-2 py-1 text-[11px] text-gray-500">
         Map Data ©2025 Google
       </div>
     </div>

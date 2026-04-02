@@ -32,15 +32,9 @@ export const CompactPoiCard = memo(function CompactPoiCard({ poi, isSaved, isIti
   }, [poi, onReplan])
   return (
     <motion.div 
-      className="bg-white rounded-2xl overflow-hidden shadow-sm w-full max-w-sm"
+      className="h-[218px] w-[248px] overflow-hidden rounded-[24px] border border-white/70 bg-white shadow-[0_18px_48px_rgba(15,23,42,0.18)]"
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
-      whileHover={{
-        scale: 1.05,
-        y: -8,
-        boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
-        transition: { duration: 0.3, ease: "easeOut" }
-      }}
       transition={{ duration: 0.2 }}
     >
       <div className="relative">
@@ -49,7 +43,7 @@ export const CompactPoiCard = memo(function CompactPoiCard({ poi, isSaved, isIti
           alt={poi.name} 
           width={400}
           height={160}
-          className="w-full h-40 object-cover"
+          className="h-32 w-full object-cover"
           quality={90}
           priority={true}
           sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
@@ -84,19 +78,20 @@ export const CompactPoiCard = memo(function CompactPoiCard({ poi, isSaved, isIti
         
       </div>
       
-      <div className="p-3">
+      <div className="space-y-2 p-3">
         <div className="flex justify-between items-start mb-2">
-          <h3 className="font-semibold text-base text-gray-900 leading-tight">{poi.name}</h3>
+          <h3 className="line-clamp-2 font-semibold text-sm leading-5 text-gray-900">{poi.name}</h3>
           {poi.rating && (
-            <div className="flex items-center gap-1 ml-2">
-              <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-              <span className="text-sm font-medium text-gray-900">{poi.rating}</span>
-              <span className="text-sm text-gray-500">(995)</span>
+            <div className="ml-2 flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1">
+              <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+              <span className="text-xs font-medium text-gray-900">{poi.rating}</span>
             </div>
           )}
         </div>
-        
-        <p className="text-xs text-gray-600 mb-2">Address : {poi.address}</p>
+
+        <p className="line-clamp-3 text-xs leading-5 text-gray-600">
+          {poi.address || "Location available on the map"}
+        </p>
       </div>
     </motion.div>
   )

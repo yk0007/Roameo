@@ -1,18 +1,10 @@
 "use client"
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { MapPin, Calendar, ChevronRight } from "lucide-react"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import MapView from "./map-view"
 import { ItineraryPanel } from "./itinerary-panel"
-import { ShareButton } from "./share-button"
-import { CachedImage } from "./cached-image"
-import type { Itinerary, POI, Activity } from "@/lib/types"
+import type { Itinerary, POI, SessionPlanningState } from "@/lib/types"
 
 interface RightPanelProps {
   activeView: "map" | "itinerary"
@@ -21,6 +13,7 @@ interface RightPanelProps {
   itinerary?: Itinerary
   mapData?: { pois: any[]; routes: Array<{ from: [number, number]; to: [number, number]; polyline?: string }> }
   onClose: () => void
+  planningState?: SessionPlanningState
   savedIds?: Set<string>
   itineraryPoiIds?: Set<string>
   onToggleSave?: (poi: POI, nextSaved: boolean) => void
@@ -36,6 +29,7 @@ export function RightPanel({
   itinerary,
   mapData,
   onClose,
+  planningState,
   savedIds,
   itineraryPoiIds,
   onToggleSave,
@@ -56,48 +50,54 @@ export function RightPanel({
   }, [activeView])
 
   return (
-    <div className="bg-white flex flex-col relative h-full">
-      {/* Navigation Tabs */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 bg-white/95 backdrop-blur-md rounded-full p-1 border border-white/30 shadow-xl transition-all duration-300">
+    <div className="relative flex h-full flex-col overflow-hidden bg-white lg:rounded-tl-[24px]">
+      <div className="pointer-events-none absolute left-1/2 top-4 z-20 flex -translate-x-1/2 items-center gap-2">
+        <div className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-white/40 bg-white/50 p-[5px] shadow-[0_8px_32px_rgba(15,23,42,0.12),0_2px_8px_rgba(15,23,42,0.06)] backdrop-blur-2xl">
+          <Button
+            variant={activeView === "map" ? "default" : "ghost"}
+            size="sm"
+            onClick={() => onViewChange("map")}
+            className={`h-[31px] rounded-full px-4 text-[13px] ${
+              activeView === "map"
+                ? "bg-black text-white hover:bg-gray-800 hover:text-white"
+                : "text-gray-500 hover:bg-transparent hover:text-black"
+            }`}
+          >
+            <MapPin className="mr-1 w-4 h-4" />
+            Map
+          </Button>
+          <Button
+            variant={activeView === "itinerary" ? "default" : "ghost"}
+            size="sm"
+            onClick={() => onViewChange("itinerary")}
+            className={`h-[31px] rounded-full px-4 text-[13px] ${
+              activeView === "itinerary"
+                ? "bg-black text-white hover:bg-gray-800 hover:text-white"
+                : "text-gray-500 hover:bg-transparent hover:text-black"
+            }`}
+          >
+            <Calendar className="mr-1 w-4 h-4" />
+            Itinerary
+          </Button>
+        </div>
+
         <Button
-          variant={activeView === "map" ? "default" : "ghost"}
+          variant="ghost"
           size="sm"
-          onClick={() => onViewChange("map")}
-          className={`rounded-full px-4 ${
-            activeView === "map"
-              ? "bg-black text-white hover:bg-gray-800 hover:text-white"
-              : "text-gray-600 hover:bg-gray-100 hover:text-black"
-          }`}
+          onClick={onClose}
+          className="pointer-events-auto h-9 w-9 rounded-full border border-white/40 bg-white/50 p-0 shadow-[0_8px_32px_rgba(15,23,42,0.12),0_2px_8px_rgba(15,23,42,0.06)] backdrop-blur-2xl hover:bg-white/70"
         >
-          <MapPin className="w-4 h-4 mr-1" />
-          Map
-        </Button>
-        <Button
-          variant={activeView === "itinerary" ? "default" : "ghost"}
-          size="sm"
-          onClick={() => onViewChange("itinerary")}
-          className={`rounded-full px-4 ${
-            activeView === "itinerary"
-              ? "bg-black text-white hover:bg-gray-800 hover:text-white"
-              : "text-gray-600 hover:bg-gray-100 hover:text-black"
-          }`}
-        >
-          <Calendar className="w-4 h-4 mr-1" />
-          Itinerary
+          <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
 
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={onClose}
-        className="absolute top-4 right-4 z-10 bg-white/90 backdrop-blur-sm rounded-full shadow-lg hover:bg-gray-100 w-8 h-8 p-0 flex items-center justify-center"
-      >
-        <ChevronRight className="w-4 h-4" />
-      </Button>
+      {planningState?.status === "unavailable" ? (
+        <div className="absolute left-4 top-16 z-20 rounded-full border border-amber-200 bg-amber-50/95 px-3 py-1 text-xs font-medium text-amber-800 shadow-sm">
+          AI unavailable
+        </div>
+      ) : null}
 
-      {/* Content */}
-      <div className="flex-1 overflow-hidden h-full">
+      <div className="h-full flex-1 overflow-hidden rounded-tl-[24px] bg-white">
         <div className={`h-full ${activeView === "map" ? "block" : "hidden"}`}>
           <MapView
             mapData={mapData || { pois: [], routes: [] }}
@@ -113,7 +113,7 @@ export function RightPanel({
         </div>
 
         {activeView === "itinerary" && (
-          <div className="h-full overflow-y-auto">
+          <div className="h-full overflow-y-auto bg-white">
             <ItineraryPanel 
               itinerary={itinerary} 
               trip={trip}
@@ -121,6 +121,7 @@ export function RightPanel({
               onToggleSave={onToggleSave}
               onAddPoi={onAddPoi}
               onReplan={onReplan}
+              planningStatus={planningState?.status === "unavailable" ? "AI unavailable. Existing itinerary remains visible until planning recovers." : undefined}
             />
           </div>
         )}

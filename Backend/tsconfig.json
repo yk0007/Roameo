@@ -1,16 +1,27 @@
 {
+  "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2020",
     "module": "ESNext",
-    "moduleResolution": "Node",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
+    "moduleResolution": "Bundler",
     "outDir": "dist",
     "rootDir": "src",
-    "resolveJsonModule": true
+    "types": [
+      "node"
+    ]
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/agents",
+    "src/cache",
+    "src/db",
+    "src/graph",
+    "src/tools",
+    "src/ws",
+    "src/api/cache.ts",
+    "src/api/maps.ts",
+    "src/utils/rateLimiter.ts",
+    "src/utils/supabase-pool.ts"
+  ]
 }

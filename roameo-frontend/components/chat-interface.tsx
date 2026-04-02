@@ -7,6 +7,7 @@ import { Send, Plus, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { sendChat } from "@/lib/api";
 import { InlinePlanningStatus } from "./inline-planning-status";
+import { StructuredResponseBlocks } from "./structured-response-blocks";
 import { TypingIndicator } from "./typing-indicator";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -17,7 +18,27 @@ import {
 } from "@/components/ui/hover-card";
 import { CachedImage } from "./cached-image";
 import { CompactPoiCard } from "./poi-card";
-import type { ChatMessage, POI } from "@/lib/types";
+import type { ChatMessage, POI, SessionPlanningState } from "@/lib/types";
+
+function normalizeRenderableMessageContent(content: string) {
+  return content
+    .replace(/,?\[object Object\],?/g, "")
+    .replace(/\[object Object\]/g, "")
+    .replace(/object Object/g, "")
+    .trim();
+}
+
+function shouldRenderMessage(message: ChatMessage) {
+  if (message.role !== "user" && message.role !== "assistant") {
+    return false;
+  }
+
+  if (message.role === "assistant" && message.meta?.responseBlocks?.length) {
+    return true;
+  }
+
+  return normalizeRenderableMessageContent(String(message.content || "")).length > 0;
+}
 
 interface ChatInterfaceProps {
   messages: ChatMessage[];
@@ -32,6 +53,7 @@ interface ChatInterfaceProps {
   isTyping?: boolean;
   detectedIntent?: "PLAN_TRIP" | "DESTINATION_SEARCH" | "CHAT" | null;
   planningActive?: boolean;
+  planningState?: SessionPlanningState;
   savedIds?: Set<string>;
   onToggleSave?: (poi: POI, nextSaved: boolean) => void;
   onAddPoi?: (poi: POI) => void;
@@ -54,6 +76,7 @@ export function ChatInterface({
   isTyping,
   detectedIntent,
   planningActive,
+  planningState,
   savedIds,
   onToggleSave,
   onAddPoi,
@@ -91,6 +114,10 @@ export function ChatInterface({
   };
 
   const safeMessages = messages || [];
+  const visibleMessages = useMemo(
+    () => safeMessages.filter(shouldRenderMessage),
+    [safeMessages]
+  );
 
   // Debug logging for ChatInterface messages
   useEffect(() => {
@@ -98,20 +125,20 @@ export function ChatInterface({
       "[chat-interface] Messages prop updated, count:",
       safeMessages.length,
     );
-    if (safeMessages.length > 0) {
-      const lastMessage = safeMessages[safeMessages.length - 1];
+    if (visibleMessages.length > 0) {
+      const lastMessage = visibleMessages[visibleMessages.length - 1];
       console.log("[chat-interface] Last message:", {
         id: lastMessage.id,
         role: lastMessage.role,
         contentLength: lastMessage.content?.length,
       });
     }
-  }, [safeMessages.length]);
+  }, [safeMessages.length, visibleMessages]);
 
   // Force re-render when messages change to ensure assistant messages are visible
   useEffect(() => {
-    if (safeMessages.length > 0) {
-      const lastMessage = safeMessages[safeMessages.length - 1];
+    if (visibleMessages.length > 0) {
+      const lastMessage = visibleMessages[visibleMessages.length - 1];
       if (lastMessage.role === "assistant") {
         console.log(
           "[chat-interface] Assistant message detected - ensuring visibility",
@@ -122,19 +149,20 @@ export function ChatInterface({
         }, 50);
       }
     }
-  }, [safeMessages]);
+  }, [visibleMessages]);
   const lastMessage = useMemo(() => {
-    return safeMessages.length > 0
-      ? safeMessages[safeMessages.length - 1]
+    return visibleMessages.length > 0
+      ? visibleMessages[visibleMessages.length - 1]
       : undefined;
-  }, [safeMessages]);
+  }, [visibleMessages]);
 
   const lastAssistant = useMemo(() => {
-    for (let i = safeMessages.length - 1; i >= 0; i--) {
-      if (safeMessages[i].role === "assistant") return safeMessages[i];
+    for (let i = visibleMessages.length - 1; i >= 0; i--) {
+      if (visibleMessages[i].role === "assistant") return visibleMessages[i];
     }
     return undefined;
-  }, [safeMessages]);
+  }, [visibleMessages]);
+  const lastAssistantHasStructuredBlocks = Boolean(lastAssistant?.meta?.responseBlocks?.length);
 
   // Decide when to show the suggestion chip: only after a substantive assistant reply,
   // only once per assistant turn, and only on the Chat view, and not when user just sent a message
@@ -146,20 +174,22 @@ export function ChatInterface({
     if (isNewAssistantTurn) {
       lastAssistantIdRef.current = lastAssistant.id;
       const longEnough =
-        (lastAssistant.content?.length || 0) > 80 && safeMessages.length >= 3;
+        (lastAssistant.content?.length || 0) > 80 && visibleMessages.length >= 3;
       const cooldownOk = Date.now() - lastSuggestionAt > SUGGESTION_COOLDOWN_MS;
       const chance = Math.random() < SUGGESTION_PROBABILITY;
-      const shouldShow = longEnough && cooldownOk && chance;
+      const shouldShow =
+        !lastAssistantHasStructuredBlocks && longEnough && cooldownOk && chance;
       setShowSuggestion(shouldShow);
       if (shouldShow) setLastSuggestionAt(Date.now());
       setUserJustSent(false); // Reset after assistant responds
     }
   }, [
     lastAssistant,
-    safeMessages.length,
+    visibleMessages.length,
     activeView,
     userJustSent,
     lastSuggestionAt,
+    lastAssistantHasStructuredBlocks,
   ]);
 
   const scrollToBottom = (behavior: "smooth" | "auto" = "smooth") => {
@@ -169,7 +199,7 @@ export function ChatInterface({
   useEffect(() => {
     // Auto-scroll on new messages
     scrollToBottom("auto");
-  }, [safeMessages, isTyping]);
+  }, [visibleMessages, isTyping]);
 
   // Reset response type when typing stops
   useEffect(() => {
@@ -214,8 +244,8 @@ export function ChatInterface({
 
   // Ensure typing indicator is hidden when messages arrive
   useEffect(() => {
-    if (safeMessages.length > 0) {
-      const lastMessage = safeMessages[safeMessages.length - 1];
+    if (visibleMessages.length > 0) {
+      const lastMessage = visibleMessages[visibleMessages.length - 1];
       if (lastMessage.role === "assistant") {
         console.log(
           "[chat-interface] Assistant message detected - forcing typing state clear",
@@ -232,7 +262,7 @@ export function ChatInterface({
         }
       }
     }
-  }, [safeMessages, isTyping, onSendMessage]);
+  }, [visibleMessages, isTyping, onSendMessage]);
 
   const handleScroll = () => {
     const container = scrollContainerRef.current;
@@ -696,25 +726,34 @@ export function ChatInterface({
   };
 
   return (
-    <div className="flex flex-col h-full bg-white relative">
+    <div className="relative flex h-full flex-col bg-white">
+      {planningState?.status === "unavailable" ? (
+        <div className="border-b border-amber-200 bg-amber-50 px-6 py-3 text-sm text-amber-900">
+          AI planning is temporarily unavailable. Roameo kept your last accepted trip visible until the provider recovers.
+        </div>
+      ) : null}
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className={`flex-1 overflow-y-auto ${isRightPanelVisible ? "p-6" : "px-6 py-4 w-full"} pt-20`}
+        className={`flex-1 overflow-y-auto ${isRightPanelVisible ? "px-6 pb-5 pt-20" : "w-full px-10 pb-8 pt-20 sm:px-16 lg:px-24"}`}
       >
-        <div className="w-full">
-          {safeMessages.map((message, i) => (
+        <div className={`w-full ${isRightPanelVisible ? "max-w-full" : "mx-auto max-w-[760px]"}`}>
+          {visibleMessages.map((message, i) => (
             <div
               key={message.id || message.createdAt || i}
-              className={`flex gap-3 mb-4 ${message.role === "user" ? "justify-end" : "justify-start"}`}
+              className={`mb-6 flex items-start gap-3 ${
+                message.role === "user"
+                  ? "justify-end"
+                  : "justify-start"
+              }`}
             >
               <Avatar
-                className={`w-8 h-8 flex-shrink-0 ${message.role === "user" ? "order-2" : "order-1"}`}
+                className={`h-8 w-8 flex-shrink-0 ${message.role === "user" ? "order-2" : "order-1"}`}
               >
                 <AvatarFallback
                   className={
                     message.role === "user"
-                      ? "bg-blue-500 text-white"
+                      ? "bg-[#4f8df7] text-white"
                       : "bg-black text-white flex items-center justify-center"
                   }
                 >
@@ -726,18 +765,36 @@ export function ChatInterface({
                 </AvatarFallback>
               </Avatar>
               <div
-                className={`max-w-[78%] ${message.role === "user" ? "order-1" : "order-2"}`}
+                className={`${
+                  message.role === "user"
+                    ? "order-1 max-w-[calc(100%-44px)]"
+                    : "order-2 flex-1 max-w-[calc(100%-44px)]"
+                }`}
               >
                 <div
-                  className={`prose prose-xs max-w-none px-4 py-3 rounded-2xl shadow-sm ${message.role === "user" ? "bg-blue-100 border border-blue-200" : "bg-white/85 border border-zinc-200"}`}
+                  className={`max-w-none rounded-[20px] border backdrop-blur-xl ${
+                    message.role === "user"
+                      ? `ml-auto w-fit min-w-[72px] border-[#a5b4fc]/40 bg-[#a5b4fc]/60 px-[21px] py-[17px] text-[#1e293b] shadow-[0_8px_32px_rgba(99,102,241,0.25),0_2px_8px_rgba(99,102,241,0.1)] ${
+                          isRightPanelVisible ? "max-w-[400px]" : "max-w-[430px]"
+                        }`
+                      : `${isRightPanelVisible ? "max-w-[78%]" : "max-w-[75%]"} border-white/60 bg-white/70 px-5 py-4 shadow-[0_12px_40px_rgba(15,23,42,0.15),0_4px_12px_rgba(15,23,42,0.08)]`
+                  }`}
                 >
-                  <div className="leading-relaxed text-sm">
+                  <div className="text-sm leading-[1.75]">
                     {message.role === "user" ? (
                       <ReactMarkdown>
                         {String(message.content)
                           .replace(/\\[object Object\\]/g, "")
                           .trim()}
                       </ReactMarkdown>
+                    ) : message.meta?.responseBlocks?.length ? (
+                      <StructuredResponseBlocks
+                        message={message}
+                        pois={pois}
+                        onQuickAction={(prompt) => {
+                          onPopulateInput?.(prompt);
+                        }}
+                      />
                     ) : (
                       renderFormattedContent(
                         String(message.content).replace(
@@ -754,7 +811,7 @@ export function ChatInterface({
 
           {/* Suggested Questions Component */}
           {lastAssistant && showSuggestion && (
-            <div className="flex justify-start mt-6 pl-11">
+            <div className="mt-6 flex justify-start pl-12">
               <div className="text-sm text-gray-600">
                 <p className="mb-3 font-medium">
                   Want me to customize your plan? Try:
@@ -853,7 +910,7 @@ export function ChatInterface({
                     return shuffled.slice(0, count).map((item, idx) => (
                       <button
                         key={idx}
-                        className="bg-white/80 border border-zinc-200 rounded-full px-3 py-2 text-xs hover:bg-zinc-50 transition-colors"
+                        className="rounded-full border border-zinc-200 bg-white/80 px-3 py-2 text-xs hover:bg-zinc-50 transition-colors"
                         onClick={() => onSendMessage(item.prompt)}
                       >
                         {item.label}
@@ -869,7 +926,7 @@ export function ChatInterface({
           {(isTyping || planningActive) &&
             (() => {
               // Safety check: Don't show typing if we just received an assistant message
-              const lastMessage = safeMessages[safeMessages.length - 1];
+              const lastMessage = visibleMessages[visibleMessages.length - 1];
               const recentAssistantMessage =
                 lastMessage &&
                 lastMessage.role === "assistant" &&
@@ -893,14 +950,14 @@ export function ChatInterface({
               }
 
               return (
-                <div className="flex gap-3 mb-4">
+                <div className="mb-6 flex items-start gap-3">
                   <Avatar className="w-8 h-8 flex-shrink-0">
                     <AvatarFallback className="bg-black text-white flex items-center justify-center">
                       <div className="w-2 h-2 bg-white rounded-full"></div>
                     </AvatarFallback>
                   </Avatar>
-                  <div className="max-w-[78%]">
-                    <div className="prose prose-xs max-w-none px-4 py-3 rounded-2xl shadow-sm bg-white/85 border border-zinc-200">
+                  <div className="max-w-[calc(100%-44px)] flex-1">
+                    <div className="max-w-none rounded-[20px] border border-[#e5e7eb] bg-white px-5 py-4 shadow-[0_8px_32px_rgba(15,23,42,0.12)]">
                       <div className="leading-relaxed text-sm">
                         {responseType === "planning" || planningActive ? (
                           <InlinePlanningStatus isVisible={true} />
@@ -921,38 +978,44 @@ export function ChatInterface({
         <Button
           onClick={() => scrollToBottom()}
           variant="outline"
-          size="icon"
-          className="absolute bottom-32 right-10 z-10 rounded-full shadow-lg bg-white/80 backdrop-blur-sm animate-in fade-in"
+          className={`absolute bottom-28 z-10 h-11 w-11 rounded-full border border-white/70 bg-white/88 p-0 text-[#1f1b16] shadow-[0_12px_24px_rgba(15,23,42,0.12)] backdrop-blur-xl transition-all hover:-translate-y-0.5 hover:bg-white ${
+            isRightPanelVisible ? "right-7" : "right-12"
+          }`}
         >
-          <ArrowDown className="h-5 w-5" />
+          <ArrowDown className="h-4 w-4" />
         </Button>
       )}
 
-      <div className={`w-full ${isRightPanelVisible ? "p-6" : "px-8 py-6"}`}>
-        <form onSubmit={handleSubmit} className="relative">
-          <div className="bg-white/80 backdrop-blur-md border rounded-3xl shadow-lg p-4 border-zinc-300">
-            <div className="flex items-center gap-3 flex-row">
+      <div className={`relative z-10 w-full bg-transparent ${isRightPanelVisible ? "px-6 pb-4 pt-3" : "px-10 pb-5 pt-4 sm:px-16 lg:px-24"}`}>
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[100px] [mask-image:linear-gradient(to_bottom,transparent,black_60%)] backdrop-blur-xl" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[72px] bg-gradient-to-t from-white/80 via-white/40 to-transparent" />
+        <form
+          onSubmit={handleSubmit}
+          className={`relative z-10 ${isRightPanelVisible ? "mx-auto max-w-[85%]" : "mx-auto max-w-[760px]"}`}
+        >
+          <div className="h-[56px] rounded-[999px] border border-white/60 bg-white/70 px-[21px] shadow-[0_12px_40px_rgba(15,23,42,0.15),0_4px_12px_rgba(15,23,42,0.08)] backdrop-blur-xl">
+            <div className="flex h-full flex-row items-center gap-3">
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="flex-shrink-0 w-10 h-10 rounded-full hover:bg-white/80"
+                className="h-[18px] w-[18px] flex-shrink-0 rounded-full p-0 text-[#6b7280] hover:bg-transparent"
               >
-                <Plus className="w-5 h-5" />
+                <Plus className="h-[18px] w-[18px]" />
               </Button>
               <Input
                 value={inputValue}
                 onChange={(e) => handleInputChange(e.target.value)}
                 placeholder="Ask anything..."
-                className="flex-1 border-0 bg-transparent text-sm placeholder:text-gray-500 focus-visible:ring-0 focus-visible:ring-offset-0 px-0 shadow-none"
+                className="flex-1 border-0 bg-transparent px-0 text-[14px] text-[#374151] placeholder:text-[#9ca3af] focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
               />
               <div className="flex items-center gap-2 flex-shrink-0">
                 <Button
                   type="submit"
                   size="sm"
-                  className="w-10 h-10 rounded-full bg-black text-white hover:bg-gray-800"
+                  className="h-[34px] w-[34px] rounded-full bg-black text-white hover:bg-black/90"
                 >
-                  <Send className="w-5 h-5" />
+                  <Send className="h-[15px] w-[15px]" />
                 </Button>
               </div>
             </div>

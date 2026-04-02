@@ -1,243 +1,110 @@
 'use client';
 
-import { useScroll, useTransform, motion, MotionValue } from 'motion/react';
-import React, { useRef, forwardRef } from 'react';
-import { Button } from "@/components/ui/button"
-import { BlurFade } from "@/components/ui/blur-fade"
-import Link from "next/link"
-import { supabase } from "@/lib/supabase/client"
-import type { User } from "@supabase/supabase-js"
-import { useRouter } from "next/navigation"
+import { motion } from 'framer-motion';
+import { ArrowRight, MapPin } from 'lucide-react';
+import { Cormorant_Garamond, Manrope } from 'next/font/google';
+import type { User } from '@supabase/supabase-js';
+import { Button } from '@/components/ui/button';
 
-interface SectionProps {
-  scrollYProgress: MotionValue<number>;
+const displayFont = Cormorant_Garamond({
+  subsets: ['latin'],
+  weight: ['500', '600', '700'],
+});
+
+const bodyFont = Manrope({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+});
+
+type HeroProps = {
   user?: User | null;
   handleProtectedAction?: (action: string) => void;
-}
+};
 
-const Section1: React.FC<SectionProps> = ({ scrollYProgress, user, handleProtectedAction }) => {
-  const scale = useTransform(scrollYProgress, [0, 1], [1, 0.8]);
-  const rotate = useTransform(scrollYProgress, [0, 1], [0, -5]);
-  
+export default function HeroScrollAnimation({ handleProtectedAction }: HeroProps) {
   return (
-    <motion.section
-      style={{ scale, rotate }}
-      className='sticky font-semibold top-0 h-screen bg-gradient-to-br from-sky-300 via-blue-500 to-blue-800 flex flex-col items-center justify-center text-white relative overflow-hidden px-6'
-    >
-      {/* Grid background */}
-      <div className='absolute bottom-0 left-0 right-0 top-0 bg-[linear-gradient(to_right,#4f4f4f2e_1px,transparent_1px),linear-gradient(to_bottom,#4f4f4f2e_1px,transparent_1px)] bg-[size:54px_54px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]'></div>
+    <section className="bg-white pb-6 pt-0">
+      <div className="relative min-h-[112svh] overflow-hidden rounded-b-[54px] bg-[#061225] text-white sm:rounded-b-[64px]">
+        <video
+          className="absolute inset-0 h-full w-full object-cover"
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="auto"
+          poster="/travelliovideo-poster.jpg"
+        >
+          <source src="/travelliovideo.mp4" type="video/mp4" />
+        </video>
 
-      <div className="max-w-7xl mx-auto flex items-center justify-between relative z-10">
-        <div className="flex-1 max-w-2xl">
-          <BlurFade delay={0.25} inView>
-            <h1 className="text-6xl font-bold text-white mb-6 leading-tight">
-              Plan your perfect
-              <br />
-              <span className="italic">adventure.</span>
-            </h1>
-          </BlurFade>
-          <BlurFade delay={0.25 * 2} inView>
-            <p className="text-xl text-white/90 mb-8 leading-relaxed">
-              Experience AI-powered travel planning that understands your preferences and creates personalized
-              itineraries in minutes, not hours.
-            </p>
-          </BlurFade>
-          <BlurFade delay={0.25 * 3} inView>
-            <div className="flex items-center gap-4">
-              <Button
-                onClick={() => handleProtectedAction?.("start planning")}
-                size="lg"
-                className="bg-black text-white hover:bg-gray-800 rounded-full px-8 py-3 text-lg"
-              >
-                Start planning
-              </Button>
-            </div>
-          </BlurFade>
-        </div>
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(4,12,28,0.42)_0%,rgba(5,19,42,0.26)_24%,rgba(7,19,38,0.48)_60%,rgba(4,10,22,0.82)_100%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_26%_44%,rgba(9,17,32,0.56),rgba(9,17,32,0.08)_28%,rgba(9,17,32,0)_52%),radial-gradient(circle_at_72%_28%,rgba(255,255,255,0.1),rgba(255,255,255,0)_22%)]" />
+        <div className="absolute inset-x-0 bottom-0 h-40 bg-[linear-gradient(180deg,transparent,rgba(4,10,22,0.7))]" />
 
-        <div className="flex-1 relative">
-          <motion.div
-            initial={{ y: 50, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ duration: 0.5, delay: 0.5, ease: "easeOut" }}
-            className="absolute top-0 right-0 bg-white rounded-2xl p-6 shadow-2xl max-w-sm transform rotate-3"
+        <div className="relative mx-auto flex min-h-[100svh] max-w-7xl items-center px-8 pb-20 pt-32 sm:px-10 lg:px-12">
+          <div className="max-w-[42rem]">
+          <motion.h1
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.65, delay: 0.08, ease: 'easeOut' }}
+            className={`${displayFont.className} max-w-[42rem] text-[4.4rem] font-semibold leading-[0.92] tracking-[-0.05em] text-white sm:text-[5rem] xl:text-[5.35rem]`}
           >
-            <div className="space-y-4">
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 bg-black rounded-full flex items-center justify-center">
-                  <div className="w-2 h-2 bg-white rounded-full"></div>
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm text-gray-700">
-                    I'd love to help you plan your trip to Araku Valley! Are you interested in the coffee plantations,
-                    tribal culture, or the scenic waterfalls?
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 justify-end">
-                <div className="bg-blue-100 rounded-lg p-3 max-w-xs">
-                  <p className="text-sm text-gray-700">
-                    I want to experience the coffee plantation tours, visit the tribal museum, and see the Borra
-                    Caves!
-                  </p>
-                </div>
-                <div className="w-8 h-8 bg-gray-300 rounded-full"></div>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 bg-black rounded-full flex items-center justify-center">
-                  <div className="w-2 h-2 bg-white rounded-full"></div>
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm text-gray-700">
-                    Perfect! I'm creating a 3-day Araku itinerary with visits to the Ananthagiri Coffee Plantations,
-                    Tribal Museum, Borra Caves, and a scenic train journey through the Eastern Ghats...
-                  </p>
-                </div>
-              </div>
+            Travel planning that finally feels composed.
+          </motion.h1>
+
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.16, ease: 'easeOut' }}
+            className={`${bodyFont.className} mt-5 max-w-lg text-[1.02rem] leading-8 text-white/74 sm:text-[1.08rem]`}
+          >
+            Start in chat, refine on the map, and keep every place, day, and decision tied together in one calmer travel workspace.
+          </motion.p>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.24, ease: 'easeOut' }}
+            className="mt-9 flex flex-wrap items-center gap-4"
+          >
+            <Button
+              onClick={() => handleProtectedAction?.('start planning')}
+              size="lg"
+              className="rounded-full bg-black px-7 text-base text-white shadow-[0_16px_32px_rgba(0,0,0,0.22)] hover:bg-gray-800"
+            >
+              Start planning
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+            <a
+              href="#how-it-works"
+              className="inline-flex items-center rounded-full border border-white/18 bg-white/10 px-6 py-3 text-sm font-medium text-white/88 backdrop-blur-md transition-colors hover:bg-white/14"
+            >
+              See how it works
+            </a>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.32, ease: 'easeOut' }}
+            className={`${bodyFont.className} mt-10 flex flex-wrap items-center gap-x-8 gap-y-3 text-sm text-white/70`}
+          >
+            <div className="flex items-center gap-2">
+              <div className="h-1.5 w-1.5 rounded-full bg-white/80" />
+              Natural conversation
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="h-1.5 w-1.5 rounded-full bg-white/80" />
+              Day-by-day itinerary stays synced
+            </div>
+            <div className="flex items-center gap-2">
+              <MapPin className="h-4 w-4" />
+              Real destinations, not template fluff
             </div>
           </motion.div>
         </div>
       </div>
-    </motion.section>
+      </div>
+    </section>
   );
-};
-
-const Section2: React.FC<SectionProps> = ({ scrollYProgress }) => {
-  const scale = useTransform(scrollYProgress, [0, 1], [0.8, 1]);
-  const rotate = useTransform(scrollYProgress, [0, 1], [5, 0]);
-
-  return (
-    <motion.section
-      style={{ scale, rotate }}
-      className='relative h-screen bg-gradient-to-t to-[#1a1919] from-[#06060e] text-white'
-    >
-      <div className='absolute bottom-0 left-0 right-0 top-0 bg-[linear-gradient(to_right,#4f4f4f2e_1px,transparent_1px),linear-gradient(to_bottom,#4f4f4f2e_1px,transparent_1px)] bg-[size:54px_54px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]'></div>
-      <article className='container mx-auto relative z-10 px-6 py-16'>
-        <h1 className='text-6xl leading-[100%] py-10 font-semibold tracking-tight text-center mb-8'>
-          Explore Popular Destinations
-        </h1>
-        
-        <div className="max-w-5xl mx-auto">
-          <div className="grid grid-cols-6 gap-2 h-[476px] relative overflow-hidden">
-            {/* Spain - Large card spanning 2 columns and full height */}
-            <div className="col-span-2 row-span-2 relative group cursor-pointer overflow-hidden">
-              <div className="w-full h-full max-h-[476px] overflow-hidden rounded-2xl">
-                <img
-                  src="https://images.unsplash.com/photo-1539037116277-4db20889f2d4?q=80&w=2070&auto=format&fit=crop"
-                  alt="Sagrada Familia, Barcelona, Spain"
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                />
-                <div className="absolute bottom-4 left-4">
-                  <span className="bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-medium text-gray-900">
-                    Spain
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* London - Medium card spanning 2 columns, top half */}
-            <div className="col-span-2 relative group cursor-pointer overflow-hidden">
-              <div className="w-full h-full max-h-[476px] overflow-hidden rounded-2xl">
-                <img
-                  src="https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?q=80&w=2070&auto=format&fit=crop"
-                  alt="London with red double-decker bus"
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                />
-                <div className="absolute bottom-4 left-4">
-                  <span className="bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-medium text-gray-900">
-                    London
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Croatia - Medium card spanning 2 columns, top half */}
-            <div className="col-span-2 relative group cursor-pointer overflow-hidden">
-              <div className="w-full h-full max-h-[476px] overflow-hidden rounded-2xl">
-                <img
-                  src="https://images.unsplash.com/photo-1603551664565-1b3c3dd61075?q=80&w=2070&auto=format&fit=crop"
-                  alt="Dubrovnik, Croatia coastal view"
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                />
-                <div className="absolute bottom-4 left-4">
-                  <span className="bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-medium text-gray-900">
-                    Croatia
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Bratislava - Small card, bottom left */}
-            <div className="relative group cursor-pointer overflow-hidden">
-              <div className="w-full h-full max-h-[476px] overflow-hidden rounded-2xl">
-                <img
-                  src="https://images.unsplash.com/photo-1567072584703-e445170f9478?q=80&w=987&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-                  alt="Bratislava Castle and Danube River"
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                />
-                <div className="absolute bottom-4 left-4">
-                  <span className="bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-medium text-gray-900">
-                    Bratislava
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Copenhagen - Small card, bottom center */}
-            <div className="relative group cursor-pointer overflow-hidden">
-              <div className="w-full h-full max-h-[476px] overflow-hidden rounded-2xl">
-                <img
-                  src="https://images.unsplash.com/photo-1513622470522-26c3c8a854bc?q=80&w=2070&auto=format&fit=crop"
-                  alt="Copenhagen colorful buildings and architecture"
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                />
-                <div className="absolute bottom-4 left-4">
-                  <span className="bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-medium text-gray-900">
-                    Copenhagen
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Lisbon - Medium card spanning 2 columns, bottom half */}
-            <div className="col-span-2 relative group cursor-pointer overflow-hidden">
-              <div className="w-full h-full max-h-[476px] overflow-hidden rounded-2xl">
-                <img
-                  src="https://images.unsplash.com/photo-1555881400-74d7acaacd8b?q=80&w=2070&auto=format&fit=crop"
-                  alt="Lisbon historic tram and architecture"
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                />
-                <div className="absolute bottom-4 left-4">
-                  <span className="bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-medium text-gray-900">
-                    Lisbon
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </article>
-    </motion.section>
-  );
-};
-
-const Component = forwardRef<HTMLElement, { user?: User | null; handleProtectedAction?: (action: string) => void }>((props, ref) => {
-  const container = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({
-    target: container,
-    offset: ['start start', 'end end'],
-  });
-
-  return (
-    <>
-      <main ref={container} className='relative h-[200vh] bg-black'>
-        <Section1 scrollYProgress={scrollYProgress} user={props.user} handleProtectedAction={props.handleProtectedAction} />
-        <Section2 scrollYProgress={scrollYProgress} />
-      </main>
-    </>
-  );
-});
-
-Component.displayName = 'HeroScrollAnimation';
-
-export default Component;
+}

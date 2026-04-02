@@ -1,11 +1,10 @@
 "use client"
 
-import { useState, useCallback, useMemo, memo } from "react"
+import { useState, useCallback, memo, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase/client"
-import { ChevronDown, User, MapPin, Calendar, Users, LogOut, Settings, Loader2 } from "lucide-react"
+import { ChevronDown, MapPin, Calendar, Users, LogOut, Loader2, IndianRupee } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import {
   DropdownMenu,
@@ -40,7 +39,16 @@ interface TopNavigationProps {
   onReplan?: () => void
   onPopulateInput?: (text: string) => void
   onSignOut?: () => void
-  showBottomBorder?: boolean // New prop to control gray border
+}
+
+function metaChipClassName(editing: boolean, recentlySaved: boolean) {
+  return editing
+    ? "flex items-center gap-2 rounded-full border border-[#d1d5db] bg-[#f3f4f6] px-3 py-1.5 text-[12px] text-[#111827] shadow-[0_2px_8px_rgba(0,0,0,0.05)] transition-all duration-200 ease-out"
+    : `flex items-center gap-2 px-3 text-[12px] font-medium transition-all duration-200 ease-out ${
+        recentlySaved
+          ? "rounded-full bg-[#f3f4f6] text-[#111827] shadow-[0_2px_8px_rgba(0,0,0,0.05)]"
+          : "text-[#6b7280]"
+      }`
 }
 
 export const TopNavigation = memo(function TopNavigation({
@@ -56,9 +64,9 @@ export const TopNavigation = memo(function TopNavigation({
   onReplan,
   onPopulateInput,
   onSignOut,
-  showBottomBorder = false, // Default to false
 }: TopNavigationProps) {
   const [editingField, setEditingField] = useState<string | null>(null)
+  const [recentlySavedField, setRecentlySavedField] = useState<string | null>(null)
   const [tempValues, setTempValues] = useState({
     title: trip.title,
     origin: trip.origin,
@@ -67,8 +75,8 @@ export const TopNavigation = memo(function TopNavigation({
     travelers: trip.travelers,
     budget: trip.budget,
   })
-  const [showInvitePopover, setShowInvitePopover] = useState(false)
   const router = useRouter()
+  const containerRef = useRef<HTMLDivElement | null>(null)
 
   const handleSignOut = useCallback(async () => {
     try {
@@ -115,6 +123,7 @@ export const TopNavigation = memo(function TopNavigation({
       [field]: tempValues[field as keyof typeof tempValues],
     })
     setEditingField(null)
+    setRecentlySavedField(field)
   }, [onTripUpdate, trip, tempValues])
 
   const handleCancel = useCallback(() => {
@@ -129,103 +138,128 @@ export const TopNavigation = memo(function TopNavigation({
     })
   }, [trip])
 
+  useEffect(() => {
+    if (!editingField) {
+      return
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        handleSave(editingField)
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown)
+    return () => document.removeEventListener("mousedown", handlePointerDown)
+  }, [editingField, handleSave])
+
+  useEffect(() => {
+    if (!recentlySavedField) {
+      return
+    }
+
+    const timer = setTimeout(() => setRecentlySavedField(null), 700)
+    return () => clearTimeout(timer)
+  }, [recentlySavedField])
+
   return (
-    <div className={`flex items-center justify-between px-8 py-3 bg-white shadow-sm ${
-      showBottomBorder ? 'border-b border-gray-200' : ''
-    }`}>
-      {/* Left Section - Logo & Trip Title */}
-      <div className="flex items-center gap-6">
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={handleLogoClick} 
-            className="flex items-center gap-3"
-          >
-            <div className="w-8 h-8 bg-black rounded-full flex items-center justify-center">
-              <div className="w-2 h-2 bg-white rounded-full"></div>
-            </div>
-            <span className="text-xl font-bold text-black">roameo</span>
-          </button>
-        </div>
-        
-        {/* Trip Title - Compact format like "Vizag → Coonoor, 2 days" */}
-        <div className="flex items-center gap-2">
+    <div ref={containerRef} className="relative z-20 grid h-[64px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-5 bg-transparent px-7">
+      <div className="flex min-w-0 items-center gap-5">
+        <button
+          onClick={handleLogoClick}
+          className="flex items-center gap-3 rounded-full"
+        >
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[linear-gradient(135deg,#000000_0%,#374151_100%)] shadow-[0_2px_8px_rgba(0,0,0,0.2)]">
+            <div className="h-2 w-2 rounded-full bg-white" />
+          </div>
+          <span className="text-[17px] font-bold tracking-[-0.04em] text-black">roameo</span>
+        </button>
+
+        <div className="h-5 w-px bg-[#e5e7eb]/80" />
+
+        <div className="min-w-0">
           {editingField === "title" ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 rounded-full border border-[#d1d5db] bg-[#f3f4f6] px-2 py-1 transition-all duration-200 ease-out">
               <Input
                 value={tempValues.title}
                 onChange={(e) => setTempValues({ ...tempValues, title: e.target.value })}
-                className="w-64 h-8 text-sm border-gray-300 rounded-md"
+                placeholder="Trip title"
+                className="h-8 w-64 border-0 bg-transparent px-3 text-center text-[14px] text-[#111827] placeholder:text-[#9ca3af] shadow-none focus-visible:ring-0"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleSave("title")
                   if (e.key === "Escape") handleCancel()
                 }}
                 autoFocus
               />
-              <Button size="sm" onClick={() => handleSave("title")} className="h-8 px-3 text-sm rounded-md">✓</Button>
+              <Button size="sm" onClick={() => handleSave("title")} className="h-8 rounded-full bg-black px-4 text-[12px] text-white hover:bg-black/90">Save</Button>
             </div>
           ) : (
             <Button
               variant="ghost"
-              className="text-lg font-medium px-2 py-1 h-auto hover:bg-gray-100 flex items-center gap-2"
+              className={`min-w-0 gap-1.5 rounded-[12px] px-3 py-1.5 text-[14px] font-medium transition-all duration-200 ease-out hover:bg-transparent ${
+                recentlySavedField === "title" ? "bg-[#f3f4f6] text-[#111827] shadow-[0_2px_8px_rgba(0,0,0,0.05)]" : "text-[#111827]"
+              }`}
               onClick={() => handleEdit("title")}
             >
-              <span className="text-gray-900">{trip.title || "My Trip"}</span>
-              <ChevronDown className="w-4 h-4 text-gray-500" />
+              <span className="truncate">{trip.title || "My Trip"}</span>
+              <ChevronDown className="h-4 w-4 text-[#9ca3af]" />
             </Button>
           )}
         </div>
       </div>
 
-      {/* Center Section - Trip Details in horizontal badges */}
-      <div className="flex items-center gap-4">
-        {/* Origin */}
-        <div className="flex items-center gap-1">
-          <MapPin className="w-4 h-4 text-gray-500" />
+      <div className="flex items-center justify-center gap-4">
+        <div className="flex items-center rounded-full border border-[rgba(255,255,255,0.8)] bg-[rgba(255,255,255,0.72)] px-2 py-1.5 shadow-[0_4px_16px_rgba(0,0,0,0.12)] backdrop-blur-xl">
+          <div className={metaChipClassName(editingField === "origin", recentlySavedField === "origin")}>
+            <MapPin className="h-3.5 w-3.5" />
           {editingField === "origin" ? (
-            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
               <Input
                 value={tempValues.origin}
                 onChange={(e) => setTempValues({ ...tempValues, origin: e.target.value })}
-                className="w-24 h-7 text-sm border-gray-300 rounded-md"
+                  placeholder="Origin"
+                  className="h-6 w-[92px] border-0 bg-transparent px-0 text-center text-[12px] text-[#111827] placeholder:text-[#9ca3af] shadow-none focus-visible:ring-0"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleSave("origin")
                   if (e.key === "Escape") handleCancel()
                 }}
                 autoFocus
               />
-              <Button size="sm" onClick={() => handleSave("origin")} className="h-7 px-2 text-sm rounded-md">✓</Button>
+                <Button size="sm" onClick={() => handleSave("origin")} className="h-6 shrink-0 rounded-full bg-black px-2.5 text-[10px] text-white hover:bg-black/90">OK</Button>
             </div>
           ) : (
-            <span 
+              <span
               onClick={() => handleEdit("origin")}
-              className="text-xs text-gray-600 cursor-pointer hover:text-gray-900 font-medium"
+                className="cursor-pointer"
             >
               {trip.origin || "Origin"}
             </span>
           )}
         </div>
 
-        {/* Destination */}
-        <div className="flex items-center gap-1">
-          <MapPin className="w-4 h-4 text-gray-500" />
+          <div className="h-4 w-px bg-[#d1d5db]/70" />
+
+          <div className={metaChipClassName(editingField === "destination", recentlySavedField === "destination")}>
+            <MapPin className="h-3.5 w-3.5" />
           {editingField === "destination" ? (
-            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
               <Input
                 value={tempValues.destination}
                 onChange={(e) => setTempValues({ ...tempValues, destination: e.target.value })}
-                className="w-28 h-7 text-sm border-gray-300 rounded-md"
+                  placeholder="Destination"
+                  className="h-6 w-[124px] border-0 bg-transparent px-0 text-center text-[12px] text-[#111827] placeholder:text-[#9ca3af] shadow-none focus-visible:ring-0"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleSave("destination")
                   if (e.key === "Escape") handleCancel()
                 }}
                 autoFocus
               />
-              <Button size="sm" onClick={() => handleSave("destination")} className="h-7 px-2 text-sm rounded-md">✓</Button>
+                <Button size="sm" onClick={() => handleSave("destination")} className="h-6 shrink-0 rounded-full bg-black px-2.5 text-[10px] text-white hover:bg-black/90">OK</Button>
             </div>
           ) : (
-            <span 
+              <span
               onClick={() => handleEdit("destination")}
-              className="text-xs text-gray-600 cursor-pointer hover:text-gray-900 font-medium"
+                className="cursor-pointer"
             >
               {trip.destinations && trip.destinations.length > 1 
                 ? `${trip.destinations.length} destinations` 
@@ -234,11 +268,12 @@ export const TopNavigation = memo(function TopNavigation({
           )}
         </div>
 
-        {/* Duration */}
-        <div className="flex items-center gap-1">
-          <Calendar className="w-4 h-4 text-gray-500" />
+          <div className="h-4 w-px bg-[#d1d5db]/70" />
+
+          <div className={metaChipClassName(editingField === "duration", recentlySavedField === "duration")}>
+            <Calendar className="h-3.5 w-3.5" />
           {editingField === "duration" ? (
-            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
               <Input
                 type="number"
                 placeholder="Days"
@@ -247,30 +282,31 @@ export const TopNavigation = memo(function TopNavigation({
                   const v = e.target.value
                   setTempValues({ ...tempValues, duration: v ? `${v} days` : "" })
                 }}
-                className="w-20 h-7 text-sm border-gray-300 rounded-md"
+                  className="h-6 w-[48px] border-0 bg-transparent px-0 text-center text-[12px] text-[#111827] placeholder:text-[#9ca3af] shadow-none focus-visible:ring-0"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleSave("duration")
                   if (e.key === "Escape") handleCancel()
                 }}
                 autoFocus
               />
-              <Button size="sm" onClick={() => handleSave("duration")} className="h-7 px-2 text-sm rounded-md">✓</Button>
+                <Button size="sm" onClick={() => handleSave("duration")} className="h-6 shrink-0 rounded-full bg-black px-2.5 text-[10px] text-white hover:bg-black/90">OK</Button>
             </div>
           ) : (
-            <span 
+              <span
               onClick={() => handleEdit("duration")}
-              className="text-xs text-gray-600 cursor-pointer hover:text-gray-900 font-medium"
+                className="cursor-pointer"
             >
               {trip.duration || "0 days"}
             </span>
           )}
         </div>
 
-        {/* Travelers */}
-        <div className="flex items-center gap-1">
-          <Users className="w-4 h-4 text-gray-500" />
+          <div className="h-4 w-px bg-[#d1d5db]/70" />
+
+          <div className={metaChipClassName(editingField === "travelers", recentlySavedField === "travelers")}>
+            <Users className="h-3.5 w-3.5" />
           {editingField === "travelers" ? (
-            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
               <Input
                 type="number"
                 placeholder="Travelers"
@@ -279,30 +315,31 @@ export const TopNavigation = memo(function TopNavigation({
                   const v = e.target.value
                   setTempValues({ ...tempValues, travelers: v ? `${v} travelers` : "" })
                 }}
-                className="w-20 h-7 text-sm border-gray-300 rounded-md"
+                  className="h-6 w-[40px] border-0 bg-transparent px-0 text-center text-[12px] text-[#111827] placeholder:text-[#9ca3af] shadow-none focus-visible:ring-0"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleSave("travelers")
                   if (e.key === "Escape") handleCancel()
                 }}
                 autoFocus
               />
-              <Button size="sm" onClick={() => handleSave("travelers")} className="h-7 px-2 text-sm rounded-md">✓</Button>
+                <Button size="sm" onClick={() => handleSave("travelers")} className="h-6 shrink-0 rounded-full bg-black px-2.5 text-[10px] text-white hover:bg-black/90">OK</Button>
             </div>
           ) : (
-            <span 
+              <span
               onClick={() => handleEdit("travelers")}
-              className="text-xs text-gray-600 cursor-pointer hover:text-gray-900 font-medium"
+                className="cursor-pointer"
             >
-              {trip.travelers || "1 travelers"}
+                {trip.travelers?.replace(" travelers", "") || "1"}
             </span>
           )}
         </div>
 
-        {/* Budget */}
-        <div className="flex items-center gap-1">
-          <span className="text-gray-500 font-medium">₹</span>
+          <div className="h-4 w-px bg-[#d1d5db]/70" />
+
+          <div className={metaChipClassName(editingField === "budget", recentlySavedField === "budget")}>
+            <IndianRupee className="h-3.5 w-3.5" />
           {editingField === "budget" ? (
-            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
               <Input
                 type="number"
                 placeholder="Budget"
@@ -311,31 +348,30 @@ export const TopNavigation = memo(function TopNavigation({
                   const v = e.target.value
                   setTempValues({ ...tempValues, budget: v })
                 }}
-                className="w-24 h-7 text-sm border-gray-300 rounded-md"
+                  className="h-6 w-[78px] border-0 bg-transparent px-0 text-center text-[12px] text-[#111827] placeholder:text-[#9ca3af] shadow-none focus-visible:ring-0"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleSave("budget")
                   if (e.key === "Escape") handleCancel()
                 }}
                 autoFocus
               />
-              <Button size="sm" onClick={() => handleSave("budget")} className="h-7 px-2 text-sm rounded-md">✓</Button>
+                <Button size="sm" onClick={() => handleSave("budget")} className="h-6 shrink-0 rounded-full bg-black px-2.5 text-[10px] text-white hover:bg-black/90">OK</Button>
             </div>
           ) : (
-            <span 
+              <span
               onClick={() => handleEdit("budget")}
-              className="text-xs text-gray-600 cursor-pointer hover:text-gray-900 font-medium"
+                className="cursor-pointer"
             >
               Budget
             </span>
           )}
         </div>
+        </div>
 
-        {/* Update Plan Button - positioned beside budget as requested */}
         {onPopulateInput && (
           <Button
-            variant="outline"
             size="sm"
-            className="border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 h-8 text-sm rounded-full"
+            className="h-8 rounded-full bg-black px-4 text-[12px] font-medium text-white shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-black/90"
             onClick={() => {
               const base = `Replan the itinerary optimizing for travel time and experience. Keep origin ${trip.origin || ""} and destination ${trip.destination || ""} for ${trip.duration || "?"}. ${trip.travelers ? `For ${trip.travelers}.` : ""} ${trip.budget && trip.budget !== "Budget" ? `Budget: ${trip.budget}.` : ""}`
               onPopulateInput(base)
@@ -347,24 +383,20 @@ export const TopNavigation = memo(function TopNavigation({
         )}
       </div>
 
-      {/* Right Section - User Menu */}
-      <div className="flex items-center gap-3">
-        
-        {/* User Menu */}
+      <div className="flex items-center justify-end">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
-              variant="outline"
               size="sm"
-              className="border-gray-300 bg-white hover:bg-gray-50 w-8 h-8 p-0 rounded-full"
+              className="h-[30px] w-[30px] rounded-full bg-[linear-gradient(135deg,#6366f1_0%,#8b5cf6_100%)] p-0 text-[12px] font-semibold text-white shadow-[0_0_0_2px_rgba(255,255,255,0.45),0_0_0_4px_rgba(255,255,255,0.6),0_4px_16px_rgba(99,102,241,0.25)] hover:opacity-95"
             >
-              <User className="w-4 h-4 text-gray-700" />
+              N
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-52 bg-white border border-gray-200 shadow-xl rounded-lg p-2 z-[10001]">
+          <DropdownMenuContent align="end" className="z-[10001] w-52 rounded-[24px] border border-slate-100/60 bg-white/60 p-2 shadow-[0_20px_80px_rgba(15,23,42,0.08),_0_6px_20px_rgba(15,23,42,0.05)] backdrop-blur-2xl">
             {onDeleteTrip && (
               <DropdownMenuItem
-                className="flex items-center gap-3 cursor-pointer text-red-600 hover:bg-red-50 rounded-lg p-3 transition-all"
+                className="flex cursor-pointer items-center gap-3 rounded-xl p-3 text-red-600 transition-all hover:bg-red-50 focus:bg-red-50"
                 disabled={!!isDeleting}
                 onClick={isDeleting ? undefined : onDeleteTrip}
               >
@@ -381,16 +413,16 @@ export const TopNavigation = memo(function TopNavigation({
                 )}
               </DropdownMenuItem>
             )}
-            <DropdownMenuSeparator className="my-2 bg-gray-100" />
-            <DropdownMenuItem asChild>
-              <Link href="/profile" className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 rounded-lg p-3 transition-all">
-                <User className="w-4 h-4 text-blue-600" />
-                <span className="font-medium">Profile</span>
+            <DropdownMenuSeparator className="my-2 bg-slate-100 bg-opacity-60" />
+            <DropdownMenuItem asChild className="focus:bg-slate-50/80">
+              <Link href="/profile" className="flex cursor-pointer items-center gap-3 rounded-xl p-3 transition-all hover:bg-slate-50/80">
+                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#f1f5f9] text-[10px] font-semibold text-[#4f46e5] shadow-[0_2px_4px_rgba(0,0,0,0.02)]">N</div>
+                <span className="font-medium text-slate-700">Profile Menu</span>
               </Link>
             </DropdownMenuItem>
-            <DropdownMenuSeparator className="my-2 bg-gray-100" />
+            <DropdownMenuSeparator className="my-2 bg-slate-100 bg-opacity-60" />
             <DropdownMenuItem 
-              className="flex items-center gap-3 cursor-pointer text-red-600 hover:bg-red-50 rounded-lg p-3 transition-all"
+              className="flex cursor-pointer items-center gap-3 rounded-xl p-3 text-red-600 transition-all hover:bg-red-50 focus:bg-red-50"
               onClick={onSignOut || handleSignOut}
             >
               <LogOut className="w-4 h-4 text-red-600" />

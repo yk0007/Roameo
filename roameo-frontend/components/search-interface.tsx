@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { CachedImage } from "@/components/cached-image"
 import { SearchCard } from "@/components/search-card"
 import { useSearchDebounce } from "@/lib/utils/performance"
-import type { SearchResults, POI } from "@/lib/types"
+import type { SearchResults, POI, SessionPlanningState } from "@/lib/types"
 
 interface SearchInterfaceProps {
   activeView?: "chat" | "search" | "saved"
@@ -19,11 +19,12 @@ interface SearchInterfaceProps {
   onToggleSave?: (poi: POI, nextSaved: boolean) => void
   onReplan?: (poi?: POI) => void
   isLoading?: boolean
+  planningState?: SessionPlanningState
   searchStatus?: string
   hasBillingError?: boolean
 }
 
-export const SearchInterface = memo(function SearchInterface({ activeView, onViewChange, results, savedIds, itineraryPoiIds, onAddPoi, onToggleSave, onReplan, isLoading = false, searchStatus, hasBillingError = false }: SearchInterfaceProps) {
+export const SearchInterface = memo(function SearchInterface({ activeView, onViewChange, results, savedIds, itineraryPoiIds, onAddPoi, onToggleSave, onReplan, isLoading = false, planningState, searchStatus, hasBillingError = false }: SearchInterfaceProps) {
   const [activeTab, setActiveTab] = useState("Stays")
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedQuery, setDebouncedQuery] = useState("")
@@ -31,6 +32,7 @@ export const SearchInterface = memo(function SearchInterface({ activeView, onVie
   const scrollPosRef = useRef<Record<string, number>>({ Stays: 0, Restaurants: 0, Attractions: 0 })
 
   const tabs = ["Stays", "Restaurants", "Attractions"]
+  const contentShellClassName = "w-full px-6 lg:px-8 xl:px-10 2xl:px-12"
 
   // Debounced search to avoid excessive filtering
   const debouncedSetQuery = useSearchDebounce((query: string) => {
@@ -69,7 +71,7 @@ export const SearchInterface = memo(function SearchInterface({ activeView, onVie
   }, [activeTab])
 
   return (
-    <div className="flex flex-col h-full bg-white pt-20 relative">
+    <div className="relative flex h-full flex-col bg-white">
       {/* Loading Overlay */}
       {(isLoading || searchStatus) && (
         <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-center justify-center">
@@ -82,72 +84,84 @@ export const SearchInterface = memo(function SearchInterface({ activeView, onVie
         </div>
       )}
       
-      <div className="flex items-center justify-center gap-2 p-2 border-b border-white/20">
-        {tabs.map((tab) => (
-          <Button
-            key={tab}
-            variant={activeTab === tab ? "default" : "ghost"}
-            size="sm"
-            onClick={() => setActiveTab(tab)}
-            className={`backdrop-blur-md border rounded-full px-4 transition-all ${
-              activeTab === tab ? "bg-black text-white hover:bg-gray-800" : "hover:bg-gray-100"
-            }`}
-          >
-            {tab}
-          </Button>
-        ))}
-      </div>
-
-      {/* Search Bar */}
-      <div className="p-4 border-b border-white/20 space-y-4">
-        <div className="flex items-center gap-2">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search places by name or address"
-              className="pl-10 rounded-2xl bg-white/80 backdrop-blur-sm border-white/30"
-            />
+      <div className={`pb-5 pt-24 ${contentShellClassName}`}>
+        <div className="flex items-center gap-4">
+          <div className="flex shrink-0 items-center gap-2">
+            {tabs.map((tab) => (
+              <Button
+                key={tab}
+                variant={activeTab === tab ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setActiveTab(tab)}
+                className={`rounded-full border px-4 transition-all ${
+                  activeTab === tab
+                    ? "border-black bg-black text-white hover:bg-black/90"
+                    : "border-[#e5e7eb] bg-white text-[#4b5563] hover:bg-[#f8fafc]"
+                }`}
+              >
+                {tab}
+              </Button>
+            ))}
           </div>
-          <Button className="bg-black/80 text-white hover:bg-black/90 rounded-2xl px-6 backdrop-blur-sm" onClick={useCallback(() => { /* hook to future manual search */ }, [])}>
-            Search
-          </Button>
+          <div className="h-8 w-px shrink-0 bg-slate-200" />
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <div className="relative min-w-0 flex-1">
+              <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search places by name or address"
+                className="h-14 rounded-full border border-[rgba(255,255,255,0.7)] bg-[rgba(255,255,255,0.8)] pl-11 pr-4 text-[14px] shadow-[0_8px_32px_rgba(0,0,0,0.12)] backdrop-blur-xl"
+              />
+            </div>
+            <Button className="h-14 shrink-0 rounded-full bg-[#4a4a4a] px-8 text-white hover:bg-[#3f3f3f]" onClick={useCallback(() => { /* hook to future manual search */ }, [])}>
+              Search
+            </Button>
+          </div>
         </div>
       </div>
 
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto p-4"
+        className="flex-1 overflow-y-auto py-4"
         onScroll={(e) => {
           const el = e.currentTarget
           scrollPosRef.current[activeTab] = el.scrollTop
         }}
       >
-        {hasBillingError ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center p-8 max-w-md">
-              <div className="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
-                <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.732 15.5c-.77.833.192 2.5 1.732 2.5z" />
-                </svg>
-              </div>
-              <h3 className="text-lg font-medium text-gray-900 mb-3">Search Features Limited</h3>
-              <p className="text-sm text-gray-600 mb-4">
-                Google Maps API has reached its billing limit. Place search and recommendations are currently unavailable.
-              </p>
-              <div className="text-xs text-gray-500 bg-blue-50 p-3 rounded-lg">
-                <strong>Note:</strong> Your trip planning and chat features continue to work normally. 
-                Only place search is affected.
+        <div className={contentShellClassName}>
+          {hasBillingError ? (
+            <div className="flex h-full items-center justify-center">
+              <div className="max-w-md p-8 text-center">
+                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
+                  <svg className="h-8 w-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.732 15.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                </div>
+                <h3 className="mb-3 text-lg font-medium text-gray-900">Search Features Limited</h3>
+                <p className="mb-4 text-sm text-gray-600">
+                  Google Maps API has reached its billing limit. Place search and recommendations are currently unavailable.
+                </p>
+                <div className="rounded-lg bg-blue-50 p-3 text-xs text-gray-500">
+                  <strong>Note:</strong> Your trip planning and chat features continue to work normally. 
+                  Only place search is affected.
+                </div>
               </div>
             </div>
-          </div>
-        ) : !results ? (
-          <div className="text-sm text-gray-500">No results yet. Ask Roameo to search for places.</div>
-        ) : allResults.length === 0 ? (
-          <div className="text-sm text-gray-500">No matches for your filters.</div>
-        ) : (
-          <>
+          ) : planningState?.status === "unavailable" ? (
+            <div className="flex h-full items-center justify-center">
+              <div className="max-w-md rounded-[28px] border border-amber-200 bg-amber-50 px-6 py-5 text-center shadow-sm">
+                <h3 className="text-base font-semibold text-slate-900">AI search is temporarily unavailable</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Roameo kept your last accepted places visible. Retry after the provider recovers to load fresh AI-backed recommendations.
+                </p>
+              </div>
+            </div>
+          ) : !results ? (
+            <div className="text-sm text-gray-500">No results yet. Ask Roameo to search for places.</div>
+          ) : allResults.length === 0 ? (
+            <div className="text-sm text-gray-500">No matches for your filters.</div>
+          ) : (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-6">
               {allResults.map((poi) => (
                 <SearchCard
@@ -161,10 +175,8 @@ export const SearchInterface = memo(function SearchInterface({ activeView, onVie
                 />
               ))}
             </div>
-
-
-          </>
-        )}
+          )}
+        </div>
       </div>
     </div>
   )

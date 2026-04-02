@@ -4,6 +4,7 @@ import { Inter, Roboto_Mono, Pacifico, Prompt } from "next/font/google"
 import "./globals.css"
 import { Toaster } from "@/components/ui/toaster"
 import { FloatingNavbarProvider } from "@/components/floating-navbar-provider"
+import { AppProviders } from "@/components/app-providers"
 
 const inter = Inter({
   subsets: ["latin"],
@@ -64,9 +65,9 @@ export default function RootLayout({
         className="antialiased font-sans"
         style={{ fontFamily: "var(--font-inter), ui-sans-serif, system-ui, sans-serif" }}
       >
-        <FloatingNavbarProvider>
-          {children}
-        </FloatingNavbarProvider>
+        <AppProviders>
+          <FloatingNavbarProvider>{children}</FloatingNavbarProvider>
+        </AppProviders>
         <Toaster />
       </body>
     </html>

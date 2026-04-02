@@ -46,7 +46,7 @@ const generateMarkdownText = (shareUrl: string, tripTitle?: string, itinerary?: 
 
 export function ShareButton({ tripId, tripTitle, itinerary }: ShareButtonProps) {
   const [isCopied, setIsCopied] = useState(false);
-  const shareUrl = `${window.location.origin}/chat/${tripId}`;
+  const shareUrl = `${window.location.origin}/chat?sessionId=${encodeURIComponent(tripId)}`;
   const shareText = generateShareText(tripTitle, itinerary);
 
   const handleCopyMarkdown = () => {

@@ -1,0 +1,20 @@
+{
+  "name": "roameo",
+  "private": true,
+  "workspaces": [
+    "Backend",
+    "roameo-frontend",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @roameo/contracts && npm run build -w roameo-backend && npm run build -w roameo-frontend",
+    "dev": "npm run dev -w roameo-backend",
+    "dev:frontend": "npm run dev -w roameo-frontend",
+    "lint": "npm run lint -w roameo-frontend",
+    "typecheck": "npm run build -w @roameo/contracts && npm run typecheck -w roameo-backend && npm run typecheck -w roameo-frontend",
+    "test": "npm run test -w @roameo/contracts && npm run test -w roameo-backend && npm run test -w roameo-frontend"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

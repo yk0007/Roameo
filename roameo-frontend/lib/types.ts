@@ -1,46 +1,28 @@
-// Shared types mirrored from Backend/src/types/schemas.ts (keep in sync)
-export type SessionId = string
-export type InviteId = string
+import type {
+  PlanningState,
+  ConversationMessage,
+  PlanSnapshot,
+  PlanMutationInput,
+  Poi,
+  SessionProviderSettings,
+  SessionSnapshot,
+  SessionSummary,
+  StreamEvent
+} from "@roameo/contracts";
 
-export interface TripContext {
-  sessionId: SessionId
-  inviteId?: InviteId
-  title?: string
-  origin?: string
-  destination?: string
-  days?: number
-  travelers?: number
-  budget?: string
-  destinationImageUrl?: string // Add destination image URL
-}
-
-export interface ChatMessage {
-  id: string
-  role: "user" | "assistant" | "system" | "tool"
-  content: string
-  createdAt: string // ISO
-  fromDashboard?: boolean
-}
-
-export interface POI {
-  id: string
-  name: string
-  type: "stay" | "restaurant" | "attraction"
-  lat: number
-  lng: number
-  rating?: number
-  price?: string
-  address?: string
-  photoUrl?: string
-  source?: "google" | "foursquare" | "custom"
-  description?: string
-  priceLevel?: number
-  phone?: string
-  website?: string
-  openingHours?: string[]
-}
+export type SessionId = string;
+export type ChatMessage = ConversationMessage;
+export type POI = Poi;
+export type CanonicalPlan = PlanSnapshot;
+export type CanonicalSession = SessionSnapshot;
+export type CanonicalSessionSummary = SessionSummary;
+export type SessionPlanMutation = PlanMutationInput;
+export type ProviderSettings = SessionProviderSettings;
+export type WsEvent = StreamEvent;
+export type SessionPlanningState = PlanningState;
 
 export interface Activity {
+  id: string;
   name: string;
   start: string;
   end: string;
@@ -52,6 +34,7 @@ export interface Activity {
   photoUrl?: string;
   rating?: number;
   description?: string;
+  notes?: string[];
 }
 
 export interface ItineraryDay {
@@ -69,40 +52,87 @@ export interface ItineraryDay {
     photoUrl?: string;
   };
   theme?: string;
+  summary?: string;
 }
 
 export interface Itinerary {
-  origin: string
-  destination: string
-  destinations?: string[] // Support multiple destinations
-  days: number
-  daysPlan: ItineraryDay[]
-  destinationSegments?: {
-    destination: string
-    startDay: number
-    endDay: number
-    days: number
-  }[] // Track which days belong to which destination
+  origin?: string;
+  destination?: string;
+  destinations?: string[];
+  days: number;
+  daysPlan: ItineraryDay[];
+  destinationSegments?: Array<{
+    destination: string;
+    startDay: number;
+    endDay: number;
+    days: number;
+  }>;
 }
 
 export interface SearchResults {
-  stays: POI[]
-  restaurants: POI[]
-  attractions: POI[]
+  stays: POI[];
+  restaurants: POI[];
+  attractions: POI[];
 }
 
-export type WsEvent =
-  | { type: "chat.append"; data: ChatMessage }
-  | { type: "navbar.update"; data: Partial<TripContext> }
-  | { type: "itinerary.update"; data: Itinerary }
-  | { type: "search.results"; data: SearchResults }
-  | { type: "map.update"; data: { pois: POI[]; routes: Array<{ from: [number, number]; to: [number, number]; polyline?: string }> } }
-  | { type: "session.ready"; data: { sessionId: SessionId; inviteId: InviteId } }
-  | { type: "chat.history"; data: ChatMessage[] }
-  | { type: "intent.detected"; data: { intent: "PLAN_TRIP" | "DESTINATION_SEARCH" | "CHAT"; message: string } }
-  | { type: "planning.status"; data: { status: string } }
-  | { type: "search.status"; data: { status: string } }
-  | { type: "map.status"; data: { status: string } }
+export interface MapData {
+  pois: POI[];
+  routes: Array<{
+    from: [number, number];
+    to: [number, number];
+    durationMinutes?: number;
+  }>;
+}
 
-export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:4000"
-export const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:4000/ws"
+export interface TripContext {
+  id: string;
+  title: string;
+  origin: string;
+  destination: string;
+  destinations: string[];
+  days: number;
+  travelers: string;
+  budget: string;
+}
+
+export interface SessionSettingsPayload {
+  providerSettings: ProviderSettings;
+  preferences: {
+    homeAirport?: string;
+    currency: string;
+    locale: string;
+    styles: string[];
+    dietaryNotes: string[];
+    accessibilityNotes: string[];
+  };
+  credentials: Array<{
+    provider: "gemini" | "openai";
+    keySource: "user";
+    configured: boolean;
+    lastUpdatedAt?: string;
+  }>;
+}
+
+function resolveBackendUrl() {
+  const configured = process.env.NEXT_PUBLIC_BACKEND_URL?.trim();
+
+  if (typeof window !== "undefined") {
+    const { hostname } = window.location;
+    const isLocalHost =
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "0.0.0.0";
+
+    if (isLocalHost) {
+      if (configured && /localhost|127\.0\.0\.1|0\.0\.0\.0/.test(configured)) {
+        return configured;
+      }
+
+      return "http://localhost:4000";
+    }
+  }
+
+  return configured || "http://localhost:4000";
+}
+
+export const BACKEND_URL = resolveBackendUrl();

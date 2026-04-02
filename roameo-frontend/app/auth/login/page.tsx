@@ -1,14 +1,18 @@
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server"
-import dynamic from "next/dynamic"
-const ClearQuery = dynamic(() => import("@/components/clear-query"), { ssr: false })
 import { redirect } from "next/navigation"
 import AuthForm from "@/components/auth-form"
+import ClearQuery from "@/components/clear-query"
+import Link from "next/link"
+import { ArrowLeft } from "lucide-react"
+import { AuthVisualPanel } from "@/components/blocks/auth-visual-panel"
 
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams?: { error?: string; success?: string }
+  searchParams?: Promise<{ error?: string; success?: string }>
 }) {
+  const resolvedSearchParams = await searchParams
+
   // If Supabase is not configured, show setup message directly
   if (!isSupabaseConfigured) {
     return (
@@ -19,7 +23,7 @@ export default async function LoginPage({
   }
 
   // Check if user is already logged in
-  const supabase = createClient()
+  const supabase = await createClient()
   const {
     data: { session },
   } = await supabase.auth.getSession()
@@ -30,41 +34,53 @@ export default async function LoginPage({
   }
 
   return (
-    <div className="min-h-screen bg-white flex">
+    <div className="h-screen overflow-hidden bg-[linear-gradient(180deg,#f9fcff_0%,#f4f8ff_100%)]">
       {/* Clear query params after first render so banners show only once */}
       {/* This is a client-only helper and renders nothing visually */}
       <ClearQuery keys={["success"]} />
-      {/* Left side - Auth Form */}
-      <div className="flex-1 flex items-center justify-center p-8 relative">
-        {/* Grid background */}
-        <div className='absolute bottom-0 left-0 right-0 top-0 bg-[linear-gradient(to_right,#4f4f4f2e_1px,transparent_1px),linear-gradient(to_bottom,#4f4f4f2e_1px,transparent_1px)] bg-[size:54px_54px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]'></div>
-        
-        <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8 border border-gray-200 relative z-10">
-          {/* Error/Success Messages */}
-          {searchParams?.error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm mb-6">
-              {decodeURIComponent(searchParams.error)}
-            </div>
-          )}
-          {searchParams?.success && (
-            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm mb-6">
-              {decodeURIComponent(searchParams.success)}
-            </div>
-          )}
-          
-          <AuthForm />
-        </div>
-      </div>
+      <div className="relative h-screen overflow-hidden px-0 py-0">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(186,230,253,0.45),transparent_24%),radial-gradient(circle_at_bottom_left,rgba(219,234,254,0.72),transparent_30%)]" />
+        <div className="relative z-10 flex h-screen">
+          <div className="hidden h-screen w-[53%] lg:block">
+            <AuthVisualPanel />
+          </div>
 
-      {/* Right side - Travel Illustration */}
-      <div className="hidden lg:flex flex-1 bg-gradient-to-br from-teal-400 via-cyan-400 to-blue-500 items-center justify-center relative overflow-hidden">
-        {/* Travel Illustration - Full Screen */}
-        <div className="absolute inset-0 w-full h-full">
-          <img
-            src="/travel-illustration.png"
-            alt="Travel illustration with inspirational quotes about collecting memories and exploring the world"
-            className="w-full h-full object-cover"
-          />
+          <div className="relative flex w-full flex-col overflow-hidden bg-transparent px-6 py-6 lg:w-[47%] lg:px-8 lg:py-7 xl:px-10">
+            <img
+              src="https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&fm=jpg&q=80&w=1800"
+              alt=""
+              aria-hidden="true"
+              className="absolute inset-0 h-full w-full object-cover scale-110 blur-[10px]"
+            />
+            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(248,251,255,0.72)_0%,rgba(240,246,255,0.76)_100%)] backdrop-blur-xl" />
+
+            <div className="flex items-center justify-start">
+              <Link
+                href="/"
+                className="relative z-10 inline-flex items-center gap-2 rounded-full border border-white/45 bg-white/55 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-white/60 hover:text-slate-950"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to home
+              </Link>
+            </div>
+
+            <div className="relative z-10 flex flex-1 items-center justify-center">
+              <div className="w-full max-w-[29rem] rounded-[32px] border border-white/45 bg-white/32 p-8 shadow-[0_28px_80px_rgba(15,23,42,0.12)] backdrop-blur-2xl">
+                {resolvedSearchParams?.error && (
+                  <div className="mb-5 border border-rose-200 bg-rose-50/90 px-4 py-3 text-sm text-rose-700">
+                    {decodeURIComponent(resolvedSearchParams.error)}
+                  </div>
+                )}
+                {resolvedSearchParams?.success && (
+                  <div className="mb-5 border border-emerald-200 bg-emerald-50/90 px-4 py-3 text-sm text-emerald-700">
+                    {decodeURIComponent(resolvedSearchParams.success)}
+                  </div>
+                )}
+
+                <AuthForm />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

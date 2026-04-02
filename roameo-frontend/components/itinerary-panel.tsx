@@ -1,438 +1,48 @@
-"use client"
+"use client";
 
-import { useState, useMemo, useCallback, useEffect, useId, useRef } from "react"
-import { Button } from "@/components/ui/button"
-import { ShareButton } from "./share-button"
-import { CompactPoiCard } from "./poi-card"
-import { Itinerary, POI, Activity } from "@/lib/types"
-import Image from "next/image"
-import { AnimatePresence, motion } from "framer-motion"
-import { useOutsideClick } from "@/hooks/use-outside-click"
-import {
-  Clock,
-  MapPin,
-  Bed,
-  Star,
-  Heart,
-  ExternalLink,
-} from "lucide-react"
+import { useCallback, useEffect, useRef, useState } from "react";
+import Image from "next/image";
+import { AnimatePresence, motion } from "framer-motion";
+import { Clock, ExternalLink, Heart, Star } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ShareButton } from "./share-button";
+import { useOutsideClick } from "@/hooks/use-outside-click";
+import type { Activity, Itinerary, POI } from "@/lib/types";
 
 interface ItineraryPanelProps {
-  itinerary?: Itinerary
-  trip: any
-  onPOISelect?: (pois: any[]) => void
-  savedIds?: Set<string>
-  onToggleSave?: (poi: POI, nextSaved: boolean) => void
-  onAddPoi?: (poi: POI) => void
-  onReplan?: (poi: POI) => void
-  isLoading?: boolean
-  planningStatus?: string
+  itinerary?: Itinerary;
+  trip: any;
+  onPOISelect?: (pois: any[]) => void;
+  savedIds?: Set<string>;
+  onToggleSave?: (poi: POI, nextSaved: boolean) => void;
+  onAddPoi?: (poi: POI) => void;
+  onReplan?: (poi: POI) => void;
+  isLoading?: boolean;
+  planningStatus?: string;
 }
 
-export function ItineraryPanel({ 
-  itinerary, 
-  trip, 
-  onPOISelect, 
-  savedIds = new Set(), 
-  onToggleSave = () => {}, 
-  onAddPoi = () => {}, 
-  onReplan = () => {},
-  isLoading = false,
-  planningStatus
-}: ItineraryPanelProps) {
-  const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null)
-  const [expandedPoiCards, setExpandedPoiCards] = useState<Set<string>>(new Set())
-  const [activeCard, setActiveCard] = useState<Activity | null>(null)
-  const [activeDestinationTab, setActiveDestinationTab] = useState<string>("")
-  const ref = useRef<HTMLDivElement>(null)
-  const id = useId()
-
-  // Set initial active tab when itinerary changes
-  useEffect(() => {
-    if (itinerary?.destinationSegments && itinerary.destinationSegments.length > 0) {
-      setActiveDestinationTab(itinerary.destinationSegments[0].destination)
-    } else if (itinerary?.destination) {
-      setActiveDestinationTab(itinerary.destination)
-    }
-  }, [itinerary?.destination, itinerary?.destinationSegments])
-
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setActiveCard(null)
-      }
-    }
-
-    if (activeCard) {
-      document.body.style.overflow = "hidden"
-    } else {
-      document.body.style.overflow = "auto"
-    }
-
-    window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
-  }, [activeCard])
-
-  useOutsideClick(ref, () => setActiveCard(null))
-
-  // Memoized function to convert activity to POI
-  const activityToPoi = useCallback((activity: Activity): POI => {
-    return {
-      id: activity.poiId || `${activity.name}-${activity.location}`,
-      name: activity.name,
-      photoUrl: activity.photoUrl,
-      type: 'attraction',
-      rating: activity.rating,
-      address: activity.location,
-      lat: activity.lat ?? 0,
-      lng: activity.lng ?? 0,
-    }
-  }, [])
-
-  // Memoized accommodation to POI converter
-  const accommodationToPoi = useCallback((accommodation: any): POI => {
-    return {
-      id: accommodation.poiId || `${accommodation.name}-${accommodation.location}`,
-      name: accommodation.name,
-      photoUrl: accommodation.photoUrl,
-      type: 'stay',
-      rating: 4.0, // Default rating for accommodations
-      address: accommodation.location,
-      lat: 0,
-      lng: 0,
-    }
-  }, [])
-
-  // Toggle POI card expansion
-  const togglePoiCard = useCallback((poiId: string) => {
-    setExpandedPoiCards(prev => {
-      const newSet = new Set(prev)
-      if (newSet.has(poiId)) {
-        newSet.delete(poiId)
-      } else {
-        newSet.add(poiId)
-      }
-      return newSet
-    })
-  }, [])
-
-  // Get days for active destination
-  const getActiveDays = useCallback(() => {
-    if (!itinerary?.daysPlan) return []
-    
-    if (!itinerary.destinationSegments || itinerary.destinationSegments.length <= 1) {
-      return itinerary.daysPlan
-    }
-    
-    const activeSegment = itinerary.destinationSegments.find(
-      seg => seg.destination === activeDestinationTab
-    )
-    
-    if (!activeSegment) return []
-    
-    return itinerary.daysPlan.filter(
-      day => day.day >= activeSegment.startDay && day.day <= activeSegment.endDay
-    )
-  }, [itinerary?.daysPlan, itinerary?.destinationSegments, activeDestinationTab])
-  
-  return (
-    <div className="h-full flex flex-col relative">
-      {/* Loading Overlay */}
-      {(isLoading || planningStatus) && (
-        <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-center justify-center">
-          <div className="flex flex-col items-center space-y-4">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            <div className="text-sm font-medium text-gray-700">
-              {planningStatus || "Planning your itinerary..."}
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Expandable Card Overlay and Content */}
-      <AnimatePresence>
-        {activeCard && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/20 h-full w-full z-10"
-          />
-        )}
-      </AnimatePresence>
-      
-      <AnimatePresence>
-        {activeCard ? (
-          <div className="fixed inset-0 grid place-items-center z-[100]">
-            <motion.button
-              key={`button-${activeCard.name}-${id}`}
-              layout
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{
-                opacity: 0,
-                transition: {
-                  duration: 0.05,
-                },
-              }}
-              className="flex absolute top-2 right-2 lg:hidden items-center justify-center bg-white rounded-full h-6 w-6"
-              onClick={() => setActiveCard(null)}
-            >
-              <CloseIcon />
-            </motion.button>
-            <motion.div
-              layoutId={`card-${activeCard.name}-${id}`}
-              ref={ref}
-              className="w-full max-w-[500px] h-full md:h-fit md:max-h-[90%] flex flex-col bg-white dark:bg-neutral-900 sm:rounded-3xl overflow-hidden"
-            >
-              <motion.div layoutId={`image-${activeCard.name}-${id}`}>
-                <Image
-                  width={500}
-                  height={320}
-                  src={activeCard.photoUrl || '/placeholder.svg'}
-                  alt={activeCard.name}
-                  className="w-full h-80 lg:h-80 sm:rounded-tr-lg sm:rounded-tl-lg object-cover object-top"
-                  priority={true}
-                  quality={90}
-                  placeholder="empty"
-                  sizes="(max-width: 768px) 100vw, 500px"
-                />
-              </motion.div>
-
-              <div>
-                <div className="flex justify-between items-start p-4">
-                  <div className="flex-1">
-                    <motion.h3
-                      layoutId={`title-${activeCard.name}-${id}`}
-                      className="font-bold text-neutral-700 dark:text-neutral-200 mb-2"
-                    >
-                      {activeCard.name}
-                    </motion.h3>
-                    <motion.p
-                      layoutId={`description-${activeCard.location}-${id}`}
-                      className="text-neutral-600 dark:text-neutral-400 mb-3"
-                    >
-                      {activeCard.location}
-                    </motion.p>
-                    
-                    {/* Time Information */}
-                    {activeCard.start && activeCard.end && (
-                      <div className="flex items-center gap-2 text-sm text-gray-600 mb-3">
-                        <Clock className="w-4 h-4" />
-                        <span>{activeCard.start} - {activeCard.end}</span>
-                      </div>
-                    )}
-                    
-                    {/* Rating */}
-                    {activeCard.rating && (
-                      <div className="flex items-center gap-1 mb-3">
-                        <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                        <span className="text-sm font-medium">{activeCard.rating}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex flex-col gap-2 ml-4">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        const poi = activityToPoi(activeCard)
-                        onToggleSave(poi, !savedIds.has(poi.id))
-                      }}
-                      className="rounded-full"
-                    >
-                      <Heart className={`w-4 h-4 ${savedIds.has(activityToPoi(activeCard).id) ? 'fill-red-500 text-red-500' : ''}`} />
-                    </Button>
-                    {activeCard.lat && activeCard.lng && (
-                      <Button size="sm" variant="outline" className="rounded-full">
-                        <ExternalLink className="w-4 h-4" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-                <div className="pt-4 relative px-4">
-                  <motion.div
-                    layout
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="text-neutral-600 text-xs md:text-sm lg:text-base h-40 md:h-fit pb-10 flex flex-col items-start gap-4 overflow-auto dark:text-neutral-400 [mask:linear-gradient(to_bottom,white,white,transparent)] [scrollbar-width:none] [-ms-overflow-style:none] [-webkit-overflow-scrolling:touch]"
-                  >
-                    {activeCard.description && (
-                      <div>
-                        <h4 className="font-semibold mb-2">Description</h4>
-                        <p>{activeCard.description}</p>
-                      </div>
-                    )}
-                    {activeCard.distanceKm && (
-                      <div>
-                        <h4 className="font-semibold mb-2">Distance</h4>
-                        <p>{activeCard.distanceKm}km from previous location</p>
-                      </div>
-                    )}
-                    <div>
-                      <h4 className="font-semibold mb-2">Location</h4>
-                      <p>{activeCard.location}</p>
-                      {activeCard.lat && activeCard.lng && (
-                        <p className="text-xs text-gray-500 mt-1">
-                          Coordinates: {activeCard.lat}, {activeCard.lng}
-                        </p>
-                      )}
-                    </div>
-                  </motion.div>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        ) : null}
-      </AnimatePresence>
-      {/* Fixed header */}
-      <div className="bg-white border-b border-gray-100">
-        <div className="flex items-center justify-between p-4 pt-16 pb-4">
-          <h3 className="font-semibold">Itinerary</h3>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-500">{itinerary?.days ?? 0} days</span>
-            <ShareButton tripId={trip.id} tripTitle={trip.title} itinerary={itinerary} />
-          </div>
-        </div>
-        
-        {/* Destination Tabs */}
-        {itinerary?.destinationSegments && itinerary.destinationSegments.length > 1 && (
-          <div className="flex border-b border-gray-200 bg-gray-50">
-            {itinerary.destinationSegments.map((segment) => (
-              <button
-                key={segment.destination}
-                onClick={() => setActiveDestinationTab(segment.destination)}
-                className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
-                  activeDestinationTab === segment.destination
-                    ? 'bg-white text-blue-600 border-b-2 border-blue-600'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                }`}
-              >
-                <div className="flex flex-col items-center">
-                  <span>{segment.destination}</span>
-                  <span className="text-xs text-gray-500 mt-1">{segment.days} days</span>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto">
-        {!itinerary && (
-          <div className="text-sm text-gray-500 p-4">No itinerary yet. Tell Roameo your origin, destination and days.</div>
-        )}
-
-        {itinerary?.daysPlan && itinerary.daysPlan.length > 0 && getActiveDays().map((day, dayIndex) => {
-          if (!day || typeof day.day !== 'number') return null;
-          
-          return (
-            <div key={day.day} className="relative">
-              <div className="flex items-center gap-3 p-3 bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-sm sticky top-0 z-10">
-                <span className="text-sm font-bold bg-zinc-800 text-white rounded-full w-8 h-8 flex items-center justify-center flex-shrink-0">{day.day}</span>
-                <h4 className="font-semibold text-md italic">{day.title || `Day ${day.day}`}</h4>
-              </div>
-
-              <div className="space-y-3 pl-4 border-l-2 border-zinc-200 ml-4 p-4">
-                {day.activities?.length > 0 && day.activities.map((activity, index) => {
-                  if (!activity || !activity.name) return null;
-                  
-                  const poi = activityToPoi(activity)
-                  const isExpanded = expandedPoiCards.has(poi.id)
-                  
-                  return (
-                    <div key={index} className="relative">
-                      <div className="absolute left-[-26px] top-5 w-3 h-3 bg-zinc-300 rounded-full border-4 border-white z-10"></div>
-                      
-                      {/* Expandable Activity Card */}
-                      <motion.div
-                        layoutId={`card-${activity.name}-${id}`}
-                        onClick={() => setActiveCard(activity)}
-                        className="p-4 flex items-center gap-4 hover:bg-neutral-50 dark:hover:bg-neutral-800 rounded-xl cursor-pointer border border-gray-200 mb-3 transition-all"
-                      >
-                        <motion.div layoutId={`image-${activity.name}-${id}`}>
-                          <Image
-                            width={60}
-                            height={60}
-                            src={activity.photoUrl || '/placeholder.svg'}
-                            alt={activity.name}
-                            className="h-14 w-14 rounded-lg object-cover object-top"
-                            quality={90}
-                            priority={true}
-                            placeholder="empty"
-                            sizes="60px"
-                          />
-                        </motion.div>
-                        <div className="flex-1">
-                          <motion.h3
-                            layoutId={`title-${activity.name}-${id}`}
-                            className="font-medium text-neutral-800 dark:text-neutral-200"
-                          >
-                            {activity.name}
-                          </motion.h3>
-                          <motion.p
-                            layoutId={`description-${activity.location}-${id}`}
-                            className="text-neutral-600 dark:text-neutral-400 text-sm"
-                          >
-                            {activity.location}
-                          </motion.p>
-                          {activity.start && activity.end && (
-                            <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
-                              <Clock className="w-3 h-3" />
-                              <span>{activity.start} - {activity.end}</span>
-                            </div>
-                          )}
-                        </div>
-                        <motion.button
-                          layoutId={`button-${activity.name}-${id}`}
-                          className="px-3 py-1 text-xs rounded-full font-bold bg-gray-100 hover:bg-blue-500 hover:text-white text-black transition-colors"
-                        >
-                          View Details
-                        </motion.button>
-                      </motion.div>
-                    </div>
-                  );
-                })}
-                
-                {/* Accommodation info text only - no separate card */}
-                {day.accommodation && (
-                  <div className="text-sm text-gray-600 mt-2 px-3 py-2 bg-blue-50 rounded-lg border border-blue-200">
-                    🏨 <span className="font-medium">{day.accommodation.name}</span>
-                    {day.accommodation.checkIn && (
-                      <span className="ml-2 text-xs">• Check-in: {day.accommodation.checkIn}</span>
-                    )}
-                    {day.accommodation.nights && (
-                      <span className="ml-2 text-xs">• {day.accommodation.nights} night{day.accommodation.nights > 1 ? 's' : ''}</span>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  )
+function activityToPoi(activity: Activity): POI {
+  return {
+    id: activity.poiId || `${activity.name}-${activity.location}`,
+    name: activity.name,
+    photoUrl: activity.photoUrl,
+    type: "attraction",
+    rating: activity.rating,
+    address: activity.location,
+    lat: activity.lat ?? 0,
+    lng: activity.lng ?? 0,
+    openingHours: [],
+    source: "manual",
+    tags: [],
+  };
 }
 
-export const CloseIcon = () => {
+function CloseIcon() {
   return (
     <motion.svg
-      initial={{
-        opacity: 0,
-      }}
-      animate={{
-        opacity: 1,
-      }}
-      exit={{
-        opacity: 0,
-        transition: {
-          duration: 0.05,
-        },
-      }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0, transition: { duration: 0.05 } }}
       xmlns="http://www.w3.org/2000/svg"
       width="24"
       height="24"
@@ -449,4 +59,325 @@ export const CloseIcon = () => {
       <path d="M6 6l12 12" />
     </motion.svg>
   );
-};
+}
+
+function ActivityModal({
+  activity,
+  savedIds,
+  onClose,
+  onToggleSave,
+}: {
+  activity: Activity | null;
+  savedIds: Set<string>;
+  onClose: () => void;
+  onToggleSave: (poi: POI, nextSaved: boolean) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useOutsideClick(ref, onClose);
+
+  useEffect(() => {
+    if (!activity) {
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [activity, onClose]);
+
+  if (!activity) {
+    return null;
+  }
+
+  const poi = activityToPoi(activity);
+  const isSaved = savedIds.has(poi.id);
+
+  return (
+    <AnimatePresence>
+      <div className="fixed inset-0 z-[100] grid place-items-center p-6">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="absolute inset-0 bg-black/30 backdrop-blur-[2px]"
+        />
+        <motion.div
+          ref={ref}
+          initial={{ opacity: 0, y: 24, scale: 0.985 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 16, scale: 0.985 }}
+          transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+          className="relative z-10 flex h-full w-full max-w-[520px] flex-col overflow-hidden rounded-[28px] bg-white shadow-[0_24px_80px_rgba(15,23,42,0.18)] md:h-auto md:max-h-[90%]"
+        >
+          <button
+            className="absolute right-4 top-4 z-20 flex h-10 w-10 items-center justify-center rounded-full bg-white/92 text-black shadow-sm ring-1 ring-black/10 backdrop-blur-sm"
+            onClick={onClose}
+          >
+            <CloseIcon />
+          </button>
+
+          <Image
+            width={520}
+            height={320}
+            src={activity.photoUrl || "/placeholder.svg"}
+            alt={activity.name}
+            className="h-72 w-full object-cover object-top md:h-80"
+            priority
+            quality={90}
+            sizes="(max-width: 768px) 100vw, 520px"
+          />
+
+          <div className="px-4 pb-6 pt-5">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0 flex-1">
+                <h3 className="mb-2 font-bold text-neutral-800">{activity.name}</h3>
+                <p className="mb-3 text-neutral-600">{activity.location}</p>
+
+                {activity.start && activity.end && (
+                  <div className="mb-3 flex items-center gap-2 text-sm text-gray-600">
+                    <Clock className="h-4 w-4" />
+                    <span>
+                      {activity.start} - {activity.end}
+                    </span>
+                  </div>
+                )}
+
+                {activity.rating && (
+                  <div className="mb-3 flex items-center gap-1">
+                    <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                    <span className="text-sm font-medium">{activity.rating}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="ml-4 flex flex-col gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onToggleSave(poi, !isSaved)}
+                  className="rounded-full"
+                >
+                  <Heart className={`h-4 w-4 ${isSaved ? "fill-red-500 text-red-500" : ""}`} />
+                </Button>
+                {activity.lat && activity.lng && (
+                  <Button size="sm" variant="outline" className="rounded-full">
+                    <ExternalLink className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-4 h-40 overflow-auto pb-6 text-sm text-neutral-600 [mask:linear-gradient(to_bottom,white,white,transparent)] [-ms-overflow-style:none] [-webkit-overflow-scrolling:touch] [scrollbar-width:none] md:h-fit">
+              {activity.description && (
+                <div className="mb-4">
+                  <h4 className="mb-2 font-semibold">Description</h4>
+                  <p>{activity.description}</p>
+                </div>
+              )}
+              {activity.distanceKm && (
+                <div className="mb-4">
+                  <h4 className="mb-2 font-semibold">Distance</h4>
+                  <p>{activity.distanceKm}km from previous location</p>
+                </div>
+              )}
+              <div>
+                <h4 className="mb-2 font-semibold">Location</h4>
+                <p>{activity.location}</p>
+                {activity.lat && activity.lng && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    Coordinates: {activity.lat}, {activity.lng}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    </AnimatePresence>
+  );
+}
+
+export function ItineraryPanel({
+  itinerary,
+  trip,
+  savedIds = new Set(),
+  onToggleSave = () => {},
+  isLoading = false,
+  planningStatus,
+}: ItineraryPanelProps) {
+  const [activeCard, setActiveCard] = useState<Activity | null>(null);
+  const [activeDestinationTab, setActiveDestinationTab] = useState("");
+
+  useEffect(() => {
+    if (itinerary?.destinationSegments?.length) {
+      setActiveDestinationTab(itinerary.destinationSegments[0].destination);
+    } else if (itinerary?.destination) {
+      setActiveDestinationTab(itinerary.destination);
+    }
+  }, [itinerary?.destination, itinerary?.destinationSegments]);
+
+  const getActiveDays = useCallback(() => {
+    if (!itinerary?.daysPlan) {
+      return [];
+    }
+
+    if (!itinerary.destinationSegments || itinerary.destinationSegments.length <= 1) {
+      return itinerary.daysPlan;
+    }
+
+    const activeSegment = itinerary.destinationSegments.find(
+      (segment) => segment.destination === activeDestinationTab,
+    );
+
+    if (!activeSegment) {
+      return [];
+    }
+
+    return itinerary.daysPlan.filter(
+      (day) => day.day >= activeSegment.startDay && day.day <= activeSegment.endDay,
+    );
+  }, [activeDestinationTab, itinerary]);
+
+  return (
+    <div className="relative flex h-full flex-col">
+      {(isLoading || planningStatus) && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/80 backdrop-blur-sm">
+          <div className="flex flex-col items-center space-y-4">
+            <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600" />
+            <div className="text-sm font-medium text-gray-700">
+              {planningStatus || "Planning your itinerary..."}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ActivityModal
+        activity={activeCard}
+        savedIds={savedIds}
+        onClose={() => setActiveCard(null)}
+        onToggleSave={onToggleSave}
+      />
+
+      <div className="border-b border-gray-100 bg-white">
+        <div className="flex items-center justify-between px-4 pb-4 pt-16">
+          <h3 className="font-semibold">Itinerary</h3>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-500">{itinerary?.days ?? 0} days</span>
+            <ShareButton tripId={trip.id} tripTitle={trip.title} itinerary={itinerary} />
+          </div>
+        </div>
+
+        {itinerary?.destinationSegments && itinerary.destinationSegments.length > 1 && (
+          <div className="flex border-b border-gray-200 bg-gray-50">
+            {itinerary.destinationSegments.map((segment) => (
+              <button
+                key={segment.destination}
+                onClick={() => setActiveDestinationTab(segment.destination)}
+                className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                  activeDestinationTab === segment.destination
+                    ? "border-b-2 border-blue-600 bg-white text-blue-600"
+                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                }`}
+              >
+                <div className="flex flex-col items-center">
+                  <span>{segment.destination}</span>
+                  <span className="mt-1 text-xs text-gray-500">{segment.days} days</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
+        {!itinerary && (
+          <div className="p-4 text-sm text-gray-500">
+            No itinerary yet. Tell Roameo your origin, destination and days.
+          </div>
+        )}
+
+        {itinerary?.daysPlan &&
+          itinerary.daysPlan.length > 0 &&
+          getActiveDays().map((day) => (
+            <div key={day.day} className="relative">
+              <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-gray-100 bg-white/95 p-3 shadow-sm backdrop-blur-md">
+                <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-zinc-800 text-sm font-bold text-white">
+                  {day.day}
+                </span>
+                <h4 className="text-md font-semibold italic">
+                  {day.title || `Day ${day.day}`}
+                </h4>
+              </div>
+
+              <div className="ml-4 space-y-3 border-l-2 border-zinc-200 p-4 pl-4">
+                {day.activities?.map((activity, index) => (
+                  <div key={`${activity.name}-${index}`} className="relative">
+                    <div className="absolute left-[-26px] top-5 z-10 h-3 w-3 rounded-full border-4 border-white bg-zinc-300" />
+
+                    <motion.div
+                      onClick={() => setActiveCard(activity)}
+                      whileHover={{ y: -1 }}
+                      transition={{ duration: 0.16, ease: "easeOut" }}
+                      className="mb-3 flex cursor-pointer items-center gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-[0_8px_20px_rgba(15,23,42,0.04)] transition-[border-color,box-shadow,background-color] hover:border-slate-300 hover:bg-slate-50/70 hover:shadow-[0_12px_26px_rgba(15,23,42,0.06)]"
+                    >
+                      <Image
+                        width={60}
+                        height={60}
+                        src={activity.photoUrl || "/placeholder.svg"}
+                        alt={activity.name}
+                        className="h-14 w-14 rounded-lg object-cover object-top"
+                        quality={90}
+                        priority
+                        sizes="60px"
+                      />
+                      <div className="flex-1">
+                        <h3 className="font-medium text-neutral-800">{activity.name}</h3>
+                        <p className="text-sm text-neutral-600">{activity.location}</p>
+                        {activity.start && activity.end && (
+                          <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
+                            <Clock className="h-3 w-3" />
+                            <span>
+                              {activity.start} - {activity.end}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      <button className="rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-100 hover:text-black">
+                        View Details
+                      </button>
+                    </motion.div>
+                  </div>
+                ))}
+
+                {day.accommodation && (
+                  <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-gray-600">
+                    🏨 <span className="font-medium">{day.accommodation.name}</span>
+                    {day.accommodation.checkIn && (
+                      <span className="ml-2 text-xs">• Check-in: {day.accommodation.checkIn}</span>
+                    )}
+                    {day.accommodation.nights && (
+                      <span className="ml-2 text-xs">
+                        • {day.accommodation.nights} night
+                        {day.accommodation.nights > 1 ? "s" : ""}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+      </div>
+    </div>
+  );
+}

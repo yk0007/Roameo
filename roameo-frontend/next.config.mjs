@@ -1,28 +1,18 @@
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+
+const configDir = path.dirname(fileURLToPath(import.meta.url))
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  eslint: {
-    ignoreDuringBuilds: true,
+  turbopack: {
+    root: configDir,
   },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  // Experimental features for performance
   experimental: {
-    // optimizeCss: true, // Disabled due to critters dependency issue
     optimizePackageImports: ['lucide-react', 'framer-motion'],
     webVitalsAttribution: ['CLS', 'LCP'],
-    turbo: {
-      rules: {
-        '*.svg': {
-          loaders: ['@svgr/webpack'],
-          as: '*.js',
-        },
-      },
-    },
   },
-  // Bundle optimization
   webpack: (config, { dev, isServer }) => {
-    // Optimize bundle splitting
     if (!dev && !isServer) {
       config.optimization.splitChunks = {
         chunks: 'all',
@@ -42,7 +32,6 @@ const nextConfig = {
       }
     }
     
-    // Optimize SVG handling
     config.module.rules.push({
       test: /\.svg$/,
       use: ['@svgr/webpack'],
@@ -89,17 +78,13 @@ const nextConfig = {
         pathname: '/api/proxy/photo/**',
       },
     ],
-    // Disable image optimization for faster loading
     unoptimized: true,
   },
-  // Performance optimizations
   poweredByHeader: false,
   compress: true,
   generateEtags: true,
-  swcMinify: true,
   reactStrictMode: true,
   
-  // Security and performance headers
   async headers() {
     return [
       {
