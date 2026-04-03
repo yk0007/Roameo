@@ -182,13 +182,6 @@ export function DashboardTripCard({
   useEffect(() => {
     if (useAnimatedStamp || trip.destinationImageUrl) return;
 
-    const haystack = `${trip.title} ${trip.destination || ""}`;
-    const matched = STOCK_IMAGE_MATCHERS.find(({ pattern }) => pattern.test(haystack));
-    if (matched) {
-      setDynamicImage(matched.url);
-      return;
-    }
-
     if (!trip.destination) {
       setDynamicImage(STOCK_IMAGE_LIBRARY[index % STOCK_IMAGE_LIBRARY.length]);
       return;
@@ -199,8 +192,10 @@ export function DashboardTripCard({
       try {
         const primaryLocation = trip.destination!.split(',')[0].trim();
         let fetchedUrl = null;
+        const haystack = `${trip.title} ${trip.destination || ""}`;
+        const matched = STOCK_IMAGE_MATCHERS.find(({ pattern }) => pattern.test(haystack));
 
-        // Step 1: Try the robust backend DestinationImageService (Google Places)
+        // Step 1: Prefer a real landmark image from the canonical backend image service.
         try {
           const res = await fetch(`${BACKEND_URL}/api/destination-image?q=${encodeURIComponent(primaryLocation)}`);
           if (res.ok) {
@@ -215,7 +210,7 @@ export function DashboardTripCard({
 
         if (!isMounted) return;
 
-        // Step 2: Fallback to Wikipedia if Google Places failed or has no image
+        // Step 2: Fallback to Wikipedia summary images for the destination itself.
         if (!fetchedUrl) {
           const wikiRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(primaryLocation)}`);
           if (wikiRes.ok) {
@@ -232,12 +227,16 @@ export function DashboardTripCard({
 
         if (fetchedUrl) {
           setDynamicImage(fetchedUrl);
+        } else if (matched) {
+          setDynamicImage(matched.url);
         } else {
           setDynamicImage(STOCK_IMAGE_LIBRARY[index % STOCK_IMAGE_LIBRARY.length]);
         }
       } catch (err) {
         if (isMounted) {
-          setDynamicImage(STOCK_IMAGE_LIBRARY[index % STOCK_IMAGE_LIBRARY.length]);
+          const haystack = `${trip.title} ${trip.destination || ""}`;
+          const matched = STOCK_IMAGE_MATCHERS.find(({ pattern }) => pattern.test(haystack));
+          setDynamicImage(matched?.url || STOCK_IMAGE_LIBRARY[index % STOCK_IMAGE_LIBRARY.length]);
         }
       }
     };

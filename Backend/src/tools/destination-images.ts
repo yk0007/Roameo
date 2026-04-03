@@ -13,6 +13,14 @@ export class DestinationImageService {
     this.maps = new GoogleMapsClient();
   }
 
+  private getPublicBaseUrl(): string {
+    return (env.APP_BASE_URL || "http://localhost:4000").replace(/\/+$/, "");
+  }
+
+  private buildPhotoProxyUrl(photoReference: string): string {
+    return `${this.getPublicBaseUrl()}/api/proxy/photo?maxwidth=1200&photo_reference=${encodeURIComponent(photoReference)}`;
+  }
+
   /**
    * Fetch a high-quality destination image for a location
    * Returns the best available image URL or undefined if not found
@@ -27,61 +35,69 @@ export class DestinationImageService {
         return {};
       }
       
-      // Use Places API to find the destination
-      const searchQuery = `${destination} tourism attractions landmark`;
-      const response = await fetch(
-        `https://maps.googleapis.com/maps/api/place/textsearch/json?` +
-        `query=${encodeURIComponent(searchQuery)}&` +
-        `type=tourist_attraction&` +
-        `key=${env.GOOGLE_MAPS_API_KEY}`
-      );
+      const searchQueries = [
+        `${destination} famous landmark`,
+        `${destination} iconic attraction`,
+        `${destination} most famous place`,
+        `${destination} tourism attraction`
+      ];
 
-      if (!response.ok) {
-        console.error(`[destination-images] Places API error: ${response.status}`);
+      let bestPlace: any | undefined;
+      for (const searchQuery of searchQueries) {
+        const response = await fetch(
+          `https://maps.googleapis.com/maps/api/place/textsearch/json?` +
+          `query=${encodeURIComponent(searchQuery)}&` +
+          `type=tourist_attraction&` +
+          `key=${env.GOOGLE_MAPS_API_KEY}`
+        );
+
+        if (!response.ok) {
+          console.error(`[destination-images] Places API error: ${response.status}`);
+          continue;
+        }
+
+        const data = await response.json();
+        if (data.status !== "OK" || !Array.isArray(data.results) || data.results.length === 0) {
+          continue;
+        }
+
+        const normalizedDestination = destination.trim().toLowerCase();
+        const placesWithPhotos = data.results
+          .filter((place: any) => Array.isArray(place.photos) && place.photos.length > 0)
+          .sort((a: any, b: any) => {
+            const aHaystack = `${a.name || ""} ${a.formatted_address || ""}`.toLowerCase();
+            const bHaystack = `${b.name || ""} ${b.formatted_address || ""}`.toLowerCase();
+            const aDestinationBoost = aHaystack.includes(normalizedDestination) ? 2 : 0;
+            const bDestinationBoost = bHaystack.includes(normalizedDestination) ? 2 : 0;
+            const aRatings = typeof a.user_ratings_total === "number" ? Math.min(a.user_ratings_total / 500, 3) : 0;
+            const bRatings = typeof b.user_ratings_total === "number" ? Math.min(b.user_ratings_total / 500, 3) : 0;
+            const aScore = aDestinationBoost + (a.rating || 0) + aRatings;
+            const bScore = bDestinationBoost + (b.rating || 0) + bRatings;
+            return bScore - aScore;
+          });
+
+        if (placesWithPhotos.length > 0) {
+          bestPlace = placesWithPhotos[0];
+          break;
+        }
+      }
+
+      if (!bestPlace) {
+        console.log(`[destination-images] No landmark photos found for: ${destination}`);
         return {};
       }
 
-      const data = await response.json();
-      
-      if (data.status !== 'OK' || !data.results || data.results.length === 0) {
-        console.log(`[destination-images] No places found for: ${destination}`);
-        return {};
-      }
-
-      // Look for places with photos, prioritize highly-rated tourist attractions
-      const placesWithPhotos = data.results
-        .filter((place: any) => place.photos && place.photos.length > 0)
-        .sort((a: any, b: any) => {
-          // Prioritize by rating, then by number of photos
-          const ratingDiff = (b.rating || 0) - (a.rating || 0);
-          if (ratingDiff !== 0) return ratingDiff;
-          return (b.photos?.length || 0) - (a.photos?.length || 0);
-        });
-
-      if (placesWithPhotos.length === 0) {
-        console.log(`[destination-images] No photos found for places in: ${destination}`);
-        return {};
-      }
-
-      const bestPlace = placesWithPhotos[0];
-      const photo = bestPlace.photos[0]; // Get the first (usually best) photo
-      
-      if (!photo.photo_reference) {
+      const photoReference = bestPlace.photos?.[0]?.photo_reference;
+      if (!photoReference) {
         console.log(`[destination-images] No photo reference found`);
         return {};
       }
 
-      // Generate high-quality image URL using the backend proxy to avoid CORS issues
-      const imageUrl = `http://localhost:4000/api/proxy/photo?` +
-        `maxwidth=800&` +
-        `photo_reference=${photo.photo_reference}&` +
-        `key=${env.GOOGLE_MAPS_API_KEY}`;
+      console.log(`[destination-images] Found landmark image for ${destination}: ${bestPlace.name}`);
 
-      console.log(`[destination-images] Found image for ${destination}: ${bestPlace.name}`);
-      
       return {
-        imageUrl,
-        photoReference: photo.photo_reference
+        imageUrl: this.buildPhotoProxyUrl(photoReference),
+        photoReference
       };
 
     } catch (error) {

@@ -64,7 +64,9 @@ export class GoogleMapsClient {
         photoUrl:
           (r.photos && r.photos[0]?.photo_reference &&
             createPhotoProxyUrl(r.photos[0].photo_reference)) || undefined,
-        source: "google",
+        openingHours: [],
+        source: "google_maps",
+        tags: [],
       }));
       try {
         const withPhotos = mapped.filter((m) => !!m.photoUrl).length;
