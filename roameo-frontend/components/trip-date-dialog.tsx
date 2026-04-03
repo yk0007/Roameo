@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { DateFlexibility } from "@roameo/contracts";
 import type { DateRange } from "react-day-picker";
 import {
   addDays,
@@ -14,6 +13,7 @@ import {
 import { CalendarDays, ChevronLeft, ChevronRight, Minus, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
+import type { DateFlexibility } from "@/lib/types";
 import {
   Dialog,
   DialogContent,

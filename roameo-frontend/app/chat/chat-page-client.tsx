@@ -243,7 +243,7 @@ export default function ChatPage() {
   const mapData = useMemo(() => buildMapData(snapshot), [snapshot]);
   const itineraryPoiIds = useMemo(() => buildItineraryPoiIds(snapshot), [snapshot]);
   const savedIds = useMemo(
-    () => new Set(snapshot?.savedPoiIds || []),
+    () => new Set<string>(snapshot?.savedPoiIds ?? []),
     [snapshot?.savedPoiIds]
   );
   const planningState: SessionPlanningState | undefined = snapshot?.memory.planningState;

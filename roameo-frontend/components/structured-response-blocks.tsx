@@ -11,7 +11,7 @@ import { resolvePoiImageUrl } from "@/lib/poi-image-url";
 import { SearchCard } from "./search-card";
 import { PoiTypeIcon } from "./poi-type-icon";
 import { AgenticStatus } from "./agentic-status";
-import type { ChatMessage, POI } from "@/lib/types";
+import type { AssistantResponseBlock, ChatMessage, POI } from "@/lib/types";
 
 interface StructuredResponseBlocksProps {
   message: ChatMessage;
@@ -25,6 +25,49 @@ interface StructuredResponseBlocksProps {
   onReplan?: (poi: POI) => void;
   hideProgressBlocks?: boolean;
 }
+
+type CapabilitiesSection = Extract<
+  AssistantResponseBlock,
+  { type: "capabilities_overview" }
+>["sections"][number];
+type DateAdvisoryItem = Extract<
+  AssistantResponseBlock,
+  { type: "date_advisory" }
+>["advisories"][number];
+type EventWindowItem = Extract<
+  AssistantResponseBlock,
+  { type: "event_window_summary" }
+>["items"][number];
+type ItineraryDayBlock = Extract<
+  AssistantResponseBlock,
+  { type: "itinerary_template" }
+>["days"][number];
+type ItineraryPeriodBlock = ItineraryDayBlock["periods"][number];
+type ItineraryEntryBlock = ItineraryPeriodBlock["entries"][number];
+type StayAlternative = Extract<
+  AssistantResponseBlock,
+  { type: "stay_recommendation_list" }
+>["alternatives"][number];
+type StayNotFit = Extract<
+  AssistantResponseBlock,
+  { type: "stay_recommendation_list" }
+>["notFit"][number];
+type PoiStoryItem = Extract<
+  AssistantResponseBlock,
+  { type: "poi_story_list" }
+>["items"][number];
+type PromptChip = Extract<
+  AssistantResponseBlock,
+  { type: "assistant_prompt_chips" }
+>["prompts"][number];
+type ItinerarySummaryDay = Extract<
+  AssistantResponseBlock,
+  { type: "itinerary_summary" }
+>["days"][number];
+type QuickAction = Extract<
+  AssistantResponseBlock,
+  { type: "quick_actions" }
+>["actions"][number];
 
 function findPoiMap(pois?: POI[]) {
   return new Map((pois || []).map((poi) => [poi.id, poi]));
@@ -111,7 +154,7 @@ export function StructuredResponseBlocks({
   hideProgressBlocks,
   onSlotAction
 }: StructuredResponseBlocksProps) {
-  const blocks = message.meta?.responseBlocks;
+  const blocks: AssistantResponseBlock[] = message.meta?.responseBlocks ?? [];
   if (!blocks?.length) {
     return null;
   }
@@ -121,7 +164,7 @@ export function StructuredResponseBlocks({
 
   return (
     <div className="space-y-4">
-      {blocks.map((block, index) => {
+      {blocks.map((block: AssistantResponseBlock, index: number) => {
         // Hide progress/status blocks once the itinerary is ready
         if (hasItinerary && (block.type === "worker_progress" || block.type === "planning_status")) {
           return null;
@@ -175,7 +218,7 @@ export function StructuredResponseBlocks({
                 </div>
               ) : null}
               <div className="mt-4 space-y-3">
-                {block.sections.map((section) => (
+                {block.sections.map((section: CapabilitiesSection) => (
                   <div key={section.title} className="rounded-2xl bg-slate-50/90 px-4 py-3">
                     <div className="font-semibold text-slate-900">{section.title}</div>
                     <div className="mt-1 text-sm leading-6 text-slate-600">
@@ -190,7 +233,7 @@ export function StructuredResponseBlocks({
                     {block.examplesTitle || "Example help"}
                   </div>
                   <ul className="mt-2 space-y-2 pl-5 text-sm leading-6 text-slate-600">
-                    {block.examples.map((example) => (
+                    {block.examples.map((example: string) => (
                       <li key={example}>{example}</li>
                     ))}
                   </ul>
@@ -243,7 +286,7 @@ export function StructuredResponseBlocks({
               </div>
               <div className="mt-2 text-sm leading-6 text-slate-600">{strip(block.summary)}</div>
               <div className="mt-4 space-y-3">
-                {block.advisories.map((item) => (
+                {block.advisories.map((item: DateAdvisoryItem) => (
                   <div key={`${item.kind}-${item.title}`} className="rounded-2xl bg-white/85 px-4 py-3">
                     <div className="text-sm font-semibold text-slate-900">{strip(item.title)}</div>
                     <div className="mt-1 text-sm leading-6 text-slate-600">{strip(item.detail)}</div>
@@ -268,7 +311,7 @@ export function StructuredResponseBlocks({
                 <div className="mt-2 text-sm leading-6 text-slate-600">{strip(block.summary)}</div>
               ) : null}
               <div className="mt-4 space-y-3">
-                {block.items.map((item) => (
+                {block.items.map((item: EventWindowItem) => (
                   <div key={`${item.title}-${item.sourceLabel || ""}`} className="rounded-2xl bg-slate-50/90 px-4 py-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <div className="font-semibold text-slate-900">{strip(item.title)}</div>
@@ -309,7 +352,7 @@ export function StructuredResponseBlocks({
               <hr className="border-slate-200" />
 
               {/* Days */}
-              {block.days.map((day, dayIndex) => (
+              {block.days.map((day: ItineraryDayBlock, dayIndex: number) => (
                 <div key={day.day} className="space-y-4">
                   {/* Day header */}
                   <div>
@@ -324,13 +367,13 @@ export function StructuredResponseBlocks({
                   </div>
 
                   {/* Periods */}
-                  {day.periods.map((period) => (
+                  {day.periods.map((period: ItineraryPeriodBlock) => (
                     <div key={`${day.day}-${period.key}`} className="space-y-3">
                       <div className="text-[16px] font-semibold text-slate-900">
                         {period.emoji ? `${period.emoji} ` : ""}{period.label}:
                       </div>
                       <div className="space-y-3 text-[15px] leading-7 text-slate-700">
-                        {period.entries.map((entry, entryIndex) => {
+                        {period.entries.map((entry: ItineraryEntryBlock, entryIndex: number) => {
                           const poi = entry.poiId ? poiMap.get(entry.poiId) : undefined;
                           return (
                             <div key={`${day.day}-${period.key}-${entryIndex}`}>
@@ -378,7 +421,7 @@ export function StructuredResponseBlocks({
           const bestPoi = poiMap.get(block.bestOption.poiId);
           const bestPoiImage = resolvePoiImageUrl(bestPoi?.photoUrl);
           const alternativeRow = cardRow(
-            block.alternatives.map((item) => item.poiId),
+            block.alternatives.map((item: StayAlternative) => item.poiId),
             poiMap,
             savedIds,
             itineraryPoiIds,
@@ -454,7 +497,7 @@ export function StructuredResponseBlocks({
                     {block.notFitTitle || "Not a good fit"}
                   </div>
                   <div className="mt-3 space-y-2">
-                    {block.notFit.map((item) => (
+                    {block.notFit.map((item: StayNotFit) => (
                       <div key={item.label} className="text-sm leading-6 text-slate-600">
                         <span className="font-semibold text-slate-900">{item.label}:</span>{" "}
                         {item.reason}
@@ -540,7 +583,7 @@ export function StructuredResponseBlocks({
                 <div className="text-sm leading-6 text-slate-600">{strip(block.intro)}</div>
               ) : null}
               <div className="space-y-4">
-                {block.items.map((item) => {
+                {block.items.map((item: PoiStoryItem) => {
                   const poi = poiMap.get(item.poiId);
                   if (!poi) {
                     return null;
@@ -628,7 +671,7 @@ export function StructuredResponseBlocks({
                 </div>
               ) : null}
               <div className="flex flex-wrap gap-2">
-                {block.questions.map((question) => (
+                {block.questions.map((question: string) => (
                   <button
                     key={question}
                     type="button"
@@ -652,7 +695,7 @@ export function StructuredResponseBlocks({
                 </div>
               ) : null}
               <div className="flex flex-wrap gap-2">
-                {block.prompts.map((action) => (
+                {block.prompts.map((action: PromptChip) => (
                   <Button
                     key={action.label}
                     type="button"
@@ -678,7 +721,7 @@ export function StructuredResponseBlocks({
                   {block.title}
                 </div>
               ) : null}
-              {block.days.map((day) => (
+              {block.days.map((day: ItinerarySummaryDay) => (
                 <div
                   key={day.day}
                   className="py-2"
@@ -709,7 +752,7 @@ export function StructuredResponseBlocks({
                 </div>
               ) : null}
               <div className="flex flex-wrap gap-2">
-                {block.actions.map((action) => (
+                {block.actions.map((action: QuickAction) => (
                   <Button
                     key={action.label}
                     type="button"

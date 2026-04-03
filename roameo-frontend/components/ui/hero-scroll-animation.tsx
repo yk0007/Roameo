@@ -2,19 +2,8 @@
 
 import { motion } from 'framer-motion';
 import { ArrowRight, MapPin } from 'lucide-react';
-import { Cormorant_Garamond, Manrope } from 'next/font/google';
 import type { User } from '@supabase/supabase-js';
 import { Button } from '@/components/ui/button';
-
-const displayFont = Cormorant_Garamond({
-  subsets: ['latin'],
-  weight: ['500', '600', '700'],
-});
-
-const bodyFont = Manrope({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-});
 
 type HeroProps = {
   user?: User | null;
@@ -47,7 +36,7 @@ export default function HeroScrollAnimation({ handleProtectedAction }: HeroProps
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.65, delay: 0.08, ease: 'easeOut' }}
-            className={`${displayFont.className} max-w-[42rem] text-[4.4rem] font-semibold leading-[0.92] tracking-[-0.05em] text-white sm:text-[5rem] xl:text-[5.35rem]`}
+            className="max-w-[42rem] font-serif text-[4.4rem] font-semibold leading-[0.92] tracking-[-0.05em] text-white sm:text-[5rem] xl:text-[5.35rem]"
           >
             Travel planning that finally feels composed.
           </motion.h1>
@@ -56,7 +45,7 @@ export default function HeroScrollAnimation({ handleProtectedAction }: HeroProps
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.16, ease: 'easeOut' }}
-            className={`${bodyFont.className} mt-5 max-w-lg text-[1.02rem] leading-8 text-white/74 sm:text-[1.08rem]`}
+            className="mt-5 max-w-lg text-[1.02rem] leading-8 text-white/74 sm:text-[1.08rem]"
           >
             Start in chat, refine on the map, and keep every place, day, and decision tied together in one calmer travel workspace.
           </motion.p>
@@ -87,7 +76,7 @@ export default function HeroScrollAnimation({ handleProtectedAction }: HeroProps
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.32, ease: 'easeOut' }}
-            className={`${bodyFont.className} mt-10 flex flex-wrap items-center gap-x-8 gap-y-3 text-sm text-white/70`}
+            className="mt-10 flex flex-wrap items-center gap-x-8 gap-y-3 text-sm text-white/70"
           >
             <div className="flex items-center gap-2">
               <div className="h-1.5 w-1.5 rounded-full bg-white/80" />

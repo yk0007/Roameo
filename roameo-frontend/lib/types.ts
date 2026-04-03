@@ -1,4 +1,5 @@
 import type {
+  AssistantResponseBlock,
   PlanningState,
   ConversationMessage,
   DateFlexibility,
@@ -22,7 +23,7 @@ export type SessionPlanMutation = PlanMutationInput;
 export type ProviderSettings = SessionProviderSettings;
 export type WsEvent = StreamEvent;
 export type SessionPlanningState = PlanningState;
-export type { AgentTraceEvent };
+export type { AgentTraceEvent, AssistantResponseBlock, DateFlexibility };
 
 
 export interface Activity {

@@ -1,36 +1,9 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Inter, Roboto_Mono, Pacifico, Prompt } from "next/font/google"
 import "./globals.css"
 import { Toaster } from "@/components/ui/toaster"
 import { FloatingNavbarProvider } from "@/components/floating-navbar-provider"
 import { AppProviders } from "@/components/app-providers"
-
-const inter = Inter({
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-inter",
-})
-
-const robotoMono = Roboto_Mono({
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-roboto-mono",
-})
-
-const pacifico = Pacifico({
-  weight: "400",
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-pacifico",
-})
-
-const prompt = Prompt({
-  weight: ["400", "500"],
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-prompt",
-})
 
 export const metadata: Metadata = {
   title: "Roameo - AI Travel Planner",
@@ -54,7 +27,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${robotoMono.variable} ${pacifico.variable} ${prompt.variable}`}>
+    <html lang="en">
       <head>
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
         <link rel="shortcut icon" href="/favicon.svg" />

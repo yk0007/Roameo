@@ -132,7 +132,7 @@ export function PoiDetailModal({
                   Opening Hours
                 </h3>
                 <div className="text-gray-700 space-y-1">
-                  {poi.openingHours.map((hours, index) => (
+                  {poi.openingHours.map((hours: string, index: number) => (
                     <div key={index} className="text-sm">
                       {hours}
                     </div>
