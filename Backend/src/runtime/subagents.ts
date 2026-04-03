@@ -471,6 +471,43 @@ function localDestinationFromSession(session: SessionSnapshot): string | undefin
   );
 }
 
+function localTotalDaysFromSession(session: SessionSnapshot): number | undefined {
+  const durationDecision = [...session.memory.acceptedDecisions]
+    .reverse()
+    .find((decision) => decision.startsWith("Duration: "));
+  const match = durationDecision?.match(/Duration:\s*(\d+)\s*days?/i);
+  if (match) {
+    const value = Number.parseInt(match[1], 10);
+    if (Number.isFinite(value) && value > 0) {
+      return value;
+    }
+  }
+
+  const startDate = session.memory.dateContext.inferredStartDate;
+  const endDate = session.memory.dateContext.inferredEndDate;
+  if (!startDate || !endDate) {
+    return undefined;
+  }
+
+  const start = new Date(`${startDate}T00:00:00.000Z`);
+  const end = new Date(`${endDate}T00:00:00.000Z`);
+  const diffDays = Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
+  return diffDays > 0 ? diffDays : undefined;
+}
+
+function localTravelerCountFromSession(session: SessionSnapshot): number | undefined {
+  const travelerDecision = [...session.memory.acceptedDecisions]
+    .reverse()
+    .find((decision) => decision.startsWith("Travelers: "));
+  const match = travelerDecision?.match(/Travelers:\s*(\d+)/i);
+  if (!match) {
+    return undefined;
+  }
+
+  const value = Number.parseInt(match[1], 10);
+  return Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
 export function resolveDiscoveryFocus(resolution: TurnResolution): DiscoveryFocus {
   switch (resolution.questionFocus) {
     case "greeting":
@@ -597,6 +634,8 @@ function inferIntentFromMessage(
   current: TravelIntent
 ): TravelIntent {
   const normalized = message.toLowerCase();
+  const rememberedDestination = localDestinationFromSession(session);
+  const rememberedTotalDays = localTotalDaysFromSession(session);
   const pendingFollowUp = getPendingFollowUpContext(session);
   const asksForStays = /\b(show|find|recommend|best)\b.*\b(hotels?|stays?|accommodation)\b|\bwhere should i stay\b/.test(
     normalized
@@ -646,9 +685,22 @@ function inferIntentFromMessage(
     return "search_places";
   }
 
+  const itineraryFollowUp =
+    /\b(generate|build|create|make|show|give|need|want)\b.*\b(itinerary|trip plan|plan)\b/.test(
+      normalized
+    ) ||
+    /\bwhere(?:'s| is)\s+(?:the\s+)?itinerary\b/.test(normalized) ||
+    /\b(itinerary|trip plan)\s+(?:now|please)\b/.test(normalized);
+  if (!session.plan && itineraryFollowUp && rememberedDestination && rememberedTotalDays) {
+    return "plan_trip";
+  }
+
   const asksForPlan =
     /\b(plan|itinerary|trip)\b/.test(normalized) &&
-    /\b(\d+\s*days?|weekend|day-by-day)\b/.test(normalized);
+    (
+      /\b(\d+\s*days?|weekend|day-by-day)\b/.test(normalized) ||
+      (!!rememberedDestination && !!rememberedTotalDays)
+    );
   if (asksForPlan) {
     return "plan_trip";
   }
@@ -725,7 +777,10 @@ function finalizeResolution(
   const dateContext = inferDateContext(
     session,
     message,
-    parsed.totalDays || inferredDays || session.plan?.totalDays
+    parsed.totalDays ||
+      inferredDays ||
+      session.plan?.totalDays ||
+      localTotalDaysFromSession(session)
   );
   const parsedStyles = parsed.styles
     .map((style) => normalizeTravelStyle(style))
@@ -736,9 +791,16 @@ function finalizeResolution(
     intent: inferredIntent,
     destination: parsed.destination || destinations[0],
     destinations,
-    totalDays: parsed.totalDays || inferredDays || session.plan?.totalDays,
+    totalDays:
+      parsed.totalDays ||
+      inferredDays ||
+      session.plan?.totalDays ||
+      localTotalDaysFromSession(session),
     travelerCount:
-      parsed.travelerCount || inferredTravelers || session.plan?.travelerCount,
+      parsed.travelerCount ||
+      inferredTravelers ||
+      session.plan?.travelerCount ||
+      localTravelerCountFromSession(session),
     styles: Array.from(new Set([...parsedStyles, ...inferredStyles])),
     questionFocus: inferredFocus,
     dateContext,
@@ -1357,6 +1419,12 @@ export type TransitSegment = {
   bookingNote: string;
 };
 
+export type FastTurnResponse = {
+  reply: string;
+  responseBlocks: AssistantResponseBlock[];
+  memory: SessionSnapshot["memory"];
+};
+
 // ─── Conversation Mode ───────────────────────────────────────────────────────
 
 export type ConversationMode =
@@ -1935,6 +2003,165 @@ function buildGreetingChips(
   ];
 }
 
+function inferredUserName(session: SessionSnapshot): string | undefined {
+  return session.memory.acceptedDecisions
+    .find((decision: string) => decision.startsWith("Name: "))
+    ?.replace(/^Name:\s*/, "")
+    .trim();
+}
+
+function normalizePersonName(raw: string): string {
+  return raw
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function isTravelIntentLikeMessage(message: string): boolean {
+  return /\b(plan|trip|itinerary|destination|destinations|travel|visit|days?|restaurants?|food|stays?|hotels?|accommodation|beaches?|attractions?|budget|transport|events?|festivals?)\b/i.test(
+    message
+  );
+}
+
+function isFastCapabilitiesMessage(message: string): boolean {
+  return /^(?:so\s+)?(?:what|how)\s+(?:can\s+(?:you|u)\s+do|can\s+(?:you|u)\s+help|do\s+(?:you|u)\s+do)\b.*[?.!]*$/i.test(
+    message
+  ) || /^(?:can\s+(?:you|u)\s+help\s+me|help)\b[\s!,.?]*$/i.test(message);
+}
+
+function isFastIdentityMessage(message: string): boolean {
+  return /^(?:who|what)\s+are\s+(?:you|u)\b.*[?.!]*$/i.test(message);
+}
+
+function isFastSmallTalkMessage(message: string): boolean {
+  return /^(?:how are you|how's it going|whats up|what's up|sup|bye|goodbye|see you|good night|goodnight|lol|haha|hmm+|huh+|nice one)[\s!,.?]*$/i.test(
+    message
+  );
+}
+
+export function resolveFastTurnResponse(
+  session: SessionSnapshot,
+  message: string
+): FastTurnResponse | null {
+  const trimmed = message.trim();
+  if (!trimmed || isTravelIntentLikeMessage(trimmed)) {
+    return null;
+  }
+
+  const existingName = inferredUserName(session);
+  const introMatch = trimmed.match(
+    /^(?:hi|hello|hey)?[\s,!-]*(?:my name is|i am|i'm|im|call me)\s+([\p{L}\p{M}][\p{L}\p{M}\s'-]{0,40})$/iu
+  );
+  const greetingOnly = /^(hi|hello|hey|hii|yo|good\s+(morning|afternoon|evening))[\s!,.?]*$/i.test(
+    trimmed
+  );
+  const acknowledgementOnly = /^(thanks|thank you|ok|okay|cool|nice|got it|alright)[\s!,.?]*$/i.test(
+    trimmed
+  );
+  const capabilitiesOnly = isFastCapabilitiesMessage(trimmed);
+  const identityOnly = isFastIdentityMessage(trimmed);
+  const smallTalkOnly = isFastSmallTalkMessage(trimmed);
+
+  if (
+    !introMatch &&
+    !greetingOnly &&
+    !acknowledgementOnly &&
+    !capabilitiesOnly &&
+    !identityOnly &&
+    !smallTalkOnly
+  ) {
+    return null;
+  }
+
+  const destination = localDestinationFromSession(session);
+  const prompts = buildGreetingChips(destination);
+  const acceptedDecisions = session.memory.acceptedDecisions.filter(
+    (decision: string) => !decision.startsWith("Name: ")
+  );
+
+  let reply = "";
+  let title = "";
+  let body = "";
+  let lead = "";
+
+  if (introMatch) {
+    const name = normalizePersonName(introMatch[1]);
+    acceptedDecisions.push(`Name: ${name}`);
+    reply = `Nice to meet you, ${name}. Tell me where you want to go, when you’re thinking, or just the kind of trip you want.`;
+    title = `Nice to meet you, ${name}`;
+    body = "I’ll keep that in mind for the rest of this conversation.";
+    lead = "Tell me a destination, dates, or just a vibe and I’ll take it from there.";
+  } else if (greetingOnly) {
+    const greetingName = existingName ? `, ${existingName}` : "";
+    reply = `Hey${greetingName}. Tell me where you want to go, when you want to travel, or what kind of trip you want.`;
+    title = `Hey${greetingName}`;
+    body = "I’m ready when you are.";
+    lead = "Give me a destination, dates, or a travel vibe and I’ll start there.";
+  } else if (capabilitiesOnly || identityOnly) {
+    const guideName = existingName ? `, ${existingName}` : "";
+    reply = `I’m Roameo${guideName}. I can plan trips, find restaurants and stays, suggest attractions, surface local events, and help refine dates, budget, and route decisions.`;
+    title = "Your Roameo travel guide";
+    body =
+      "I’m here to help you plan trips, discover places worth visiting, and refine the details without making you spell out everything up front.";
+    lead =
+      destination
+        ? `I can start with ${destination}, or you can ask for restaurants, stays, local gems, better dates, or a full itinerary.`
+        : "Give me a destination, a rough vibe, or just tell me whether you want ideas for a trip, places to eat, or places to stay.";
+  } else if (smallTalkOnly) {
+    const smallTalkName = existingName ? `, ${existingName}` : "";
+    reply = `I’m good${smallTalkName}. Whenever you’re ready, give me a destination, a date range, or even just a rough travel vibe.`;
+    title = `Ready when you are${smallTalkName}`;
+    body = "I can keep things simple and start from very little information.";
+    lead =
+      destination
+        ? `We can keep building around ${destination}, or switch to a different place anytime.`
+        : "A destination name, a budget, or even a one-line idea is enough to get started.";
+  } else {
+    const acknowledgementName = existingName ? `, ${existingName}` : "";
+    reply = `Got it${acknowledgementName}. Tell me where you want to go or what you want to figure out next.`;
+    title = `Got it${acknowledgementName}`;
+    body = "I’m ready for the next step whenever you are.";
+    lead = "A destination, dates, or even a rough travel idea is enough to get moving.";
+  }
+
+  return {
+    reply,
+    responseBlocks: [
+      {
+        type: "trip_intro",
+        title,
+        body
+      },
+      {
+        type: "lead",
+        text: lead
+      },
+      {
+        type: "assistant_prompt_chips",
+        title: "Easy next steps",
+        prompts
+      }
+    ],
+    memory: {
+      ...session.memory,
+      summary: reply.slice(0, 400),
+      acceptedDecisions,
+      pendingFollowUp: null,
+      planningState: {
+        ...session.memory.planningState,
+        status: "ready",
+        stage: "ready",
+        source: undefined,
+        reason: undefined,
+        retryable: true,
+        updatedAt: new Date().toISOString()
+      }
+    }
+  };
+}
+
 function buildDiscoveryChips(
   destination: string,
   focus: string
@@ -2459,12 +2686,33 @@ export function updateSessionMemory(
   const acceptedDecisions = new Set(session.memory.acceptedDecisions);
   if (plan?.destination) {
     acceptedDecisions.add(`Destination: ${plan.destination}`);
+  } else if (resolution.destination) {
+    acceptedDecisions.add(`Destination: ${resolution.destination}`);
   }
   if (plan?.totalDays) {
     acceptedDecisions.add(`Duration: ${plan.totalDays} days`);
+  } else if (resolution.totalDays) {
+    acceptedDecisions.add(`Duration: ${resolution.totalDays} days`);
   }
   if (plan?.startDate && plan?.endDate) {
     acceptedDecisions.add(`Dates: ${plan.startDate} to ${plan.endDate}`);
+  } else if (
+    resolution.dateContext.inferredStartDate &&
+    resolution.dateContext.inferredEndDate &&
+    resolution.dateContext.flexibility === "exact"
+  ) {
+    acceptedDecisions.add(
+      `Dates: ${resolution.dateContext.inferredStartDate} to ${resolution.dateContext.inferredEndDate}`
+    );
+  }
+  if (resolution.origin) {
+    acceptedDecisions.add(`Origin: ${resolution.origin}`);
+  }
+  if (resolution.travelerCount) {
+    acceptedDecisions.add(`Travelers: ${resolution.travelerCount}`);
+  }
+  if (resolution.budgetNote) {
+    acceptedDecisions.add(`Budget target: ${resolution.budgetNote}`);
   }
 
   return {

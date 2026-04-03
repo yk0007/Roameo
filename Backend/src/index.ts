@@ -62,6 +62,8 @@ app.use(
   })
 );
 
-app.listen(config.port, () => {
-  console.log(`[roameo-backend] listening on http://localhost:${config.port}`);
+const host = "0.0.0.0";
+
+app.listen(config.port, host, () => {
+  console.log(`[roameo-backend] listening on ${host}:${config.port}`);
 });

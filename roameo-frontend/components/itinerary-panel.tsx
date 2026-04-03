@@ -7,6 +7,7 @@ import { Clock, ExternalLink, Heart, MapPin, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ShareButton } from "./share-button";
 import { PoiTypeIcon } from "./poi-type-icon";
+import { CachedImage } from "./cached-image";
 import { useOutsideClick } from "@/hooks/use-outside-click";
 import { resolvePoiImageUrl } from "@/lib/poi-image-url";
 import type { Activity, Itinerary, POI } from "@/lib/types";
@@ -350,17 +351,16 @@ export function ItineraryPanel({
                       transition={{ duration: 0.16, ease: "easeOut" }}
                       className="mb-4 flex cursor-pointer items-center gap-4 rounded-2xl border border-white/60 bg-white/50 px-4 py-4 shadow-[0_8px_20px_rgba(15,23,42,0.04)] backdrop-blur-md transition-[border-color,box-shadow,background-color] hover:border-white/80 hover:bg-white/70 hover:shadow-[0_12px_26px_rgba(15,23,42,0.06)]"
                     >
-                      {activity.photoUrl && activity.photoUrl !== "/placeholder.svg" ? (
-                        <Image
-                          width={60}
-                          height={60}
-                          src={activity.photoUrl}
-                          alt={activity.name}
-                          className="h-14 w-14 rounded-xl object-cover object-top border border-white/40 shadow-sm"
-                          quality={90}
-                          priority
-                          sizes="60px"
-                        />
+                      {resolvePoiImageUrl(activity.photoUrl) ? (
+                        <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-white/40 shadow-sm">
+                          <CachedImage
+                            src={activity.photoUrl}
+                            alt={activity.name}
+                            className="h-14 w-14 object-cover object-top"
+                            quality={90}
+                            priority
+                          />
+                        </div>
                       ) : (
                         <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-white/60 bg-blue-50/60 text-blue-500 shadow-sm backdrop-blur-md">
                           <PoiTypeIcon

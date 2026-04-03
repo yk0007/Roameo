@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, type Root } from "react-dom/client";
 import { Plus, Minus, Navigation, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SearchCard } from "@/components/search-card";
@@ -27,6 +27,22 @@ export interface MapViewProps {
   onReplan?: (poi: POI) => void;
   isVisible?: boolean;
   hasBillingError?: boolean;
+}
+
+function disposeReactRoot(root: Root) {
+  setTimeout(() => {
+    try {
+      root.unmount();
+    } catch (error) {
+      console.warn("Error unmounting React root:", error);
+    }
+  }, 0);
+}
+
+function disposeAllReactRoots(roots: Map<Element, Root>) {
+  const pendingRoots = Array.from(roots.values());
+  roots.clear();
+  pendingRoots.forEach(disposeReactRoot);
 }
 
 // Add effect to log mapData changes
@@ -211,6 +227,8 @@ export default function MapView({
   isVisible = true,
   hasBillingError = false,
 }: MapViewProps) {
+  const HOVER_CARD_WIDTH = 248;
+  const HOVER_CARD_HEIGHT = 218;
   const mapRef = useRef<HTMLDivElement | null>(null);
   const mapInstance = useRef<any | null>(null);
   const markersRef = useRef<any[]>([]);
@@ -222,7 +240,7 @@ export default function MapView({
   const markersByIdRef = useRef<Record<string, any>>({});
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const persistentInfoWindowRef = useRef<any | null>(null);
-  const reactRootsRef = useRef<Map<Element, any>>(new Map()); // Track React roots for cleanup
+  const reactRootsRef = useRef<Map<Element, Root>>(new Map()); // Track React roots for cleanup
   const [customStyle, setCustomStyle] = useState(true);
   const [zoom, setZoom] = useState(5);
   const [autoZoomOnHover, setAutoZoomOnHover] = useState(true);
@@ -369,15 +387,7 @@ export default function MapView({
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      // Clean up React roots
-      reactRootsRef.current.forEach((root, element) => {
-        try {
-          root.unmount();
-        } catch (error) {
-          console.warn("Error unmounting React root:", error);
-        }
-      });
-      reactRootsRef.current.clear();
+      disposeAllReactRoots(reactRootsRef.current);
     };
   }, []);
 
@@ -626,15 +636,7 @@ export default function MapView({
       markersRef.current = [];
       markersByIdRef.current = {};
 
-      // Clean up React roots
-      reactRootsRef.current.forEach((root, element) => {
-        try {
-          root.unmount();
-        } catch (error) {
-          console.warn("Error unmounting React root:", error);
-        }
-      });
-      reactRootsRef.current.clear();
+      disposeAllReactRoots(reactRootsRef.current);
 
       // Close any open info windows when re-rendering markers
       if (activeInfoWindowRef.current) {
@@ -704,8 +706,8 @@ export default function MapView({
           const mapWidth = mapDiv.clientWidth;
           const mapHeight = mapDiv.clientHeight;
 
-          const cardWidth = 248;
-          const cardHeight = 218;
+          const cardWidth = HOVER_CARD_WIDTH;
+          const cardHeight = HOVER_CARD_HEIGHT;
           const markerSize = 12;
           const padding = 10;
 
@@ -784,9 +786,11 @@ export default function MapView({
                 iwContainer.style.borderRadius = "0";
                 iwContainer.style.boxShadow = "none";
                 iwContainer.style.background = "transparent";
-                iwContainer.style.maxWidth = "188px";
-                iwContainer.style.minWidth = "188px";
+                iwContainer.style.width = `${HOVER_CARD_WIDTH}px`;
+                iwContainer.style.maxWidth = `${HOVER_CARD_WIDTH}px`;
+                iwContainer.style.minWidth = `${HOVER_CARD_WIDTH}px`;
                 iwContainer.style.outline = "none";
+                iwContainer.style.overflow = "visible";
               }
 
               if (iwTitle) iwTitle.style.display = "none";
@@ -803,6 +807,7 @@ export default function MapView({
                 iwContent.style.overflow = "visible";
                 iwContent.style.outline = "none";
                 iwContent.style.maxWidth = "none";
+                iwContent.style.width = `${HOVER_CARD_WIDTH}px`;
               }
 
               // Remove any parent container borders
@@ -811,7 +816,11 @@ export default function MapView({
                 iwWrapper.style.border = "none";
                 iwWrapper.style.outline = "none";
                 iwWrapper.style.boxShadow = "none";
+                iwWrapper.style.overflow = "visible";
               }
+
+              content.style.width = `${HOVER_CARD_WIDTH}px`;
+              content.style.minHeight = `${HOVER_CARD_HEIGHT}px`;
 
               // Check if this container already has a React root
               let root = reactRootsRef.current.get(content);

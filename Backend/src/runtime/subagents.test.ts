@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import {
   buildResponseBlocks,
   normalizeTravelIntent,
-  resolveTurnIntent
+  resolveFastTurnResponse,
+  resolveTurnIntent,
+  updateSessionMemory
 } from "./subagents.js";
 import type { SessionSnapshot } from "@roameo/contracts";
 
@@ -85,6 +87,71 @@ test("normalizeTravelIntent fails fast for unsupported values", () => {
     () => normalizeTravelIntent("unknown_mode"),
     /Unsupported travel intent/
   );
+});
+
+test("resolveFastTurnResponse handles simple greetings without travel pipeline work", () => {
+  const fast = resolveFastTurnResponse(makeSession(), "hi");
+
+  assert.ok(fast);
+  assert.match(fast.reply, /tell me where you want to go/i);
+  assert.deepEqual(
+    fast.responseBlocks.map((block) => block.type),
+    ["trip_intro", "lead", "assistant_prompt_chips"]
+  );
+  assert.equal(fast.memory.planningState.status, "ready");
+});
+
+test("resolveFastTurnResponse stores the user's name from a simple introduction", () => {
+  const fast = resolveFastTurnResponse(makeSession(), "my name is yk");
+
+  assert.ok(fast);
+  assert.match(fast.reply, /nice to meet you, Yk/i);
+  assert.ok(
+    fast.memory.acceptedDecisions.includes("Name: Yk")
+  );
+});
+
+test("resolveFastTurnResponse handles capability questions without the full pipeline", () => {
+  const fast = resolveFastTurnResponse(makeSession(), "what can u do?");
+
+  assert.ok(fast);
+  assert.match(fast.reply, /i can plan trips, find restaurants and stays/i);
+  assert.equal(fast.memory.planningState.status, "ready");
+});
+
+test("resolveFastTurnResponse handles identity questions without the full pipeline", () => {
+  const fast = resolveFastTurnResponse(makeSession(), "what are you?");
+
+  assert.ok(fast);
+  assert.match(fast.reply, /roameo/i);
+  assert.equal(fast.memory.planningState.status, "ready");
+});
+
+test("updateSessionMemory keeps pre-plan destination and duration in canonical memory", () => {
+  const memory = updateSessionMemory(
+    makeSession(),
+    {
+      intent: "plan_trip",
+      destination: "Meghalaya",
+      destinations: ["Meghalaya"],
+      origin: "Shillong",
+      totalDays: 3,
+      travelerCount: 2,
+      styles: [],
+      dateContext: {
+        flexibility: "open_ended",
+        derivedFrom: "none",
+        advisoryItems: []
+      }
+    },
+    "Working on it."
+  );
+
+  assert.ok(memory.acceptedDecisions.includes("Origin: Shillong"));
+  assert.ok(memory.acceptedDecisions.includes("Destination: Meghalaya"));
+  assert.ok(memory.acceptedDecisions.includes("Duration: 3 days"));
+  assert.ok(memory.acceptedDecisions.includes("Travelers: 2"));
+  assert.deepEqual(memory.destinationsDiscussed, ["Meghalaya"]);
 });
 
 test("buildResponseBlocks emits canonical itinerary presentation blocks", () => {

@@ -11,6 +11,71 @@ import { getBudgetOptionByLabel, getBudgetOptionByTotal } from "./budget-options
 
 const CANONICAL_POI_SOURCES = new Set(["google_places", "google_maps", "web_research"]);
 
+function latestAcceptedDecision(
+  session: CanonicalSession | undefined,
+  prefix: string
+) {
+  return [...(session?.memory.acceptedDecisions || [])]
+    .reverse()
+    .find((decision) => decision.startsWith(prefix))
+    ?.slice(prefix.length)
+    .trim();
+}
+
+function acceptedDurationDays(session?: CanonicalSession) {
+  const decision = latestAcceptedDecision(session, "Duration: ");
+  const match = decision?.match(/(\d+)/);
+  if (!match) {
+    return undefined;
+  }
+
+  const value = Number.parseInt(match[1], 10);
+  return Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+function acceptedTravelers(session?: CanonicalSession) {
+  const decision = latestAcceptedDecision(session, "Travelers: ");
+  const match = decision?.match(/(\d+)/);
+  if (!match) {
+    return undefined;
+  }
+
+  const value = Number.parseInt(match[1], 10);
+  return Number.isFinite(value) && value > 0 ? String(value) : undefined;
+}
+
+function acceptedBudget(session?: CanonicalSession) {
+  return latestAcceptedDecision(session, "Budget target: ");
+}
+
+function acceptedOrigin(session?: CanonicalSession) {
+  return latestAcceptedDecision(session, "Origin: ");
+}
+
+function acceptedDestination(session?: CanonicalSession) {
+  return latestAcceptedDecision(session, "Destination: ");
+}
+
+function deriveTripTitle(
+  session: CanonicalSession | undefined,
+  destination?: string,
+  totalDays?: number
+) {
+  const currentTitle = session?.title?.trim();
+  if (currentTitle && !/^untitled trip$/i.test(currentTitle)) {
+    return currentTitle;
+  }
+
+  if (destination && totalDays) {
+    return `${destination}, ${totalDays} days`;
+  }
+  if (destination) {
+    return destination;
+  }
+
+  return currentTitle || "Untitled trip";
+}
+
 function getCanonicalPois(session?: CanonicalSession): POI[] {
   return Object.values(session?.poiCatalog.items || {}).filter((poi) =>
     CANONICAL_POI_SOURCES.has(poi.source)
@@ -180,20 +245,35 @@ export function buildMapData(session?: CanonicalSession): MapData {
 
 export function buildTripContext(session?: CanonicalSession): TripContext {
   const plan = session?.plan;
+  const destination =
+    plan?.destination ||
+    acceptedDestination(session) ||
+    session?.memory.destinationsDiscussed.at(-1) ||
+    "";
+  const totalDays = plan?.totalDays || acceptedDurationDays(session) || 0;
   const budgetLabel =
     getBudgetOptionByTotal(plan?.budgetTarget?.total || plan?.budget?.total)?.label ||
+    acceptedBudget(session) ||
     "";
   return {
     id: session?.id || "",
-    title: session?.title || "Untitled trip",
-    origin: plan?.origin || "",
-    destination: plan?.destination || "",
-    destinations: plan?.destinations || [],
-    startDate: plan?.startDate,
-    endDate: plan?.endDate,
+    title: deriveTripTitle(session, destination, totalDays),
+    origin: plan?.origin || acceptedOrigin(session) || "",
+    destination,
+    destinations:
+      plan?.destinations?.length
+        ? plan.destinations
+        : session?.memory.destinationsDiscussed.length
+          ? session.memory.destinationsDiscussed
+          : destination
+            ? [destination]
+            : [],
+    startDate: plan?.startDate || session?.memory.dateContext.inferredStartDate,
+    endDate: plan?.endDate || session?.memory.dateContext.inferredEndDate,
     dateFlexibility: session?.memory.dateContext.flexibility,
-    days: plan?.totalDays || 0,
-    travelers: plan?.travelerCount ? String(plan.travelerCount) : "",
+    days: totalDays,
+    travelers:
+      plan?.travelerCount ? String(plan.travelerCount) : acceptedTravelers(session) || "",
     budget: budgetLabel
   };
 }

@@ -20,6 +20,7 @@ import {
   criticizeAndRefinePlan,
   derivePendingFollowUpContext,
   enrichPlanLogistics,
+  resolveFastTurnResponse,
   type PlanningContext,
   researchDestinations,
   resolveDiscoveryFocus,
@@ -69,6 +70,39 @@ function createPlanningState(
   };
 }
 
+function deriveSessionTitle(
+  session: SessionSnapshot,
+  resolution: {
+    destination?: string;
+    destinations: string[];
+    totalDays?: number;
+    explicitNewTrip?: boolean;
+  },
+  plan?: SessionSnapshot["plan"]
+): string | undefined {
+  if (plan?.title?.trim()) {
+    return plan.title.trim();
+  }
+
+  const currentTitle = session.title?.trim();
+  const destination =
+    resolution.destination ||
+    resolution.destinations[0] ||
+    session.plan?.destination ||
+    session.memory.destinationsDiscussed.at(-1);
+  const totalDays = resolution.totalDays || session.plan?.totalDays;
+
+  if (!destination) {
+    return currentTitle;
+  }
+
+  if (!currentTitle || /^untitled trip$/i.test(currentTitle) || resolution.explicitNewTrip) {
+    return totalDays ? `${destination}, ${totalDays} days` : destination;
+  }
+
+  return currentTitle;
+}
+
 export class TurnRunner {
   private inflight = new Map<string, Promise<void>>();
 
@@ -106,10 +140,6 @@ export class TurnRunner {
   ): Promise<void> {
     const turnId = randomUUID();
     const settings = input.providerSettings || session.providerSettings;
-    const resolvedProvider = await this.providerService.resolveProvider(
-      userId,
-      settings
-    );
 
     const userMessage: ConversationMessage = {
       id: randomUUID(),
@@ -133,6 +163,69 @@ export class TurnRunner {
         providerSettings: settings
       }
     });
+
+    const fastTurn = resolveFastTurnResponse(session, input.content);
+    if (fastTurn) {
+      const assistantMessageId = randomUUID();
+      const chunks = chunkText(fastTurn.reply);
+      for (let index = 0; index < chunks.length; index += 1) {
+        this.streamHub.emit(session.id, {
+          type: "message.delta",
+          data: {
+            sessionId: session.id,
+            turnId,
+            messageId: assistantMessageId,
+            role: "assistant",
+            delta: chunks[index],
+            done: index === chunks.length - 1
+          }
+        });
+      }
+
+      const assistantMessage: ConversationMessage = {
+        id: assistantMessageId,
+        sessionId: session.id,
+        role: "assistant",
+        content: fastTurn.reply,
+        createdAt: new Date().toISOString(),
+        phase: "final",
+        meta: {
+          turnId,
+          responseBlocks: fastTurn.responseBlocks
+        }
+      };
+      await this.repository.saveMessage(assistantMessage);
+      this.streamHub.emit(session.id, {
+        type: "message.committed",
+        data: assistantMessage
+      });
+
+      const updated = await this.repository.updateSession(session.id, {
+        providerSettings: settings,
+        memory: fastTurn.memory
+      });
+      if (updated) {
+        updated.memory = fastTurn.memory;
+        this.streamHub.emit(session.id, {
+          type: "session.snapshot",
+          data: updated
+        });
+      }
+
+      this.streamHub.emit(session.id, {
+        type: "turn.completed",
+        data: {
+          sessionId: session.id,
+          turnId
+        }
+      });
+      return;
+    }
+
+    const resolvedProvider = await this.providerService.resolveProvider(
+      userId,
+      settings
+    );
 
     const emitTrace = async (
       agent: string,
@@ -465,7 +558,7 @@ export class TurnRunner {
         providerSettings: settings,
         preferences: nextMemory.preferences,
         memory: nextMemory,
-        title: latestPlan?.title
+        title: deriveSessionTitle(nextSession, resolution, latestPlan)
       });
 
       if (updated) {

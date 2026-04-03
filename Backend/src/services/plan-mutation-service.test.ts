@@ -204,6 +204,38 @@ test("overview mutations keep title and budget target in the plan snapshot", asy
   assert.equal(updated.plan?.budgetTarget?.currency, "INR");
 });
 
+test("overview mutations persist canonical pre-plan trip details in memory", async () => {
+  const repository = new SessionRepository();
+  const providerService = new ProviderService(repository);
+  const service = new PlanMutationService(
+    repository,
+    providerService,
+    new TravelToolsService()
+  );
+
+  const session = await repository.createSession("user-4", {
+    title: "Untitled trip"
+  });
+
+  const updated = await service.apply(
+    (await repository.getSession(session.id, "user-4"))!,
+    "user-4",
+    {
+      type: "update_overview",
+      origin: "Shillong",
+      destination: "Meghalaya",
+      totalDays: 3,
+      travelerCount: 2
+    }
+  );
+
+  assert.ok(updated.memory.acceptedDecisions.includes("Origin: Shillong"));
+  assert.ok(updated.memory.acceptedDecisions.includes("Destination: Meghalaya"));
+  assert.ok(updated.memory.acceptedDecisions.includes("Duration: 3 days"));
+  assert.ok(updated.memory.acceptedDecisions.includes("Travelers: 2"));
+  assert.deepEqual(updated.memory.destinationsDiscussed, ["Meghalaya"]);
+});
+
 test("rebalance_trip fails fast instead of generating fallback POIs when provider generation fails", async () => {
   const repository = new SessionRepository();
   const providerService = new ThrowingProviderService(repository);

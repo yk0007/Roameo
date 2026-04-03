@@ -52,6 +52,14 @@ function appendUnique(values: string[], next: string): string[] {
   return values.includes(next) ? values : [...values, next];
 }
 
+function upsertDecision(values: string[], prefix: string, next?: string): string[] {
+  if (!next) {
+    return values;
+  }
+
+  return [...values.filter((value) => !value.startsWith(prefix)), `${prefix}${next}`];
+}
+
 function matchesDestination(poi: Poi, destination: string): boolean {
   const haystack = `${poi.name} ${poi.address || ""} ${poi.tags.join(" ")}`.toLowerCase();
   return haystack.includes(destination.toLowerCase());
@@ -365,6 +373,69 @@ function buildMutationMemory(
   };
 }
 
+function buildOverviewOnlyMemory(
+  session: SessionSnapshot,
+  mutation: Extract<PlanMutationInput, { type: "update_overview" }>
+): SessionSnapshot["memory"] {
+  const nextDestinations = mutation.destinations?.length
+    ? mutation.destinations
+    : mutation.destination
+      ? [mutation.destination]
+      : [];
+  const destinationsDiscussed = Array.from(
+    new Set([...session.memory.destinationsDiscussed, ...nextDestinations])
+  );
+
+  let acceptedDecisions = [...session.memory.acceptedDecisions];
+  acceptedDecisions = upsertDecision(
+    acceptedDecisions,
+    "Destination: ",
+    mutation.destination || mutation.destinations?.[0]
+  );
+  acceptedDecisions = upsertDecision(acceptedDecisions, "Origin: ", mutation.origin);
+  acceptedDecisions = upsertDecision(
+    acceptedDecisions,
+    "Duration: ",
+    mutation.totalDays ? `${mutation.totalDays} days` : undefined
+  );
+  acceptedDecisions = upsertDecision(
+    acceptedDecisions,
+    "Travelers: ",
+    mutation.travelerCount ? String(mutation.travelerCount) : undefined
+  );
+  acceptedDecisions = upsertDecision(
+    acceptedDecisions,
+    "Budget target: ",
+    typeof mutation.budgetTotal === "number"
+      ? `${mutation.currency || session.memory.preferences.currency || "INR"} ${mutation.budgetTotal.toLocaleString()}`
+      : undefined
+  );
+  acceptedDecisions = upsertDecision(
+    acceptedDecisions,
+    "Dates: ",
+    mutation.startDate && mutation.endDate ? `${mutation.startDate} to ${mutation.endDate}` : undefined
+  );
+
+  return {
+    ...session.memory,
+    summary: "Updated trip overview",
+    destinationsDiscussed,
+    acceptedDecisions,
+    dateContext: {
+      ...session.memory.dateContext,
+      inferredStartDate: mutation.startDate || session.memory.dateContext.inferredStartDate,
+      inferredEndDate: mutation.endDate || session.memory.dateContext.inferredEndDate,
+      flexibility:
+        mutation.dateFlexibility ||
+        (mutation.startDate && mutation.endDate ? "exact" : session.memory.dateContext.flexibility),
+      derivedFrom:
+        mutation.dateFlexibility || (mutation.startDate && mutation.endDate)
+          ? "explicit"
+          : session.memory.dateContext.derivedFrom
+    }
+  };
+}
+
 function buildDateContextOverrides(
   session: SessionSnapshot,
   mutation: Extract<PlanMutationInput, { type: "update_overview" }>,
@@ -475,12 +546,14 @@ export class PlanMutationService {
       decision: string;
       confirmation?: string;
       sessionTitle?: string;
+      sessionMemory?: SessionSnapshot["memory"];
       dateContextOverrides?: Partial<SessionSnapshot["memory"]["dateContext"]>;
     }
   ): Promise<SessionSnapshot> {
     if (!change.plan) {
       const updated = await this.repository.updateSession(session.id, {
-        title: change.sessionTitle
+        title: change.sessionTitle,
+        memory: change.sessionMemory
       });
       if (!updated) {
         throw new Error("Session not found");
@@ -770,7 +843,8 @@ export class PlanMutationService {
     if (!session.plan) {
       return {
         sessionTitle: mutation.title || session.title,
-        decision: "Updated session title"
+        sessionMemory: buildOverviewOnlyMemory(session, mutation),
+        decision: "Updated trip overview"
       };
     }
 
