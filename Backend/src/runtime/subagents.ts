@@ -4,6 +4,9 @@ import type {
   AssistantResponseBlock,
   DateContext,
   DateAdvisoryItem,
+  FollowUpDomain,
+  FollowUpOption,
+  PendingFollowUpContext,
   PlanSnapshot,
   Poi,
   PoiCatalog,
@@ -35,6 +38,10 @@ export type TurnResolution = {
   dateContext: DateContext;
   stayMode?: boolean;
   explicitNewTrip?: boolean;
+  followUpDomain?: FollowUpDomain;
+  restaurantCategory?: RestaurantCategoryKey;
+  followUpAmbiguous?: boolean;
+  followUpOptions?: FollowUpOption[];
 };
 
 export type DestinationResearch = {
@@ -71,6 +78,13 @@ export type PlanningContext = {
     state: "running" | "completed";
   }>;
 };
+
+type RestaurantCategoryKey =
+  | "famous"
+  | "budget_friendly"
+  | "vegetarian"
+  | "non_vegetarian"
+  | "premium";
 
 const intentAliases: Record<string, TravelIntent> = {
   plan_trip: "plan_trip",
@@ -246,6 +260,87 @@ function inferQuestionFocus(message: string, intent: TravelIntent): string | und
   }
   if (intent === "search_places") {
     return "general";
+  }
+  return undefined;
+}
+
+function getPendingFollowUpContext(
+  session: SessionSnapshot
+): PendingFollowUpContext | undefined {
+  const fromMemory = session.memory.pendingFollowUp;
+  if (fromMemory) {
+    return fromMemory;
+  }
+
+  for (let index = session.messages.length - 1; index >= 0; index -= 1) {
+    const message = session.messages[index];
+    if (message.role !== "assistant") {
+      continue;
+    }
+    const context = message.meta?.followUpContext as PendingFollowUpContext | undefined;
+    if (context) {
+      return context;
+    }
+  }
+
+  return undefined;
+}
+
+function isAffirmationMessage(message: string): boolean {
+  return /^(yes|yeah|yep|sure|ok|okay|do that|show me|go ahead|sounds good)\b/i.test(
+    message.trim()
+  );
+}
+
+function inferOfferedDomainsFromText(text: string): FollowUpDomain[] {
+  const domains = new Set<FollowUpDomain>();
+  const normalized = text.toLowerCase();
+
+  if (/\b(stays?|hotels?|accommodation)\b/.test(normalized)) {
+    domains.add("stays");
+  }
+  if (/\b(restaurants?|food|eat|dining|cafes?)\b/.test(normalized)) {
+    domains.add("restaurants");
+  }
+  if (/\b(attractions?|things to do|activities?|places to visit|hidden gems?)\b/.test(normalized)) {
+    domains.add("attractions");
+  }
+  if (/\b(transport|train|bus|drive|flight|get to)\b/.test(normalized)) {
+    domains.add("transport");
+  }
+  if (/\b(events?|festivals?|best dates?|best time)\b/.test(normalized)) {
+    domains.add("events");
+  }
+  if (/\b(dates?|timing)\b/.test(normalized)) {
+    domains.add("dates");
+  }
+
+  return Array.from(domains);
+}
+
+function inferPromptDomain(promptOrLabel: string): FollowUpDomain | undefined {
+  const [domain] = inferOfferedDomainsFromText(promptOrLabel);
+  return domain;
+}
+
+function inferRestaurantCategoryFromMessage(
+  message: string
+): RestaurantCategoryKey | undefined {
+  const normalized = message.toLowerCase();
+  if (/\b(cheap|cheaper|budget|budget-friendly|affordable|value)\b/.test(normalized)) {
+    return "budget_friendly";
+  }
+  if (/\b(veg|vegetarian|pure veg)\b/.test(normalized)) {
+    return "vegetarian";
+  }
+  if (/\b(non veg|non-veg|meat|chicken|mutton|seafood|grill|bbq|barbecue)\b/.test(normalized)) {
+    return "non_vegetarian";
+  }
+  if (/\b(premium|rich|fancy|upscale|luxury|fine dining)\b/.test(normalized)) {
+    return "premium";
+  }
+  if (/\b(famous|iconic|must[- ]try|signature|popular)\b/.test(normalized)) {
+    return "famous";
   }
   return undefined;
 }
@@ -437,6 +532,9 @@ export function shouldResearchResolution(resolution: TurnResolution): boolean {
   }
 
   if (resolution.intent === "question") {
+    if (resolution.questionFocus === "followup_clarify") {
+      return false;
+    }
     // POI-focused questions need real cards — research them
     const poiFocuses = [
       "restaurants",
@@ -499,15 +597,11 @@ function inferIntentFromMessage(
   current: TravelIntent
 ): TravelIntent {
   const normalized = message.toLowerCase();
+  const pendingFollowUp = getPendingFollowUpContext(session);
   const asksForStays = /\b(show|find|recommend|best)\b.*\b(hotels?|stays?|accommodation)\b|\bwhere should i stay\b/.test(
     normalized
   );
-  const affirmsStayFollowup =
-    session.plan &&
-    /^(yes|yeah|sure|ok|okay)\b/.test(normalized.trim()) &&
-    /(?:stay|hotel|accommodation)/i.test(
-      session.messages.at(-1)?.content || session.messages.at(-2)?.content || ""
-    );
+  const affirmation = isAffirmationMessage(message);
   const refineCue =
     /\b(add|remove|replace|swap|move|adjust|refine|change|update|tweak|slower|relax|rebalance|upgrade)\b/.test(
       normalized
@@ -517,7 +611,26 @@ function inferIntentFromMessage(
     return "refine_trip";
   }
 
-  if (asksForStays || affirmsStayFollowup) {
+  if (
+    pendingFollowUp &&
+    (affirmation || Boolean(inferRestaurantCategoryFromMessage(message)))
+  ) {
+    if (pendingFollowUp.primaryDomain === "restaurants") {
+      return "search_places";
+    }
+    if (pendingFollowUp.primaryDomain === "stays") {
+      return "search_places";
+    }
+    if (
+      pendingFollowUp.primaryDomain === "attractions" ||
+      pendingFollowUp.primaryDomain === "activities"
+    ) {
+      return "search_places";
+    }
+    return "question";
+  }
+
+  if (asksForStays) {
     return "search_places";
   }
 
@@ -548,9 +661,42 @@ function finalizeResolution(
   message: string,
   parsed: z.infer<typeof resolverSchema>
 ): TurnResolution {
+  const pendingFollowUp = getPendingFollowUpContext(session);
   const inferredIntent = inferIntentFromMessage(session, message, parsed.intent);
   const heuristicFocus = inferQuestionFocus(message, inferredIntent);
-  const inferredFocus = heuristicFocus || parsed.questionFocus;
+  const requestedRestaurantCategory = inferRestaurantCategoryFromMessage(message);
+  const affirmation = isAffirmationMessage(message);
+  const inferredFollowUpOptions = pendingFollowUp?.options || [];
+  const followUpAmbiguous =
+    Boolean(pendingFollowUp) &&
+    affirmation &&
+    !pendingFollowUp?.primaryDomain &&
+    inferredFollowUpOptions.length > 1 &&
+    !requestedRestaurantCategory;
+  const followUpDomain =
+    pendingFollowUp?.primaryDomain ||
+    (requestedRestaurantCategory ? "restaurants" : undefined);
+  const pendingFocus =
+    pendingFollowUp?.primaryDomain === "stays"
+      ? "hotels"
+      : pendingFollowUp?.primaryDomain === "restaurants"
+        ? "restaurants"
+        : pendingFollowUp?.primaryDomain === "attractions" ||
+            pendingFollowUp?.primaryDomain === "activities"
+          ? "attractions"
+          : pendingFollowUp?.primaryDomain === "events"
+            ? "events"
+            : pendingFollowUp?.primaryDomain === "transport"
+              ? "transport"
+              : undefined;
+  const inferredFocus =
+    followUpAmbiguous
+      ? "followup_clarify"
+      : (pendingFollowUp &&
+          (affirmation || Boolean(requestedRestaurantCategory)) &&
+          pendingFocus)
+        ? pendingFocus
+        : heuristicFocus || parsed.questionFocus;
   const inferredDestinations = inferDestinationFromMessage(message);
   const explicitNewTrip =
     inferredIntent === "plan_trip" &&
@@ -561,6 +707,7 @@ function finalizeResolution(
       [
         ...normalizeDestinations(parsed),
         ...inferredDestinations,
+        ...(pendingFollowUp?.destination ? [pendingFollowUp.destination] : []),
         ...(explicitNewTrip ? [] : session.memory.destinationsDiscussed.slice(-2))
       ].filter(Boolean)
     )
@@ -597,8 +744,13 @@ function finalizeResolution(
     dateContext,
     stayMode:
       inferredFocus === "hotels" ||
-      (inferredIntent === "search_places" && /^(yes|yeah|sure|ok|okay)\b/i.test(message.trim())),
-    explicitNewTrip
+      (pendingFollowUp?.primaryDomain === "stays" &&
+        (affirmation || Boolean(requestedRestaurantCategory))),
+    explicitNewTrip,
+    followUpDomain,
+    restaurantCategory: requestedRestaurantCategory,
+    followUpAmbiguous,
+    followUpOptions: inferredFollowUpOptions
   };
 }
 
@@ -679,6 +831,7 @@ function buildConversationDigest(session: SessionSnapshot): string {
     `Session title: ${session.title}`,
     `Current destinations: ${session.plan?.destinations.join(", ") || "none"}`,
     `Current dates: ${session.plan?.startDate || session.memory.dateContext.inferredStartDate || "none"} to ${session.plan?.endDate || session.memory.dateContext.inferredEndDate || "none"}`,
+    `Pending follow-up: ${session.memory.pendingFollowUp ? JSON.stringify(session.memory.pendingFollowUp) : "none"}`,
     `Accepted decisions: ${session.memory.acceptedDecisions.join(" | ") || "none"}`,
     `Preferences: ${session.memory.preferences.styles.join(", ") || "none"}`,
     `Recent messages:\n${recentMessages || "none"}`
@@ -1357,6 +1510,21 @@ export async function answerConversationally(
 ): Promise<AssistantNarrative> {
   const mode = resolveConversationMode(session, resolution);
   const missingSlot = resolveMissingSlot(resolution);
+  if (resolution.questionFocus === "followup_clarify") {
+    return {
+      introTitle: "Which one should I pull up?",
+      introBody:
+        resolution.destination || resolution.destinations[0]
+          ? `I can keep going for ${resolution.destination || resolution.destinations[0]}, but there are a couple of different directions from the last message.`
+          : "I can keep going, but there are a couple of different directions from the last message.",
+      leadText: "Pick the one you want and I’ll continue from there.",
+      promptChips: (resolution.followUpOptions || []).slice(0, 4).map((option) => ({
+        label: option.label,
+        prompt: option.prompt
+      })),
+      clarifyingQuestions: []
+    };
+  }
   const digest = buildConversationDigest(session);
 
   const researchSummary = research
@@ -1540,6 +1708,192 @@ function buildPoiStoryBody(
   }
 }
 
+function classifyRestaurantCategory(
+  poi: Poi,
+  destination?: string
+): RestaurantCategoryKey {
+  const haystack = [poi.name, poi.description, poi.address, ...(poi.tags || [])]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  const localDestination = destination?.toLowerCase() || "";
+
+  if (/\b(veg|vegetarian|pure veg|thali|satvik|jain)\b/.test(haystack)) {
+    return "vegetarian";
+  }
+
+  if (
+    /\b(non veg|non-veg|seafood|fish|chicken|mutton|biryani|grill|bbq|barbecue)\b/.test(
+      haystack
+    )
+  ) {
+    return "non_vegetarian";
+  }
+
+  if (
+    (typeof poi.priceLevel === "number" && poi.priceLevel >= 3) ||
+    /\b(fine dining|upscale|premium|luxury|chef|signature tasting)\b/.test(haystack)
+  ) {
+    return "premium";
+  }
+
+  if (
+    (typeof poi.priceLevel === "number" && poi.priceLevel <= 1) ||
+    /\b(budget|cheap|cheap eats|street food|mess|canteen|value)\b/.test(haystack)
+  ) {
+    return "budget_friendly";
+  }
+
+  if (
+    (typeof poi.rating === "number" && poi.rating >= 4.4) ||
+    /\b(famous|popular|must try|must-try|iconic|legendary|local favorite)\b/.test(haystack) ||
+    (localDestination && haystack.includes(localDestination))
+  ) {
+    return "famous";
+  }
+
+  return "famous";
+}
+
+function bucketRestaurants(
+  pois: Poi[],
+  destination?: string
+): Array<{ key: RestaurantCategoryKey; title: string; poiIds: string[] }> {
+  const buckets = new Map<RestaurantCategoryKey, Poi[]>();
+  for (const poi of pois) {
+    const bucket = classifyRestaurantCategory(poi, destination);
+    const items = buckets.get(bucket) || [];
+    items.push(poi);
+    buckets.set(bucket, items);
+  }
+
+  const definitions: Array<{ key: RestaurantCategoryKey; title: string }> = [
+    { key: "famous", title: "Famous" },
+    { key: "budget_friendly", title: "Budget-friendly" },
+    { key: "vegetarian", title: "Vegetarian" },
+    { key: "non_vegetarian", title: "Non-vegetarian" },
+    { key: "premium", title: "Premium" }
+  ];
+
+  return definitions
+    .map((definition) => ({
+      ...definition,
+      poiIds: Array.from(
+        new Set((buckets.get(definition.key) || []).map((poi) => poi.id))
+      ).slice(0, 8)
+    }))
+    .filter((section) => section.poiIds.length > 0);
+}
+
+export function derivePendingFollowUpContext(params: {
+  resolution: TurnResolution;
+  narrative: AssistantNarrative;
+  responseBlocks: AssistantResponseBlock[];
+  assistantReply: string;
+  plan?: PlanSnapshot;
+}): PendingFollowUpContext | null {
+  const { resolution, narrative, responseBlocks, assistantReply, plan } = params;
+  const destination = resolution.destination || resolution.destinations[0] || plan?.destination;
+  const startDate = resolution.dateContext.inferredStartDate || plan?.startDate;
+  const endDate = resolution.dateContext.inferredEndDate || plan?.endDate;
+  const promptOptions = narrative.promptChips
+    .map((chip) => {
+      const domain = inferPromptDomain(`${chip.label} ${chip.prompt}`);
+      return domain
+        ? {
+            domain,
+            label: chip.label,
+            prompt: chip.prompt
+          }
+        : null;
+    })
+    .filter((option): option is FollowUpOption => Boolean(option));
+  const textDomains = inferOfferedDomainsFromText(assistantReply);
+
+  const stayBlock = responseBlocks.find(
+    (block) => block.type === "stay_recommendation_list"
+  );
+  if (stayBlock && stayBlock.type === "stay_recommendation_list") {
+    return {
+      primaryDomain: "stays",
+      destination,
+      startDate,
+      endDate,
+      focus: "hotels",
+      categoryKeys: [],
+      poiIds: [
+        stayBlock.bestOption.poiId,
+        ...stayBlock.alternatives.map((item) => item.poiId)
+      ],
+      options: [{ domain: "stays", label: "Stay options", prompt: "Show me stay options" }]
+    };
+  }
+
+  const categorizedRows = responseBlocks.find(
+    (block) => block.type === "categorized_place_rows"
+  );
+  if (categorizedRows && categorizedRows.type === "categorized_place_rows") {
+    return {
+      primaryDomain: "restaurants",
+      destination,
+      startDate,
+      endDate,
+      focus: "restaurants",
+      categoryKeys: categorizedRows.sections.map((section) => section.key),
+      poiIds: categorizedRows.sections.flatMap((section) => section.poiIds),
+      options: categorizedRows.sections.map((section) => ({
+        domain: "restaurants",
+        label: section.title,
+        prompt: `Show me ${section.title.toLowerCase()} restaurants`,
+        categoryKey: section.key
+      }))
+    };
+  }
+
+  const placeRows = responseBlocks.filter((block) => block.type === "place_card_row");
+  if (resolution.stayMode) {
+    return {
+      primaryDomain: "stays",
+      destination,
+      startDate,
+      endDate,
+      focus: "hotels",
+      categoryKeys: [],
+      poiIds: placeRows.flatMap((block) => block.poiIds),
+      options: [{ domain: "stays", label: "Stay options", prompt: "Show me stay options" }]
+    };
+  }
+
+  if (resolution.questionFocus === "restaurants" || resolution.questionFocus === "seafood") {
+    return {
+      primaryDomain: "restaurants",
+      destination,
+      startDate,
+      endDate,
+      focus: "restaurants",
+      categoryKeys: [],
+      poiIds: placeRows.flatMap((block) => block.poiIds),
+      options: promptOptions
+    };
+  }
+
+  const uniqueDomains = Array.from(new Set([...textDomains, ...promptOptions.map((option) => option.domain)]));
+  if (uniqueDomains.length === 0) {
+    return null;
+  }
+
+  return {
+    primaryDomain: uniqueDomains.length === 1 ? uniqueDomains[0] : undefined,
+    destination,
+    startDate,
+    endDate,
+    focus: resolution.questionFocus,
+    categoryKeys: [],
+    poiIds: placeRows.flatMap((block) => block.poiIds),
+    options: promptOptions
+  };
+}
+
 // ─── Smart default chips ──────────────────────────────────────────────────────
 
 function buildMissingDestinationChips(): Array<{ label: string; prompt: string; slotAction?: { field: string; value: string | number } }> {
@@ -1629,6 +1983,14 @@ export function buildResponseBlocks(params: {
       text: narrative.leadText
     }
   ];
+
+  if (planningContext?.workerProgress?.length) {
+    blocks.push({
+      type: "worker_progress",
+      title: resolution.stayMode ? "Scouting options" : "Working through your trip",
+      steps: planningContext.workerProgress
+    });
+  }
 
   // ── MISSING INFO: short circuit, return chips only ──────────────────────────
   if (mode === "missing_info") {
@@ -1748,21 +2110,11 @@ export function buildResponseBlocks(params: {
       const showRestaurants = isFoodFocus || discoveryFocus === "general";
       const showAttractions = isAttractionFocus || discoveryFocus === "general";
 
-      if (showRestaurants) {
-        const rankedRestaurants = sortPois(research.grouped.restaurants, resolution, "restaurant")
-          .filter((poi) => isCanonicalPoiId(session.poiCatalog, poi.id));
-
-        if (rankedRestaurants.length > 0) {
-          blocks.push({
-            type: "place_card_row",
-            title: discoveryFocus === "seafood"
-              ? (dest ? `Seafood spots in ${dest}` : "Seafood spots")
-              : (dest ? `Top restaurants in ${dest}` : "Top restaurants"),
-            poiIds: rankedRestaurants.slice(0, 4).map((p) => p.id),
-            display: "carousel"
-          });
-        }
-      }
+      const rankedRestaurants = showRestaurants
+        ? sortPois(research.grouped.restaurants, resolution, "restaurant").filter((poi) =>
+            isCanonicalPoiId(session.poiCatalog, poi.id)
+          )
+        : [];
 
       if (showAttractions) {
         const rankedAttractions = sortPois(research.grouped.attractions, resolution, "attraction")
@@ -1787,12 +2139,12 @@ export function buildResponseBlocks(params: {
 
       // poi_story_list: use focus-appropriate POIs only
       const storySource = isFoodFocus
-        ? sortPois(research.grouped.restaurants, resolution, "restaurant")
+        ? rankedRestaurants
         : isAttractionFocus
           ? sortPois(research.grouped.attractions, resolution, "attraction")
           : [
               ...sortPois(research.grouped.attractions, resolution, "attraction"),
-              ...sortPois(research.grouped.restaurants, resolution, "restaurant")
+              ...rankedRestaurants
             ];
 
       const storyCandidates = Array.from(
@@ -1821,6 +2173,43 @@ export function buildResponseBlocks(params: {
             body: buildPoiStoryBody(poi, discoveryFocus, dest)
           }))
         });
+      }
+
+      if (isFoodFocus && rankedRestaurants.length > 0) {
+        const filteredRestaurants = resolution.restaurantCategory
+          ? rankedRestaurants.filter(
+              (poi) =>
+                classifyRestaurantCategory(poi, dest) ===
+                resolution.restaurantCategory
+            )
+          : rankedRestaurants;
+        const sections = bucketRestaurants(filteredRestaurants, dest)
+          .filter((section) =>
+            resolution.restaurantCategory
+              ? section.key === resolution.restaurantCategory
+              : true
+          )
+          .map((section) => ({
+            key: section.key,
+            title: section.title,
+            poiIds: section.poiIds,
+            display: "carousel" as const
+          }));
+
+        if (sections.length > 0) {
+          blocks.push({
+            type: "categorized_place_rows",
+            title:
+              discoveryFocus === "seafood"
+                ? dest
+                  ? `Seafood picks in ${dest}`
+                  : "Seafood picks"
+                : dest
+                  ? `Restaurants in ${dest}`
+                  : "Restaurants",
+            sections
+          });
+        }
       }
     }
 
@@ -1869,7 +2258,10 @@ export function buildResponseBlocks(params: {
         ? narrative.promptChips
         : buildDiscoveryChips(resolution.destination || resolution.destinations[0] || "", discoveryFocus);
 
-    if (discoveryChips.length > 0) {
+    const hasCategorizedRows = blocks.some(
+      (block) => block.type === "categorized_place_rows"
+    );
+    if (discoveryChips.length > 0 && !hasCategorizedRows) {
       blocks.push({ type: "assistant_prompt_chips", title: "Explore more", prompts: discoveryChips });
     }
 
@@ -2056,7 +2448,8 @@ export function updateSessionMemory(
   session: SessionSnapshot,
   resolution: TurnResolution,
   assistantReply: string,
-  plan?: PlanSnapshot
+  plan?: PlanSnapshot,
+  pendingFollowUp?: PendingFollowUpContext | null
 ): SessionSnapshot["memory"] {
   const destinations = new Set(session.memory.destinationsDiscussed);
   for (const destination of resolution.destinations) {
@@ -2083,6 +2476,7 @@ export function updateSessionMemory(
       ...session.memory.dateContext,
       ...resolution.dateContext
     },
+    pendingFollowUp: pendingFollowUp ?? null,
     lastPlanVersion: plan?.version || session.memory.lastPlanVersion,
     preferences: {
       ...session.memory.preferences,

@@ -5,14 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.json",
+    "build": "npm --prefix ../packages/contracts run build && tsc -p tsconfig.json",
     "start": "node dist/index.js",
-    "typecheck": "npm run build -w @roameo/contracts && tsc -p tsconfig.json --noEmit",
+    "typecheck": "npm --prefix ../packages/contracts run build && tsc -p tsconfig.json --noEmit",
     "test": "npm run build && sh -c 'files=$(find dist -name \"*.test.js\" -type f); [ -n \"$files\" ] && node --test $files || echo \"No tests found\"'"
   },
   "dependencies": {
     "@google/genai": "^1.47.0",
-    "@roameo/contracts": "^0.1.0",
+    "@roameo/contracts": "file:../packages/contracts",
     "@supabase/supabase-js": "^2.101.1",
     "bullmq": "^5.58.5",
     "cors": "^2.8.5",

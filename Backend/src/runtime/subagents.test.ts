@@ -21,6 +21,7 @@ function makeSession(): SessionSnapshot {
       destinationsDiscussed: [],
       acceptedDecisions: [],
       lastPlanVersion: 0,
+      pendingFollowUp: null,
       dateContext: {
         flexibility: "open_ended",
         derivedFrom: "none",
@@ -414,7 +415,76 @@ test("buildResponseBlocks emits discovery stories from canonical POIs", () => {
   assert.ok(blocks.some((block) => block.type === "poi_story_list"));
   const row = blocks.find((block) => block.type === "place_card_row");
   assert.ok(row && row.type === "place_card_row");
-  assert.deepEqual(row.poiIds, ["poi-1", "poi-2"]);
+  assert.deepEqual(row.poiIds, ["poi-1"]);
+});
+
+test("buildResponseBlocks emits categorized restaurant rows for food discovery", () => {
+  const session = makeSession();
+  session.poiCatalog.items["poi-3"] = {
+    id: "poi-3",
+    name: "Araku Coffee House",
+    type: "restaurant",
+    lat: 18.32,
+    lng: 82.87,
+    openingHours: [],
+    source: "google_places",
+    tags: ["Araku", "famous local restaurant in Araku"],
+    rating: 4.6,
+    priceLevel: 2
+  };
+  session.poiCatalog.items["poi-4"] = {
+    id: "poi-4",
+    name: "Sai Pure Veg",
+    type: "restaurant",
+    lat: 18.33,
+    lng: 82.88,
+    openingHours: [],
+    source: "google_places",
+    tags: ["Araku", "vegetarian restaurant in Araku"],
+    rating: 4.2,
+    priceLevel: 1
+  };
+  const blocks = buildResponseBlocks({
+    session,
+    resolution: {
+      intent: "search_places",
+      destination: "Araku",
+      destinations: ["Araku"],
+      styles: [],
+      questionFocus: "restaurants",
+      dateContext: {
+        flexibility: "open_ended",
+        derivedFrom: "none",
+        advisoryItems: []
+      }
+    },
+    narrative: {
+      introTitle: "Araku food picks are ready",
+      introBody: "I pulled together a better spread than one generic restaurant row.",
+      leadText: "Here are the strongest food categories to explore.",
+      promptChips: [],
+      clarifyingQuestions: []
+    },
+    research: {
+      destinations: ["Araku"],
+      focus: "restaurants",
+      catalog: session.poiCatalog,
+      grouped: {
+        stays: [],
+        restaurants: [
+          session.poiCatalog.items["poi-2"],
+          session.poiCatalog.items["poi-3"],
+          session.poiCatalog.items["poi-4"]
+        ],
+        attractions: []
+      },
+      facts: []
+    }
+  });
+
+  const grouped = blocks.find((block) => block.type === "categorized_place_rows");
+  assert.ok(grouped && grouped.type === "categorized_place_rows");
+  assert.ok(grouped.sections.length >= 2);
 });
 
 test("buildResponseBlocks emits stay and date-aware blocks for stay mode", () => {
@@ -492,4 +562,102 @@ test("buildResponseBlocks emits stay and date-aware blocks for stay mode", () =>
   assert.ok(blocks.some((block) => block.type === "date_advisory"));
   assert.ok(blocks.some((block) => block.type === "event_window_summary"));
   assert.ok(blocks.some((block) => block.type === "stay_recommendation_list"));
+});
+
+test("resolveTurnIntent resolves yes against pending stay follow-up context", async () => {
+  const session = makeSession();
+  session.memory.pendingFollowUp = {
+    primaryDomain: "stays",
+    destination: "Araku",
+    startDate: "2026-07-02",
+    endDate: "2026-07-03",
+    categoryKeys: [],
+    poiIds: ["poi-1"],
+    options: [{ domain: "stays", label: "Stay options", prompt: "Show me stay options" }]
+  };
+
+  const providerService = {
+    generateObject: async () => ({
+      intent: "question",
+      destinations: [],
+      styles: []
+    })
+  } as any;
+
+  const resolution = await resolveTurnIntent(providerService, {} as any, session, "yes");
+  assert.equal(resolution.intent, "search_places");
+  assert.equal(resolution.stayMode, true);
+  assert.equal(resolution.destination, "Araku");
+});
+
+test("resolveTurnIntent resolves yes against pending restaurant follow-up context", async () => {
+  const session = makeSession();
+  session.memory.pendingFollowUp = {
+    primaryDomain: "restaurants",
+    destination: "Goa",
+    poiIds: ["poi-2"],
+    categoryKeys: ["famous", "budget_friendly"],
+    options: [{ domain: "restaurants", label: "Restaurants", prompt: "Show me restaurants" }]
+  };
+
+  const providerService = {
+    generateObject: async () => ({
+      intent: "question",
+      destinations: [],
+      styles: []
+    })
+  } as any;
+
+  const resolution = await resolveTurnIntent(providerService, {} as any, session, "sure");
+  assert.equal(resolution.intent, "search_places");
+  assert.equal(resolution.questionFocus, "restaurants");
+  assert.equal(resolution.destination, "Goa");
+});
+
+test("resolveTurnIntent refines restaurant category from follow-up text", async () => {
+  const session = makeSession();
+  session.memory.pendingFollowUp = {
+    primaryDomain: "restaurants",
+    destination: "Goa",
+    poiIds: ["poi-2"],
+    categoryKeys: ["famous", "budget_friendly", "vegetarian", "non_vegetarian", "premium"],
+    options: [{ domain: "restaurants", label: "Restaurants", prompt: "Show me restaurants" }]
+  };
+
+  const providerService = {
+    generateObject: async () => ({
+      intent: "question",
+      destinations: [],
+      styles: []
+    })
+  } as any;
+
+  const resolution = await resolveTurnIntent(providerService, {} as any, session, "show me cheaper ones");
+  assert.equal(resolution.intent, "search_places");
+  assert.equal(resolution.restaurantCategory, "budget_friendly");
+});
+
+test("resolveTurnIntent asks to clarify ambiguous follow-up branches", async () => {
+  const session = makeSession();
+  session.memory.pendingFollowUp = {
+    destination: "Araku",
+    categoryKeys: [],
+    poiIds: [],
+    options: [
+      { domain: "stays", label: "Stay options", prompt: "Show me stay options" },
+      { domain: "restaurants", label: "Restaurants", prompt: "Show me restaurants" }
+    ]
+  };
+
+  const providerService = {
+    generateObject: async () => ({
+      intent: "question",
+      destinations: [],
+      styles: []
+    })
+  } as any;
+
+  const resolution = await resolveTurnIntent(providerService, {} as any, session, "yes");
+  assert.equal(resolution.intent, "question");
+  assert.equal(resolution.questionFocus, "followup_clarify");
 });

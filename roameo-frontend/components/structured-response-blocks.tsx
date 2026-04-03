@@ -60,6 +60,10 @@ type PromptChip = Extract<
   AssistantResponseBlock,
   { type: "assistant_prompt_chips" }
 >["prompts"][number];
+type CategorizedPlaceSection = Extract<
+  AssistantResponseBlock,
+  { type: "categorized_place_rows" }
+>["sections"][number];
 type ItinerarySummaryDay = Extract<
   AssistantResponseBlock,
   { type: "itinerary_summary" }
@@ -532,6 +536,43 @@ export function StructuredResponseBlocks({
                 </div>
               ) : null}
               <div className="-mx-1">{row}</div>
+            </div>
+          );
+        }
+
+        if (block.type === "categorized_place_rows") {
+          return (
+            <div key={`${block.type}-${index}`} className="space-y-4">
+              {block.title ? (
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  {block.title}
+                </div>
+              ) : null}
+              <div className="space-y-4">
+                {block.sections.map((section: CategorizedPlaceSection) => {
+                  const row = cardRow(
+                    section.poiIds,
+                    poiMap,
+                    savedIds,
+                    itineraryPoiIds,
+                    onToggleSave,
+                    onAddPoi,
+                    onReplan
+                  );
+                  if (!row) {
+                    return null;
+                  }
+
+                  return (
+                    <div key={section.key} className="space-y-2">
+                      <div className="text-sm font-semibold text-slate-900">
+                        {section.title}
+                      </div>
+                      <div className="-mx-1">{row}</div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           );
         }

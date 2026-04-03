@@ -109,11 +109,24 @@ const discoveryQueries: Record<
   },
   seafood: {
     // Type-filtered to `restaurant` only — no attractions here
-    restaurant: ["best seafood restaurant", "local seafood dining", "fish restaurant"]
+    restaurant: [
+      "best seafood restaurant",
+      "local seafood dining",
+      "fish restaurant",
+      "grill seafood restaurant",
+      "coastal seafood restaurant"
+    ]
   },
   restaurants: {
     // Type-filtered to `restaurant` only — prevents viewpoints bleeding in
-    restaurant: ["best restaurant", "popular local dining", "top rated restaurant"]
+    restaurant: [
+      "famous local restaurant",
+      "budget friendly restaurant",
+      "vegetarian restaurant",
+      "non veg restaurant",
+      "premium restaurant",
+      "top rated restaurant"
+    ]
   },
   attractions: {
     // Type-filtered to `tourist_attraction` only
@@ -293,7 +306,7 @@ export class TravelToolsService {
     const typeFilter = GOOGLE_PLACE_TYPE_FILTER[sanitizePlaceType(type)];
 
     const results = await Promise.all(
-      queries.slice(0, 3).map(async (query) => {
+      queries.slice(0, type === "restaurant" ? 6 : 3).map(async (query) => {
         const url = new URL(`${GOOGLE_PLACES_BASE}/textsearch/json`);
         url.searchParams.set("query", query);
         url.searchParams.set("type", typeFilter);
@@ -343,7 +356,7 @@ export class TravelToolsService {
       new Map(
         results.flat().map((poi) => [poi.id, poi] as const)
       ).values()
-    ).slice(0, 8);
+    ).slice(0, type === "restaurant" ? 18 : 8);
   }
 
   async getPlaceDetails(placeId: string): Promise<Partial<Poi>> {

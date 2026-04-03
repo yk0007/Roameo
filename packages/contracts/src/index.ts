@@ -99,6 +99,39 @@ export const dateContextSchema = z.object({
 });
 export type DateContext = z.infer<typeof dateContextSchema>;
 
+export const followUpDomainSchema = z.enum([
+  "stays",
+  "restaurants",
+  "attractions",
+  "transport",
+  "activities",
+  "dates",
+  "events"
+]);
+export type FollowUpDomain = z.infer<typeof followUpDomainSchema>;
+
+export const followUpOptionSchema = z.object({
+  domain: followUpDomainSchema,
+  label: z.string(),
+  prompt: z.string(),
+  categoryKey: z.string().optional()
+});
+export type FollowUpOption = z.infer<typeof followUpOptionSchema>;
+
+export const pendingFollowUpContextSchema = z.object({
+  primaryDomain: followUpDomainSchema.optional(),
+  destination: z.string().optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  focus: z.string().optional(),
+  categoryKey: z.string().optional(),
+  categoryKeys: z.array(z.string()).default([]),
+  poiIds: z.array(z.string()).default([]),
+  options: z.array(followUpOptionSchema).default([]),
+  sourceMessageId: z.string().optional()
+});
+export type PendingFollowUpContext = z.infer<typeof pendingFollowUpContextSchema>;
+
 export const planningStateSchema = z.object({
   status: planningStateStatusSchema.default("ready"),
   stage: planningStateStageSchema.default("ready"),
@@ -114,6 +147,7 @@ export const sessionMemorySchema = z.object({
   destinationsDiscussed: z.array(z.string()).default([]),
   acceptedDecisions: z.array(z.string()).default([]),
   lastPlanVersion: z.number().default(0),
+  pendingFollowUp: pendingFollowUpContextSchema.nullable().default(null),
   dateContext: dateContextSchema.default({
     flexibility: "open_ended",
     derivedFrom: "none",
@@ -365,6 +399,18 @@ export const assistantResponseBlockSchema = z.discriminatedUnion("type", [
     display: z.enum(["inline", "carousel"]).default("inline")
   }),
   z.object({
+    type: z.literal("categorized_place_rows"),
+    title: z.string().optional(),
+    sections: z.array(
+      z.object({
+        key: z.string(),
+        title: z.string(),
+        poiIds: z.array(z.string()).default([]),
+        display: z.enum(["inline", "carousel"]).default("carousel")
+      })
+    ).min(1)
+  }),
+  z.object({
     type: z.literal("recommendation_cards"),
     title: z.string().optional(),
     poiIds: z.array(z.string()).default([])
@@ -476,7 +522,8 @@ export const conversationMessageMetaSchema = z
   .object({
     provider: providerSchema.optional(),
     turnId: z.string().optional(),
-    responseBlocks: z.array(assistantResponseBlockSchema).optional()
+    responseBlocks: z.array(assistantResponseBlockSchema).optional(),
+    followUpContext: pendingFollowUpContextSchema.optional()
   })
   .catchall(z.any());
 export type ConversationMessageMeta = z.infer<typeof conversationMessageMetaSchema>;

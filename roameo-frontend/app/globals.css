@@ -37,10 +37,7 @@
     --sidebar-accent-foreground: #8d4f11;
     --sidebar-border: #eadac7;
     --sidebar-ring: rgba(187, 106, 28, 0.22);
-    --font-inter: ui-sans-serif, system-ui, sans-serif;
-    --font-roboto-mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-    --font-pacifico: "Segoe Script", "Brush Script MT", cursive;
-    --font-prompt: ui-sans-serif, system-ui, sans-serif;
+    --font-inter: "Inter";
   }
 
   .dark {
@@ -81,10 +78,7 @@
     --sidebar-border: #334155;
     --sidebar-ring: rgba(8, 145, 178, 0.5);
     /* Updated font variables to use Inter instead of Source Sans Pro */
-    --font-inter: ui-sans-serif, system-ui, sans-serif;
-    --font-roboto-mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-    --font-pacifico: "Segoe Script", "Brush Script MT", cursive;
-    --font-prompt: ui-sans-serif, system-ui, sans-serif;
+    --font-inter: "Inter";
   }
 
   @theme inline {
@@ -124,10 +118,7 @@
     --sidebar-accent-foreground: #8d4f11;
     --sidebar-border: #d1d5db;
     --sidebar-ring: rgba(8, 145, 178, 0.5);
-    --font-inter: ui-sans-serif, system-ui, sans-serif;
-    --font-roboto-mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-    --font-pacifico: "Segoe Script", "Brush Script MT", cursive;
-    --font-prompt: ui-sans-serif, system-ui, sans-serif;
+    --font-inter: "Inter";
     --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
     --font-serif: ui-serif, Georgia, serif;
   }
@@ -148,14 +139,14 @@
   .font-roboto-mono *,
   span.font-roboto-mono,
   div.font-roboto-mono * {
-    font-family: var(--font-roboto-mono) !important;
+    font-family: 'Roboto Mono', monospace !important;
   }
 
   .font-pacifico,
   .font-pacifico *,
   p.font-pacifico,
   div.font-pacifico * {
-    font-family: var(--font-pacifico) !important;
+    font-family: 'Pacifico', cursive !important;
   }
 
   .font-prompt,
@@ -163,7 +154,7 @@
   span.font-prompt,
   h2.font-prompt,
   div.font-prompt * {
-    font-family: var(--font-prompt) !important;
+    font-family: 'Prompt', sans-serif !important;
   }
 
   /* Added smooth scrolling behavior globally */

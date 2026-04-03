@@ -23,6 +23,7 @@ test("session snapshot fills canonical defaults", () => {
   assert.equal(snapshot.memory.preferences.currency, "INR");
   assert.equal(snapshot.memory.planningState.stage, "ready");
   assert.equal(snapshot.memory.dateContext.flexibility, "open_ended");
+  assert.equal(snapshot.memory.pendingFollowUp, null);
 });
 
 test("plan snapshot keeps schema version and day structure", () => {
@@ -245,6 +246,18 @@ test("assistant response blocks accept capability and discovery presentation blo
       }
     ]
   });
+  const categorizedRows = assistantResponseBlockSchema.parse({
+    type: "categorized_place_rows",
+    title: "Restaurants in Araku",
+    sections: [
+      {
+        key: "famous",
+        title: "Famous",
+        poiIds: ["poi-1", "poi-2"],
+        display: "carousel"
+      }
+    ]
+  });
 
   assert.equal(capabilities.type, "capabilities_overview");
   assert.equal(stories.type, "poi_story_list");
@@ -253,6 +266,47 @@ test("assistant response blocks accept capability and discovery presentation blo
   assert.equal(stayList.type, "stay_recommendation_list");
   assert.equal(dateAdvisory.type, "date_advisory");
   assert.equal(eventSummary.type, "event_window_summary");
+  assert.equal(categorizedRows.type, "categorized_place_rows");
+});
+
+test("conversation message meta accepts follow-up context", () => {
+  const snapshot = sessionSnapshotSchema.parse({
+    id: "session-1",
+    providerSettings: { provider: "gemini", runMode: "balanced", keySource: "platform" },
+    memory: {},
+    messages: [
+      {
+        id: "message-1",
+        sessionId: "session-1",
+        role: "assistant",
+        content: "Want stay options?",
+        createdAt: "2026-04-01T00:00:00.000Z",
+        meta: {
+          followUpContext: {
+            primaryDomain: "stays",
+            destination: "Araku",
+            startDate: "2026-07-02",
+            endDate: "2026-07-03",
+            poiIds: ["poi-1"],
+            options: [
+              {
+                domain: "stays",
+                label: "Stay options",
+                prompt: "Show me stay options"
+              }
+            ]
+          }
+        }
+      }
+    ],
+    createdAt: "2026-04-01T00:00:00.000Z",
+    updatedAt: "2026-04-01T00:00:00.000Z"
+  });
+
+  assert.equal(
+    snapshot.messages[0].meta.followUpContext?.primaryDomain,
+    "stays"
+  );
 });
 
 test("assistant response blocks fail fast on invalid itinerary template payloads", () => {

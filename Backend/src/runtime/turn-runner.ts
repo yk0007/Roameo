@@ -18,6 +18,7 @@ import {
   answerConversationally,
   buildResponseBlocks,
   criticizeAndRefinePlan,
+  derivePendingFollowUpContext,
   enrichPlanLogistics,
   type PlanningContext,
   researchDestinations,
@@ -398,6 +399,13 @@ export class TurnRunner {
         plan: latestPlan,
         planningContext
       });
+      const followUpContext = derivePendingFollowUpContext({
+        resolution,
+        narrative,
+        responseBlocks,
+        assistantReply: reply,
+        plan: latestPlan
+      });
 
       const assistantMessageId = randomUUID();
       const chunks = chunkText(reply);
@@ -426,7 +434,8 @@ export class TurnRunner {
         meta: {
           provider: resolvedProvider.provider,
           turnId,
-          responseBlocks
+          responseBlocks,
+          followUpContext: followUpContext || undefined
         }
       };
       await this.repository.saveMessage(assistantMessage);
@@ -439,7 +448,8 @@ export class TurnRunner {
         nextSession,
         resolution,
         reply,
-        latestPlan
+        latestPlan,
+        followUpContext
       );
       nextMemory.planningState = createPlanningState(
         nextSession.memory.planningState,
