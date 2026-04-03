@@ -2,8 +2,11 @@
 
 import { useState, useCallback, memo, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
+import { format, parseISO } from "date-fns"
+import type { DateFlexibility } from "@roameo/contracts"
 import { supabase } from "@/lib/supabase/client"
-import { ChevronDown, MapPin, Calendar, Users, LogOut, Loader2, IndianRupee } from "lucide-react"
+import { BACKEND_URL } from "@/lib/types"
+import { ChevronDown, MapPin, Calendar, Users, LogOut, Loader2, IndianRupee, User, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -14,6 +17,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import Link from "next/link"
+import { TripDateDialog } from "./trip-date-dialog"
+import { TripDestinationDialog } from "./trip-destination-dialog"
+import { TripTravelersDialog } from "./trip-travelers-dialog"
+import { TripBudgetDialog } from "./trip-budget-dialog"
 
 interface Trip {
   id: string
@@ -21,6 +28,9 @@ interface Trip {
   origin: string
   destination: string
   destinations?: string[]
+  startDate?: string
+  endDate?: string
+  dateFlexibility?: DateFlexibility
   duration: string
   travelers: string
   budget: string
@@ -67,6 +77,10 @@ export const TopNavigation = memo(function TopNavigation({
 }: TopNavigationProps) {
   const [editingField, setEditingField] = useState<string | null>(null)
   const [recentlySavedField, setRecentlySavedField] = useState<string | null>(null)
+  const [isDateDialogOpen, setIsDateDialogOpen] = useState(false)
+  const [isDestinationDialogOpen, setIsDestinationDialogOpen] = useState(false)
+  const [isTravelersDialogOpen, setIsTravelersDialogOpen] = useState(false)
+  const [isBudgetDialogOpen, setIsBudgetDialogOpen] = useState(false)
   const [tempValues, setTempValues] = useState({
     title: trip.title,
     origin: trip.origin,
@@ -77,6 +91,7 @@ export const TopNavigation = memo(function TopNavigation({
   })
   const router = useRouter()
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const attemptedOriginAutofillRef = useRef<string | null>(null)
 
   const handleSignOut = useCallback(async () => {
     try {
@@ -106,6 +121,22 @@ export const TopNavigation = memo(function TopNavigation({
   }, [router])
 
   const handleEdit = useCallback((field: string) => {
+    if (field === "duration") {
+      setIsDateDialogOpen(true)
+      return
+    }
+    if (field === "destination") {
+      setIsDestinationDialogOpen(true)
+      return
+    }
+    if (field === "travelers") {
+      setIsTravelersDialogOpen(true)
+      return
+    }
+    if (field === "budget") {
+      setIsBudgetDialogOpen(true)
+      return
+    }
     setEditingField(field)
     setTempValues({
       title: trip.title,
@@ -162,22 +193,105 @@ export const TopNavigation = memo(function TopNavigation({
     return () => clearTimeout(timer)
   }, [recentlySavedField])
 
+  useEffect(() => {
+    if (!trip.id || trip.origin || typeof window === "undefined" || !navigator.geolocation) {
+      return
+    }
+    if (attemptedOriginAutofillRef.current === trip.id) {
+      return
+    }
+
+    attemptedOriginAutofillRef.current = trip.id
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const query = new URLSearchParams({
+            lat: String(position.coords.latitude),
+            lng: String(position.coords.longitude)
+          })
+          const response = await fetch(
+            `${BACKEND_URL}/api/maps/reverse-geocode?${query.toString()}`
+          )
+          if (!response.ok) {
+            return
+          }
+
+          const payload = (await response.json()) as { label?: string; formatted?: string }
+          const origin = (payload.label || payload.formatted || "").trim()
+          if (!origin) {
+            return
+          }
+
+          onTripUpdate({
+            ...trip,
+            origin
+          })
+        } catch {
+          // Leave origin editable and empty if autofill fails.
+        }
+      },
+      () => {
+        // Permission denied or unavailable; keep origin editable.
+      },
+      {
+        maximumAge: 300000,
+        timeout: 8000
+      }
+    )
+  }, [onTripUpdate, trip])
+
+  const handleDateApply = useCallback(
+    ({
+      startDate,
+      endDate,
+      totalDays,
+      dateFlexibility
+    }: {
+      startDate: string
+      endDate: string
+      totalDays: number
+      dateFlexibility?: DateFlexibility
+    }) => {
+      onTripUpdate({
+        ...trip,
+        startDate,
+        endDate,
+        dateFlexibility,
+        duration: `${totalDays} days`
+      })
+      setRecentlySavedField("duration")
+    },
+    [onTripUpdate, trip]
+  )
+
+  const durationLabel = formatDateChip(
+    trip.startDate,
+    trip.endDate,
+    trip.duration,
+    trip.dateFlexibility
+  )
+  const travelersLabel = formatTravelersChip(trip.travelers)
+
   return (
-    <div ref={containerRef} className="relative z-20 grid h-[64px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-5 bg-transparent px-7">
-      <div className="flex min-w-0 items-center gap-5">
+    <>
+    <div
+      ref={containerRef}
+      className="relative z-20 flex h-[60px] flex-row items-center justify-between gap-x-3 bg-transparent px-5 py-2"
+    >
+      <div className="flex shrink-0 items-center gap-3 max-w-[220px]">
         <button
           onClick={handleLogoClick}
-          className="flex items-center gap-3 rounded-full"
+          className="flex shrink-0 items-center gap-3 rounded-full"
         >
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[linear-gradient(135deg,#000000_0%,#374151_100%)] shadow-[0_2px_8px_rgba(0,0,0,0.2)]">
             <div className="h-2 w-2 rounded-full bg-white" />
           </div>
-          <span className="text-[17px] font-bold tracking-[-0.04em] text-black">roameo</span>
+          <span className="hidden text-[17px] font-bold tracking-[-0.04em] text-black sm:block">roameo</span>
         </button>
 
         <div className="h-5 w-px bg-[#e5e7eb]/80" />
 
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           {editingField === "title" ? (
             <div className="flex items-center gap-2 rounded-full border border-[#d1d5db] bg-[#f3f4f6] px-2 py-1 transition-all duration-200 ease-out">
               <Input
@@ -202,14 +316,35 @@ export const TopNavigation = memo(function TopNavigation({
               onClick={() => handleEdit("title")}
             >
               <span className="truncate">{trip.title || "My Trip"}</span>
-              <ChevronDown className="h-4 w-4 text-[#9ca3af]" />
+              <ChevronDown className="h-4 w-4 shrink-0 text-[#9ca3af]" />
             </Button>
           )}
         </div>
       </div>
 
-      <div className="flex items-center justify-center gap-4">
-        <div className="flex items-center rounded-full border border-[rgba(255,255,255,0.8)] bg-[rgba(255,255,255,0.72)] px-2 py-1.5 shadow-[0_4px_16px_rgba(0,0,0,0.12)] backdrop-blur-xl">
+      <div className="flex shrink-0 items-center justify-end sm:hidden">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full bg-slate-100 hover:bg-slate-200">
+              <User className="h-[18px] w-[18px] text-slate-700" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-[200px] rounded-xl border-black/5 bg-white p-2 shadow-xl">
+            <DropdownMenuItem className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-900">
+              <Settings className="h-4 w-4 text-slate-400" />
+              Settings
+            </DropdownMenuItem>
+            <div className="my-1 border-t border-slate-100" />
+            <DropdownMenuItem className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 hover:text-red-700">
+              <LogOut className="h-4 w-4" />
+              Logout
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <div className="order-last flex min-w-0 w-full items-center justify-start gap-3 overflow-x-auto sm:order-none sm:w-auto sm:flex-1 xl:justify-center [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden py-1">
+        <div className="flex min-w-0 flex-none items-center rounded-[28px] border border-[rgba(255,255,255,0.8)] bg-[rgba(255,255,255,0.72)] px-2 py-1.5 shadow-[0_6px_20px_rgba(0,0,0,0.14),0_1px_4px_rgba(0,0,0,0.06)] backdrop-blur-xl">
           <div className={metaChipClassName(editingField === "origin", recentlySavedField === "origin")}>
             <MapPin className="h-3.5 w-3.5" />
           {editingField === "origin" ? (
@@ -230,14 +365,14 @@ export const TopNavigation = memo(function TopNavigation({
           ) : (
               <span
               onClick={() => handleEdit("origin")}
-                className="cursor-pointer"
+                className="max-w-[220px] cursor-pointer truncate"
             >
               {trip.origin || "Origin"}
             </span>
           )}
         </div>
 
-          <div className="h-4 w-px bg-[#d1d5db]/70" />
+          <div className="my-1 h-4 w-px bg-[#d1d5db]/70" />
 
           <div className={metaChipClassName(editingField === "destination", recentlySavedField === "destination")}>
             <MapPin className="h-3.5 w-3.5" />
@@ -259,7 +394,7 @@ export const TopNavigation = memo(function TopNavigation({
           ) : (
               <span
               onClick={() => handleEdit("destination")}
-                className="cursor-pointer"
+                className="max-w-[220px] cursor-pointer truncate"
             >
               {trip.destinations && trip.destinations.length > 1 
                 ? `${trip.destinations.length} destinations` 
@@ -268,7 +403,7 @@ export const TopNavigation = memo(function TopNavigation({
           )}
         </div>
 
-          <div className="h-4 w-px bg-[#d1d5db]/70" />
+          <div className="my-1 h-4 w-px bg-[#d1d5db]/70" />
 
           <div className={metaChipClassName(editingField === "duration", recentlySavedField === "duration")}>
             <Calendar className="h-3.5 w-3.5" />
@@ -296,12 +431,12 @@ export const TopNavigation = memo(function TopNavigation({
               onClick={() => handleEdit("duration")}
                 className="cursor-pointer"
             >
-              {trip.duration || "0 days"}
+              {durationLabel}
             </span>
           )}
         </div>
 
-          <div className="h-4 w-px bg-[#d1d5db]/70" />
+          <div className="my-1 h-4 w-px bg-[#d1d5db]/70" />
 
           <div className={metaChipClassName(editingField === "travelers", recentlySavedField === "travelers")}>
             <Users className="h-3.5 w-3.5" />
@@ -329,42 +464,21 @@ export const TopNavigation = memo(function TopNavigation({
               onClick={() => handleEdit("travelers")}
                 className="cursor-pointer"
             >
-                {trip.travelers?.replace(" travelers", "") || "1"}
+                {travelersLabel}
             </span>
           )}
         </div>
 
-          <div className="h-4 w-px bg-[#d1d5db]/70" />
+          <div className="my-1 h-4 w-px bg-[#d1d5db]/70" />
 
           <div className={metaChipClassName(editingField === "budget", recentlySavedField === "budget")}>
             <IndianRupee className="h-3.5 w-3.5" />
-          {editingField === "budget" ? (
-              <div className="flex items-center gap-2">
-              <Input
-                type="number"
-                placeholder="Budget"
-                value={parseInt((tempValues.budget || "").replace(/[^0-9]/g, "") || "", 10) as any}
-                onChange={(e) => {
-                  const v = e.target.value
-                  setTempValues({ ...tempValues, budget: v })
-                }}
-                  className="h-6 w-[78px] border-0 bg-transparent px-0 text-center text-[12px] text-[#111827] placeholder:text-[#9ca3af] shadow-none focus-visible:ring-0"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleSave("budget")
-                  if (e.key === "Escape") handleCancel()
-                }}
-                autoFocus
-              />
-                <Button size="sm" onClick={() => handleSave("budget")} className="h-6 shrink-0 rounded-full bg-black px-2.5 text-[10px] text-white hover:bg-black/90">OK</Button>
-            </div>
-          ) : (
               <span
               onClick={() => handleEdit("budget")}
                 className="cursor-pointer"
             >
-              Budget
+              {trip.budget || "Budget"}
             </span>
-          )}
         </div>
         </div>
 
@@ -383,7 +497,7 @@ export const TopNavigation = memo(function TopNavigation({
         )}
       </div>
 
-      <div className="flex items-center justify-end">
+      <div className="hidden shrink-0 items-center justify-end sm:flex sm:ml-auto">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -432,5 +546,87 @@ export const TopNavigation = memo(function TopNavigation({
         </DropdownMenu>
       </div>
     </div>
+    <TripDateDialog
+      open={isDateDialogOpen}
+      onOpenChange={setIsDateDialogOpen}
+      startDate={trip.startDate}
+      endDate={trip.endDate}
+      dateFlexibility={trip.dateFlexibility}
+      onApply={handleDateApply}
+    />
+    <TripDestinationDialog
+      open={isDestinationDialogOpen}
+      onOpenChange={setIsDestinationDialogOpen}
+      destination={trip.destination}
+      destinations={trip.destinations}
+      onApply={({ destination, destinations }) => {
+        onTripUpdate({
+          ...trip,
+          destination,
+          destinations
+        })
+        setRecentlySavedField("destination")
+      }}
+    />
+    <TripTravelersDialog
+      open={isTravelersDialogOpen}
+      onOpenChange={setIsTravelersDialogOpen}
+      travelers={trip.travelers}
+      onApply={(totalTravelers) => {
+        onTripUpdate({
+          ...trip,
+          travelers: String(totalTravelers)
+        })
+        setRecentlySavedField("travelers")
+      }}
+    />
+    <TripBudgetDialog
+      open={isBudgetDialogOpen}
+      onOpenChange={setIsBudgetDialogOpen}
+      budget={trip.budget}
+      onApply={(budget) => {
+        onTripUpdate({
+          ...trip,
+          budget
+        })
+        setRecentlySavedField("budget")
+      }}
+    />
+    </>
   )
 })
+
+function formatDateChip(
+  startDate?: string,
+  endDate?: string,
+  duration?: string,
+  dateFlexibility?: DateFlexibility
+) {
+  if (dateFlexibility && dateFlexibility !== "exact") {
+    return duration || "Flexible"
+  }
+
+  if (!startDate) {
+    return duration || "When"
+  }
+
+  try {
+    const start = parseISO(startDate)
+    const end = endDate ? parseISO(endDate) : start
+    const sameMonth = format(start, "MMM yyyy") === format(end, "MMM yyyy")
+    return sameMonth
+      ? `${format(start, "MMM d")}–${format(end, "d")}`
+      : `${format(start, "MMM d")}–${format(end, "MMM d")}`
+  } catch {
+    return duration || "When"
+  }
+}
+
+function formatTravelersChip(travelers?: string) {
+  const total = Number.parseInt(travelers || "", 10)
+  if (!Number.isFinite(total) || total <= 0) {
+    return "1 traveler"
+  }
+
+  return `${total} traveler${total === 1 ? "" : "s"}`
+}

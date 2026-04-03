@@ -1,11 +1,13 @@
 "use client"
 
-import { Heart, Plus, Hotel, MapPin, Star, RefreshCw, X, Check, Bookmark } from "lucide-react"
+import { Heart, Check, Star } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Image from "next/image"
 import { motion } from "framer-motion"
 import { memo, useCallback } from "react"
+import { resolvePoiImageUrl } from "@/lib/poi-image-url"
 import type { POI } from "@/lib/types"
+import { PoiTypeIcon } from "./poi-type-icon"
 
 interface PoiCardProps {
   poi: POI
@@ -30,6 +32,7 @@ export const CompactPoiCard = memo(function CompactPoiCard({ poi, isSaved, isIti
   const handleReplan = useCallback(() => {
     onReplan(poi)
   }, [poi, onReplan])
+  const imageUrl = resolvePoiImageUrl(poi.photoUrl) || "/placeholder.svg"
   return (
     <motion.div 
       className="h-[218px] w-[248px] overflow-hidden rounded-[24px] border border-white/70 bg-white shadow-[0_18px_48px_rgba(15,23,42,0.18)]"
@@ -39,7 +42,7 @@ export const CompactPoiCard = memo(function CompactPoiCard({ poi, isSaved, isIti
     >
       <div className="relative">
         <Image 
-          src={poi.photoUrl || '/placeholder.svg'} 
+          src={imageUrl} 
           alt={poi.name} 
           width={400}
           height={160}
@@ -63,17 +66,29 @@ export const CompactPoiCard = memo(function CompactPoiCard({ poi, isSaved, isIti
           </Button>
         </div>
         
-        {/* Info badge - no longer clickable for auto-add */}
+        {/* Info badge / Add to trip button */}
         <div className="absolute top-3 left-3">
-          {isItineraryItem ? (
-            <div className="bg-white/90 text-gray-700 rounded-full px-3 py-0.5 text-xs font-medium shadow-sm">
-              <Check className="w-4 h-4 mr-1 inline" /> In Itinerary
-            </div>
-          ) : (
-            <div className="bg-white/90 text-gray-700 rounded-full px-3 py-0.5 text-xs font-medium shadow-sm">
-              <MapPin className="w-3 h-3 mr-1 inline" /> Available
-            </div>
-          )}
+          <Button
+            type="button"
+            size="sm"
+            onClick={handleAddPoi}
+            disabled={isItineraryItem}
+            className={`h-7 px-3 text-xs rounded-full font-medium shadow-sm ${
+              isItineraryItem
+                ? "bg-white/90 text-gray-700 hover:bg-white"
+                : "bg-white/90 text-gray-700 hover:bg-white"
+            }`}
+          >
+            {isItineraryItem ? (
+              <>
+                <Check className="w-3.5 h-3.5 mr-1 inline" /> In Itinerary
+              </>
+            ) : (
+              <>
+                <PoiTypeIcon poi={poi} className="mr-1 inline h-3 w-3" /> Add to Itinerary
+              </>
+            )}
+          </Button>
         </div>
         
       </div>

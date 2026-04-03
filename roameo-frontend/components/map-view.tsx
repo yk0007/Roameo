@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Plus, Minus, Navigation, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { CompactPoiCard } from "./poi-card";
+import { SearchCard } from "@/components/search-card";
+import { CompactPoiCard } from "@/components/poi-card";
 import type { Itinerary, POI } from "@/lib/types";
 
 type MapData = {
@@ -783,8 +784,8 @@ export default function MapView({
                 iwContainer.style.borderRadius = "0";
                 iwContainer.style.boxShadow = "none";
                 iwContainer.style.background = "transparent";
-                iwContainer.style.maxWidth = "248px";
-                iwContainer.style.minWidth = "248px";
+                iwContainer.style.maxWidth = "188px";
+                iwContainer.style.minWidth = "188px";
                 iwContainer.style.outline = "none";
               }
 
@@ -801,7 +802,7 @@ export default function MapView({
                 iwContent.style.background = "transparent";
                 iwContent.style.overflow = "visible";
                 iwContent.style.outline = "none";
-                iwContent.style.maxWidth = "248px";
+                iwContent.style.maxWidth = "none";
               }
 
               // Remove any parent container borders

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Image from "next/image"
+import { resolvePoiImageUrl } from "@/lib/poi-image-url"
 
 interface CachedImageProps {
   src?: string
@@ -20,18 +21,19 @@ export function CachedImage({
   priority = true, 
   quality = 90 
 }: CachedImageProps) {
-  const [imageSrc, setImageSrc] = useState<string>(src || "/placeholder.svg")
+  const resolvedSrc = resolvePoiImageUrl(src) || "/placeholder.svg"
+  const [imageSrc, setImageSrc] = useState<string>(resolvedSrc)
   const [hasError, setHasError] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
 
   // Update imageSrc when src prop changes
   useEffect(() => {
-    if (src && src !== imageSrc && !hasError) {
-      setImageSrc(src)
+    if (resolvedSrc && resolvedSrc !== imageSrc && !hasError) {
+      setImageSrc(resolvedSrc)
       setHasError(false)
       setIsLoading(true)
     }
-  }, [src, imageSrc, hasError])
+  }, [resolvedSrc, imageSrc, hasError])
 
   const handleError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
     const target = e.currentTarget as HTMLImageElement

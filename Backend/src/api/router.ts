@@ -23,6 +23,7 @@ import {
 import { TurnRunner } from "../runtime/turn-runner.js";
 import { SessionRepository } from "../services/session-repository.js";
 import { PlanMutationService } from "../services/plan-mutation-service.js";
+import { DestinationImageService } from "../tools/destination-images.js";
 
 type RouterDeps = {
   repository: SessionRepository;
@@ -65,6 +66,99 @@ export function buildApiRouter({
     }
 
     return res.json({ apiKey: env.GOOGLE_MAPS_API_KEY });
+  });
+
+  router.get("/maps/reverse-geocode", async (req, res) => {
+    if (!env.GOOGLE_MAPS_API_KEY) {
+      return res.status(503).json({ error: "Google Maps is not configured" });
+    }
+
+    const lat = Number.parseFloat(String(req.query.lat || ""));
+    const lng = Number.parseFloat(String(req.query.lng || ""));
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return res.status(400).json({ error: "lat and lng query parameters are required" });
+    }
+
+    const geocodeUrl =
+      "https://maps.googleapis.com/maps/api/geocode/json" +
+      `?latlng=${encodeURIComponent(`${lat},${lng}`)}` +
+      `&key=${encodeURIComponent(env.GOOGLE_MAPS_API_KEY)}`;
+
+    try {
+      const response = await fetch(geocodeUrl, {
+        signal: AbortSignal.timeout(10_000),
+        headers: { "User-Agent": "Roameo/2.0" }
+      });
+
+      if (!response.ok) {
+        return res
+          .status(502)
+          .json({ error: `Google Geocoding error: ${response.status}` });
+      }
+
+      const payload = (await response.json()) as {
+        status?: string;
+        results?: Array<{
+          formatted_address?: string;
+          address_components?: Array<{
+            long_name?: string;
+            short_name?: string;
+            types?: string[];
+          }>;
+        }>;
+      };
+
+      const result = payload.results?.[0];
+      if (!result) {
+        return res.status(404).json({ error: "No location found for these coordinates" });
+      }
+
+      const readComponent = (...types: string[]) =>
+        result.address_components?.find((component) =>
+          types.some((type) => component.types?.includes(type))
+        )?.long_name;
+
+      const locality =
+        readComponent("locality", "postal_town", "administrative_area_level_3") ||
+        readComponent("sublocality", "sublocality_level_1");
+      const region = readComponent("administrative_area_level_1");
+      const country = readComponent("country");
+      const label = [locality, region].filter(Boolean).join(", ") || result.formatted_address;
+
+      return res.json({
+        label,
+        locality,
+        region,
+        country,
+        formatted: result.formatted_address || label
+      });
+    } catch (error) {
+      return res.status(502).json({
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to reverse geocode the current location"
+      });
+    }
+  });
+
+  router.get("/destination-image", async (req, res) => {
+    const destination = String(req.query.q || "");
+    if (!destination) {
+      return res.status(400).json({ error: "q query parameter is required" });
+    }
+
+    try {
+      const destinationImageService = new DestinationImageService();
+      const result = await destinationImageService.getDestinationImage(destination);
+      if (result.imageUrl) {
+        return res.json({ imageUrl: result.imageUrl });
+      }
+      return res.status(404).json({ error: "Image not found" });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Destination image fetch failed";
+      return res.status(502).json({ error: message });
+    }
   });
 
   router.get("/proxy/photo", async (req, res) => {

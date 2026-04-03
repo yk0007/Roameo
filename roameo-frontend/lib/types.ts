@@ -1,13 +1,15 @@
 import type {
   PlanningState,
   ConversationMessage,
+  DateFlexibility,
   PlanSnapshot,
   PlanMutationInput,
   Poi,
   SessionProviderSettings,
   SessionSnapshot,
   SessionSummary,
-  StreamEvent
+  StreamEvent,
+  AgentTraceEvent
 } from "@roameo/contracts";
 
 export type SessionId = string;
@@ -20,6 +22,8 @@ export type SessionPlanMutation = PlanMutationInput;
 export type ProviderSettings = SessionProviderSettings;
 export type WsEvent = StreamEvent;
 export type SessionPlanningState = PlanningState;
+export type { AgentTraceEvent };
+
 
 export interface Activity {
   id: string;
@@ -90,6 +94,9 @@ export interface TripContext {
   origin: string;
   destination: string;
   destinations: string[];
+  startDate?: string;
+  endDate?: string;
+  dateFlexibility?: DateFlexibility;
   days: number;
   travelers: string;
   budget: string;

@@ -6,9 +6,8 @@ import ReactMarkdown from "react-markdown";
 import { Send, Plus, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { sendChat } from "@/lib/api";
-import { InlinePlanningStatus } from "./inline-planning-status";
+import { AgenticStatus } from "./agentic-status";
 import { StructuredResponseBlocks } from "./structured-response-blocks";
-import { TypingIndicator } from "./typing-indicator";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -18,7 +17,8 @@ import {
 } from "@/components/ui/hover-card";
 import { CachedImage } from "./cached-image";
 import { CompactPoiCard } from "./poi-card";
-import type { ChatMessage, POI, SessionPlanningState } from "@/lib/types";
+import { PoiTypeIcon } from "./poi-type-icon";
+import type { AgentTraceEvent, ChatMessage, POI, SessionPlanningState } from "@/lib/types";
 
 function normalizeRenderableMessageContent(content: string) {
   return content
@@ -38,6 +38,18 @@ function shouldRenderMessage(message: ChatMessage) {
   }
 
   return normalizeRenderableMessageContent(String(message.content || "")).length > 0;
+}
+
+function isPlanMutationNote(message: ChatMessage) {
+  return (
+    message.role === "assistant" &&
+    message.meta?.source === "plan-mutation" &&
+    !message.meta?.responseBlocks?.length
+  );
+}
+
+function isStructuredAssistantMessage(message: ChatMessage) {
+  return message.role === "assistant" && Boolean(message.meta?.responseBlocks?.length);
 }
 
 interface ChatInterfaceProps {
@@ -60,8 +72,13 @@ interface ChatInterfaceProps {
   onAddPoi?: (poi: POI) => void;
   onReplan?: (poi: POI) => void;
   onPopulateInput?: (text: string) => void;
+  onSlotAction?: (action: { field: string; value: string | number }, prompt: string) => void;
   inputValue?: string;
   onInputChange?: (value: string) => void;
+  /** Live agent trace events from the current session */
+  traces?: AgentTraceEvent[];
+  /** The currently active turn ID (streaming) */
+  activeTurnId?: string;
 }
 
 export function ChatInterface({
@@ -84,8 +101,11 @@ export function ChatInterface({
   onAddPoi,
   onReplan,
   onPopulateInput,
+  onSlotAction,
   inputValue: externalInputValue,
   onInputChange,
+  traces,
+  activeTurnId,
 }: ChatInterfaceProps) {
   const [inputValue, setInputValue] = useState(externalInputValue || "");
   const [showSuggestion, setShowSuggestion] = useState(false);
@@ -99,6 +119,7 @@ export function ChatInterface({
   >(null);
   const lastAssistantIdRef = useRef<string | null>(null);
   const typedMessageIdsRef = useRef<Set<string>>(new Set());
+  const isSubmittingRef = useRef(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -210,33 +231,18 @@ export function ChatInterface({
     }
   }, [isTyping]);
 
-  // Update response type based on server-detected intent
-  // Handle typing indicator visibility based on detected intent
+  // Gate the response type on planningActive OR isTyping — but never on detectedIntent alone,
+  // because intent persists across turns and would keep the animation alive forever.
   useEffect(() => {
-    if (isTyping || planningActive) {
+    if (planningActive) {
+      setResponseType("planning");
+    } else if (isTyping) {
       if (
         detectedIntent === "PLAN_TRIP" ||
-        planningActive ||
         detectedIntent === "DESTINATION_SEARCH"
       ) {
-        console.log(
-          "[chat-interface] Setting response type to planning for intent:",
-          detectedIntent,
-          "planningActive:",
-          planningActive,
-        );
         setResponseType("planning");
-      } else if (detectedIntent) {
-        console.log(
-          "[chat-interface] Setting response type to general for intent:",
-          detectedIntent,
-        );
-        setResponseType("general");
       } else {
-        // If typing but no intent detected yet, default to general typing indicator
-        console.log(
-          "[chat-interface] No intent detected yet, defaulting to general typing",
-        );
         setResponseType("general");
       }
     } else {
@@ -295,7 +301,7 @@ export function ChatInterface({
         <HoverCard>
           <HoverCardTrigger asChild>
             <strong
-              className="font-semibold text-gray-900 cursor-pointer hover:underline"
+              className="font-bold text-slate-900 cursor-pointer hover:underline"
               onClick={() => {
                 const loc = matchingPoi.address
                   ? ` at ${matchingPoi.address}`
@@ -331,7 +337,7 @@ export function ChatInterface({
       );
     }
     return (
-      <strong className="font-semibold text-gray-900">
+      <strong className="font-bold text-slate-900">
         {renderWithPoiHover(children, true)}
       </strong>
     );
@@ -381,7 +387,10 @@ export function ChatInterface({
                       }}
                       title={`Click to add ${matchingPoi.name} to trip`}
                     >
-                      {pin} {poiName}
+                      <span className="inline-flex items-center gap-1">
+                        <PoiTypeIcon poi={matchingPoi} className="h-[1em] w-[1em] shrink-0" />
+                        <span>{poiName}</span>
+                      </span>
                     </span>
                   </HoverCardTrigger>
                   <HoverCardContent
@@ -415,7 +424,13 @@ export function ChatInterface({
                 key={`${poiName}-${index}`}
                 className="font-semibold text-gray-900"
               >
-                {pin} {poiName}
+                <span className="inline-flex items-center gap-1">
+                  <PoiTypeIcon
+                    poi={matchingPoi ? matchingPoi : { type: "destination", name: poiName, tags: [] }}
+                    className="h-[1em] w-[1em] shrink-0"
+                  />
+                  <span>{poiName}</span>
+                </span>
               </strong>
             );
           }
@@ -492,33 +507,33 @@ export function ChatInterface({
           if (trimmedLine.length) {
           }
 
-          // Main title (# *Title*) — italic, slightly lighter weight
-          if (trimmedLine.match(/^#\s*\*.*\*$/)) {
-            const title = trimmedLine.replace(/^#\s*\*(.+)\*$/, "$1");
+          // Main title (# *Title*)
+          if (trimmedLine.match(/^#\s*\*.*\*$/) || trimmedLine.match(/^#\s+(.+)$/)) {
+            const title = trimmedLine.replace(/^#\s*\*(.+)\*$/, "$1").replace(/^#\s+(.+)$/, "$1");
             return (
               <h1
                 key={index}
-                className="text-[22px] md:text-2xl font-semibold italic mb-2.5 text-gray-900"
+                className="text-2xl font-semibold tracking-tight text-slate-900 mb-2.5"
               >
                 {renderWithPoiHover(title, true)}
               </h1>
             );
           }
 
-          // Day headers (## *Day 1:*) — italic, lighter weight with subtle divider
-          if (trimmedLine.match(/^##\s*\*.*\*$/)) {
-            const dayTitle = trimmedLine.replace(/^##\s*\*(.+)\*$/, "$1");
+          // Day headers (## *Day 1:*) or regular headers (## Day 1)
+          if (trimmedLine.match(/^##\s*\*.*\*$/) || trimmedLine.match(/^##\s+(.+)$/)) {
+            const dayTitle = trimmedLine.replace(/^##\s*\*(.+)\*$/, "$1").replace(/^##\s+(.+)$/, "$1");
             return (
               <h2
                 key={index}
-                className="text-xl font-medium italic mb-2.5 mt-5 text-gray-900 border-b border-gray-200 pb-2"
+                className="text-lg font-semibold tracking-tight text-slate-900 mb-2 mt-5"
               >
                 {renderWithPoiHover(dayTitle, true)}
               </h2>
             );
           }
 
-          // Time section headers (### ☀️ Morning) — orange banner with strong left bar
+          // Time section headers (### ☀️ Morning)
           if (
             trimmedLine.match(
               /^###\s*(☀️|⛵|🌅|🚗|🛍️|🍽️|🏨|✈️)\s*(Morning|Afternoon|Evening|Shopping|Heritage|Departure)/,
@@ -526,12 +541,10 @@ export function ChatInterface({
           ) {
             const sectionTitle = trimmedLine.replace(/^###\s*/, "");
             return (
-              <div key={index} className="mt-5 mb-2">
-                <div className="bg-orange-50 border-l-8 border-orange-400 rounded-md px-3 py-1.5">
-                  <h3 className="font-semibold text-gray-900 text-base">
-                    {renderWithPoiHover(sectionTitle, true)}
-                  </h3>
-                </div>
+              <div key={index} className="mt-4 mb-2">
+                <h3 className="text-base font-semibold text-slate-900">
+                  {renderWithPoiHover(sectionTitle, true)}
+                </h3>
               </div>
             );
           }
@@ -545,12 +558,10 @@ export function ChatInterface({
           if (trimmedLine.startsWith("### ")) {
             const sectionTitle = trimmedLine.replace(/^###\s*/, "");
             return (
-              <div key={index} className="mt-5 mb-2">
-                <div className="bg-orange-50 border-l-8 border-orange-400 rounded-md px-3 py-2">
-                  <h3 className="font-semibold text-gray-900 text-base">
-                    {renderWithPoiHover(sectionTitle, true)}
-                  </h3>
-                </div>
+              <div key={index} className="mt-4 mb-2">
+                <h3 className="text-base font-semibold text-slate-900">
+                  {renderWithPoiHover(sectionTitle, true)}
+                </h3>
               </div>
             );
           }
@@ -561,11 +572,9 @@ export function ChatInterface({
             if (/^\**\s*Meals:?\s*\**$/i.test(normalized)) {
               return (
                 <div key={index} className="mt-4 mb-1">
-                  <div className="bg-orange-50 border-l-8 border-orange-400 rounded-md px-3 py-1.5">
-                    <h3 className="font-semibold text-gray-900 text-base">
-                      Meals
-                    </h3>
-                  </div>
+                  <h3 className="font-semibold text-slate-900 text-[16px]">
+                    Meals
+                  </h3>
                 </div>
               );
             }
@@ -585,7 +594,7 @@ export function ChatInterface({
                   <span className="w-2 h-2 bg-gray-300 rounded-full mt-2 flex-shrink-0"></span>
                   <div className="flex-1">
                     <div className="font-bold text-gray-900 mb-1">{time}:</div>
-                    <div className="text-gray-600 leading-relaxed">
+                    <div className="text-sm leading-6 text-neutral-600">
                       <ReactMarkdown
                         components={{
                           p: ({ children }) => (
@@ -609,7 +618,7 @@ export function ChatInterface({
             return (
               <div key={index} className="flex items-start gap-3 py-0.5 ml-4">
                 <span className="w-2 h-2 bg-gray-300 rounded-full mt-2 flex-shrink-0"></span>
-                <div className="text-gray-600 leading-relaxed">
+                <div className="text-sm leading-6 text-neutral-600">
                   <ReactMarkdown
                     components={{
                       p: ({ children }) => (
@@ -633,7 +642,7 @@ export function ChatInterface({
             return (
               <div key={index} className="flex items-start gap-3 py-0.5 ml-4">
                 <span className="w-2 h-2 bg-gray-300 rounded-full mt-2 flex-shrink-0"></span>
-                <div className="text-gray-600 leading-relaxed">
+                <div className="text-sm leading-6 text-neutral-600">
                   <ReactMarkdown
                     components={{
                       p: ({ children }) => (
@@ -654,6 +663,20 @@ export function ChatInterface({
             return <div key={index} className="h-2" />;
           }
 
+          // Standalone bold heading: **Day 1: Title** or **Title**
+          // The AI often emits these instead of ## headings
+          if (/^\*\*[^*]+\*\*$/.test(trimmedLine)) {
+            const heading = trimmedLine.replace(/^\*\*(.*)\*\*$/, "$1").trim();
+            return (
+              <h2
+                key={index}
+                className="text-lg font-semibold tracking-tight text-slate-900 mb-2 mt-5"
+              >
+                {renderWithPoiHover(heading, true)}
+              </h2>
+            );
+          }
+
           // Descriptive paragraphs (no markdown prefix)
           if (
             trimmedLine.match(/^[A-Z].*[.!]$/) &&
@@ -662,7 +685,7 @@ export function ChatInterface({
             return (
               <div
                 key={index}
-                className="mb-4 leading-relaxed italic text-gray-500 text-sm pl-4 border-l-2 border-gray-200"
+                className="mb-4 italic text-sm leading-6 text-slate-500 pl-4 border-l-2 border-slate-200"
               >
                 <ReactMarkdown
                   components={{
@@ -678,20 +701,11 @@ export function ChatInterface({
             );
           }
 
-          // Regular paragraphs
+          // Regular paragraph text
           return (
-            <div key={index} className="mb-2.5 leading-relaxed text-gray-700">
-              <ReactMarkdown
-                components={{
-                  p: ({ children }) => (
-                    <span>{renderWithPoiHover(children, true)}</span>
-                  ),
-                  strong: StrongWithPoiHover,
-                }}
-              >
-                {stripPriceBold(trimmedLine)}
-              </ReactMarkdown>
-            </div>
+            <p key={index} className="text-sm leading-6 text-neutral-600">
+              {renderWithPoiHover(trimmedLine)}
+            </p>
           );
         })}
 
@@ -717,243 +731,191 @@ export function ChatInterface({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (inputValue.trim()) {
-      setUserJustSent(true); // Hide suggestions when user sends a message
-      setShowSuggestion(false);
-
-      // Response type will be set by server-detected intent
-      onSendMessage(inputValue.trim());
-      handleInputChange(""); // Clear both internal and external input
+    if (!inputValue.trim() || isSubmittingRef.current) {
+      return;
     }
+    isSubmittingRef.current = true;
+    setUserJustSent(true); // Hide suggestions when user sends a message
+    setShowSuggestion(false);
+
+    // Response type will be set by server-detected intent
+    onSendMessage(inputValue.trim());
+    handleInputChange(""); // Clear both internal and external input
+    // Reset after a brief delay to allow the async send to start
+    setTimeout(() => {
+      isSubmittingRef.current = false;
+    }, 800);
   };
 
   return (
     <div className="relative flex h-full flex-col bg-transparent">
-      {planningState?.status === "unavailable" ? (
-        <div className="border-b border-amber-200 bg-amber-50 px-6 py-3 text-sm text-amber-900">
-          AI planning is temporarily unavailable. Roameo kept your last accepted trip visible until the provider recovers.
-        </div>
-      ) : null}
+
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
         className={`flex-1 overflow-y-auto ${isRightPanelVisible ? "px-6 pb-32 pt-20" : "w-full px-10 pb-32 pt-20 sm:px-16 lg:px-24"}`}
       >
         <div className={`w-full ${isRightPanelVisible ? "max-w-full" : "mx-auto max-w-[760px]"}`}>
-          {visibleMessages.map((message, i) => (
-            <div
-              key={message.id || message.createdAt || i}
-              className={`mb-6 flex items-start gap-3 ${
-                message.role === "user"
-                  ? "justify-end"
-                  : "justify-start"
-              }`}
-            >
-              <Avatar
-                className={`h-8 w-8 flex-shrink-0 ${message.role === "user" ? "order-2" : "order-1"}`}
-              >
-                <AvatarFallback
-                  className={
-                    message.role === "user"
-                      ? "bg-[#4f8df7] text-white"
-                      : "bg-black text-white flex items-center justify-center"
-                  }
+          {visibleMessages.map((message, i) => {
+            if (isPlanMutationNote(message)) {
+              return (
+                <div
+                  key={message.id || message.createdAt || i}
+                  className="mb-4 pl-11"
                 >
-                  {message.role === "user" ? (
-                    "N"
-                  ) : (
-                    <div className="w-2 h-2 bg-white rounded-full"></div>
-                  )}
-                </AvatarFallback>
-              </Avatar>
+                  <div className="max-w-[680px] text-[13px] italic leading-6 text-slate-500">
+                    {normalizeRenderableMessageContent(String(message.content || ""))}
+                  </div>
+                </div>
+              );
+            }
+
+            if (isStructuredAssistantMessage(message)) {
+              return (
+                <div
+                  key={message.id || message.createdAt || i}
+                  className="mb-8 flex items-start gap-3"
+                >
+                  <Avatar className="h-8 w-8 flex-shrink-0">
+                    <AvatarFallback className="bg-black text-white flex items-center justify-center">
+                      <div className="w-2 h-2 rounded-full bg-white" />
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="max-w-[calc(100%-44px)] flex-1">
+                    <StructuredResponseBlocks
+                      message={message}
+                      pois={pois}
+                      savedIds={savedIds}
+                      itineraryPoiIds={itineraryPoiIds}
+                      onQuickAction={(prompt) => {
+                        onPopulateInput?.(prompt);
+                      }}
+                      onToggleSave={onToggleSave}
+                      onAddPoi={(poi) => onAddPoi?.(poi)}
+                      onReplan={onReplan}
+                      onSlotAction={onSlotAction}
+                    />
+                  </div>
+                </div>
+              );
+            }
+
+            return (
               <div
-                className={`${
+                key={message.id || message.createdAt || i}
+                className={`mb-6 flex items-start gap-3 ${
                   message.role === "user"
-                    ? "order-1 max-w-[calc(100%-44px)]"
-                    : "order-2 flex-1 max-w-[calc(100%-44px)]"
+                    ? "justify-end"
+                    : "justify-start"
                 }`}
               >
+                <Avatar
+                  className={`h-8 w-8 flex-shrink-0 ${message.role === "user" ? "order-2" : "order-1"}`}
+                >
+                  <AvatarFallback
+                    className={
+                      message.role === "user"
+                        ? "bg-[#4f8df7] text-white"
+                        : "bg-black text-white flex items-center justify-center"
+                    }
+                  >
+                    {message.role === "user" ? (
+                      "N"
+                    ) : (
+                      <div className="w-2 h-2 bg-white rounded-full"></div>
+                    )}
+                  </AvatarFallback>
+                </Avatar>
                 <div
-                  className={`max-w-none rounded-[20px] border ${
+                  className={`${
                     message.role === "user"
-                      ? `ml-auto w-fit min-w-[72px] border-[#d9d9d9] bg-[#e5e5e5] px-[21px] py-[17px] text-[#1a1a1a] shadow-[0_8px_24px_rgba(0,0,0,0.10),0_2px_8px_rgba(0,0,0,0.06)] ${
-                          isRightPanelVisible ? "max-w-[400px]" : "max-w-[430px]"
-                        }`
-                      : `${isRightPanelVisible ? "max-w-[76%]" : "max-w-[72%]"} border-[#e5e5e5] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(0,0,0,0.10),0_2px_8px_rgba(0,0,0,0.06)]`
+                      ? "order-1 max-w-[calc(100%-44px)]"
+                      : "order-2 flex-1 max-w-[calc(100%-44px)]"
                   }`}
                 >
-                  <div className="text-[14.875px] font-normal leading-[27px]">
-                    {message.role === "user" ? (
-                      <ReactMarkdown>
-                        {String(message.content)
-                          .replace(/\\[object Object\\]/g, "")
-                          .trim()}
-                      </ReactMarkdown>
-                    ) : message.meta?.responseBlocks?.length ? (
-                      <StructuredResponseBlocks
-                        message={message}
-                        pois={pois}
-                        savedIds={savedIds}
-                        itineraryPoiIds={itineraryPoiIds}
-                        onQuickAction={(prompt) => {
-                          onPopulateInput?.(prompt);
-                        }}
-                        onToggleSave={onToggleSave}
-                        onAddPoi={(poi) => onAddPoi?.(poi)}
-                        onReplan={onReplan}
-                      />
-                    ) : (
-                      renderFormattedContent(
-                        String(message.content).replace(
-                          /\\[object Object\\]/g,
-                          "",
-                        ),
-                      )
-                    )}
+                  <div
+                    className={`max-w-none ${
+                      message.role === "user"
+                        ? `rounded-[24px] ml-auto w-fit min-w-[72px] bg-white px-5 py-4 text-[#1a1a1a] shadow-[0_12px_24px_rgba(0,0,0,0.04),0_2px_8px_rgba(0,0,0,0.02)] ${
+                            isRightPanelVisible ? "max-w-[400px]" : "max-w-[430px]"
+                          }`
+                        : `${isRightPanelVisible ? "max-w-[76%]" : "max-w-[72%]"} pt-1`
+                    }`}
+                  >
+                    <div className={message.role === "user" ? "text-[15px] leading-7 text-slate-800" : ""}>
+                      {message.role === "user" ? (
+                        <ReactMarkdown className="prose prose-slate max-w-none text-[15px] leading-[1.6] text-slate-800 prose-p:my-1 prose-strong:font-semibold prose-strong:text-slate-900">
+                          {String(message.content)
+                            .replace(/\[object Object\]/g, "")
+                            .trim()}
+                        </ReactMarkdown>
+                      ) : (
+                        renderFormattedContent(
+                          String(message.content).replace(
+                            /\[object Object\]/g,
+                            "",
+                          ),
+                        )
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
 
-          {/* Suggested Questions Component */}
+          {/* Contextual follow-up prompts — only for non-structured replies */}
           {lastAssistant && showSuggestion && (
-            <div className="mt-6 flex justify-start pl-12">
-              <div className="text-sm text-gray-600">
-                <p className="mb-3 font-medium">
-                  Want me to customize your plan? Try:
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {(() => {
-                    const pool: Array<{ label: string; prompt: string }> = [
-                      {
-                        label: "🚗 Transportation options",
-                        prompt:
-                          "What's the best way to travel within the city?",
-                      },
-                      {
-                        label: "🍽️ Local cuisine",
-                        prompt:
-                          "Can you suggest local food specialties I should try?",
-                      },
-                      {
-                        label: "🏛️ Cultural sites",
-                        prompt: "What are the must-visit cultural attractions?",
-                      },
-                      {
-                        label: "🎉 Events & festivals",
-                        prompt:
-                          "Are there any local festivals or events during my visit?",
-                      },
-                      {
-                        label: "⏰ Best visiting times",
-                        prompt:
-                          "What's the best time to visit popular attractions to avoid crowds?",
-                      },
-                      {
-                        label: "💎 Hidden gems",
-                        prompt:
-                          "Can you recommend some hidden gems or off-the-beaten-path places?",
-                      },
-                      {
-                        label: "🎿 Adventure activities",
-                        prompt:
-                          "Could you add adventure activities to the plan?",
-                      },
-                      {
-                        label: "👨‍👩‍👧‍👦 Family-friendly tips",
-                        prompt:
-                          "What are some family-friendly tips and places?",
-                      },
-                      {
-                        label: "🥘 Must-try dishes",
-                        prompt: "Which local dishes should I not miss?",
-                      },
-                      {
-                        label: "📅 Day-by-day tweaks",
-                        prompt: "Can you tweak Day 2 to be more relaxed?",
-                      },
-                      {
-                        label: "💰 Budget optimizations",
-                        prompt:
-                          "How can we reduce the overall budget without losing experiences?",
-                      },
-                      {
-                        label: "🕒 Time-saving routes",
-                        prompt:
-                          "Can you optimize the route to save travel time?",
-                      },
-                      {
-                        label: "📸 Photo spots",
-                        prompt: "Where are the best photo spots?",
-                      },
-                      {
-                        label: "🌦️ Weather prep",
-                        prompt: "What should I pack given the typical weather?",
-                      },
-                      {
-                        label: "🛍️ Shopping",
-                        prompt:
-                          "What are the best places to shop for souvenirs?",
-                      },
-                      {
-                        label: "🚶 Walkability",
-                        prompt: "Which parts of the itinerary are walkable?",
-                      },
-                      {
-                        label: "🕰️ Opening hours",
-                        prompt:
-                          "Do any attractions require booking or have tight hours?",
-                      },
-                      {
-                        label: "♿ Accessibility",
-                        prompt:
-                          "Can you adjust for accessibility considerations?",
-                      },
-                    ];
-                    // Shuffle and pick a subset (6-9)
-                    const shuffled = [...pool].sort(() => Math.random() - 0.5);
-                    const count = Math.floor(6 + Math.random() * 4);
-                    return shuffled.slice(0, count).map((item, idx) => (
-                      <button
-                        key={idx}
-                        className="rounded-full border border-zinc-200 bg-white/80 px-3 py-2 text-xs hover:bg-zinc-50 transition-colors"
-                        onClick={() => onSendMessage(item.prompt)}
-                      >
-                        {item.label}
-                      </button>
-                    ));
-                  })()}
-                </div>
+            <div className="mt-5 flex justify-start pl-12">
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { label: "Tweak the schedule", prompt: "Can you adjust the itinerary to be more relaxed with fewer stops per day?" },
+                  { label: "Add local food spots", prompt: "Suggest specific restaurants or street food spots near each day's activities." },
+                  { label: "Cut costs", prompt: "How can I reduce the budget without dropping key experiences?" },
+                  { label: "Off-the-beaten-path", prompt: "Replace one mainstream stop each day with something locals would recommend." },
+                ].map((item) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    className="rounded-full border border-slate-200 bg-white px-4 py-2 text-[13px] font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
+                    onClick={() => onSendMessage(item.prompt)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
               </div>
             </div>
           )}
 
-          {/* Show typing indicator when typing OR when planning is active (even with recent messages) */}
-          {(isTyping || planningActive) &&
+          {/* Agentic status / typing indicator
+           *
+           * Visibility rules (in priority order):
+           *  1. planningActive=true  → always show (backend is still working)
+           *  2. isTyping=true + no recent assistant message → show generic indicator
+           *  3. Everything else → hide
+           *
+           * The "detectedIntent === PLAN_TRIP" bypass has been removed.
+           * planningActive is derived from planningState.status==='running' on
+           * the session snapshot and is reset to 'ready' by turn-runner.ts as
+           * soon as the turn completes, so this correctly terminates.
+           */}
+          {(planningActive || isTyping) &&
             (() => {
-              // Safety check: Don't show typing if we just received an assistant message
-              const lastMessage = visibleMessages[visibleMessages.length - 1];
-              const recentAssistantMessage =
-                lastMessage &&
-                lastMessage.role === "assistant" &&
-                lastMessage.createdAt &&
-                Date.now() - new Date(lastMessage.createdAt).getTime() < 3000; // reduced to 3 seconds
+              // If planning is no longer active, check whether a very recent
+              // assistant message was just committed — if so, suppress the
+              // indicator so there's no "flash" between message arrival and
+              // planningActive going false.
+              if (!planningActive) {
+                const lastMessage = visibleMessages[visibleMessages.length - 1];
+                const recentAssistantMessage =
+                  lastMessage &&
+                  lastMessage.role === "assistant" &&
+                  lastMessage.createdAt &&
+                  Date.now() - new Date(lastMessage.createdAt).getTime() < 2000;
 
-              // Always show planning animation when planning is active, regardless of recent messages
-              if (planningActive || detectedIntent === "PLAN_TRIP") {
-                console.log(
-                  "[chat-interface] Showing planning animation - planningActive:",
-                  planningActive,
-                  "intent:",
-                  detectedIntent,
-                );
-                // Show planning animation even if there are recent messages
-              } else if (recentAssistantMessage) {
-                console.log(
-                  "[chat-interface] Suppressing typing indicator due to recent assistant message",
-                );
-                return null;
+                if (recentAssistantMessage) {
+                  return null;
+                }
               }
 
               return (
@@ -963,16 +925,12 @@ export function ChatInterface({
                       <div className="w-2 h-2 bg-white rounded-full"></div>
                     </AvatarFallback>
                   </Avatar>
-                  <div className="max-w-[calc(100%-44px)] flex-1">
-                    <div className="max-w-none rounded-[20px] border border-[#e5e7eb] bg-white px-5 py-4 shadow-[0_8px_32px_rgba(15,23,42,0.12)]">
-                      <div className="leading-relaxed text-sm">
-                        {responseType === "planning" || planningActive ? (
-                          <InlinePlanningStatus isVisible={true} />
-                        ) : (
-                          <TypingIndicator isVisible={true} />
-                        )}
-                      </div>
-                    </div>
+                  <div className="max-w-[calc(100%-44px)] flex-1 pt-1">
+                    <AgenticStatus
+                      traces={traces}
+                      turnId={activeTurnId}
+                      mode={planningActive ? "planning" : "general"}
+                    />
                   </div>
                 </div>
               );

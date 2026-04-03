@@ -287,4 +287,9 @@
   .animate-scale-in {
     animation: scaleIn 0.6s ease-out forwards;
   }
+
+  @keyframes shimmer {
+    0% { background-position: 200% center; }
+    100% { background-position: -200% center; }
+  }
 }

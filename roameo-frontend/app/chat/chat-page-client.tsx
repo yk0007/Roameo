@@ -53,7 +53,11 @@ export default function ChatPage() {
   const [sessionId, setSessionId] = useState(initialSessionId);
   const [isDeleting, setIsDeleting] = useState(false);
   const [draftInput, setDraftInput] = useState("");
-  const handledQueryRef = useRef<string>("");
+  const [optimisticTrip, setOptimisticTrip] = useState<TripContext | null>(null);
+  const handledQueryRef = useRef<string | null>(null);
+  const searchParamsRef = useRef(searchParams);
+  searchParamsRef.current = searchParams;
+  const isSendingRef = useRef(false);
 
   const {
     snapshot,
@@ -63,7 +67,8 @@ export default function ChatPage() {
     reset,
     hydrate,
     applyEvent,
-    setSavedPoiIds
+    setSavedPoiIds,
+    activeTurnId
   } = useSessionStore();
 
   const sessionQuery = useQuery({
@@ -186,18 +191,23 @@ export default function ChatPage() {
   }, [error]);
 
   useEffect(() => {
-    if (!authReady || handledQueryRef.current === `${sessionId ?? "new"}:${queuedMessage}`) {
+    if (!authReady) {
       return;
     }
 
     if (!queuedMessage) {
+      handledQueryRef.current = null;
       return;
     }
 
-    handledQueryRef.current = `${sessionId ?? "new"}:${queuedMessage}`;
+    if (handledQueryRef.current === queuedMessage) {
+      return;
+    }
+
+    handledQueryRef.current = queuedMessage;
 
     const clearQueuedMessage = (nextSessionId?: string) => {
-      const params = new URLSearchParams(searchParams.toString());
+      const params = new URLSearchParams(searchParamsRef.current.toString());
       params.delete("message");
       if (nextSessionId) {
         params.set("sessionId", nextSessionId);
@@ -220,13 +230,14 @@ export default function ChatPage() {
       hydrate(session);
       clearQueuedMessage(session.id);
     });
-  }, [authReady, hydrate, queuedMessage, router, searchParams, sessionId]);
+  }, [authReady, hydrate, queuedMessage, router, sessionId]);
 
   const visibleMessages = useMemo(
     () => getVisibleMessages(snapshot, streamingMessage),
     [snapshot, streamingMessage]
   );
   const trip = useMemo(() => buildTripContext(snapshot), [snapshot]);
+  const displayedTrip = optimisticTrip || trip;
   const itinerary = useMemo(() => buildItinerary(snapshot), [snapshot]);
   const searchResults = useMemo(() => buildSearchResults(snapshot), [snapshot]);
   const mapData = useMemo(() => buildMapData(snapshot), [snapshot]);
@@ -256,17 +267,27 @@ export default function ChatPage() {
       return;
     }
 
-    if (snapshot?.id) {
-      await sendMessage(snapshot.id, { content });
+    // Prevent double-fire from React StrictMode or rapid submissions
+    if (isSendingRef.current) {
       return;
     }
+    isSendingRef.current = true;
 
-    const session = await createSession({ initialMessage: content });
-    setSessionId(session.id);
-    hydrate(session);
-    startTransition(() => {
-      router.replace(`/chat?sessionId=${encodeURIComponent(session.id)}`);
-    });
+    try {
+      if (snapshot?.id) {
+        await sendMessage(snapshot.id, { content });
+        return;
+      }
+
+      const session = await createSession({ initialMessage: content });
+      setSessionId(session.id);
+      hydrate(session);
+      startTransition(() => {
+        router.replace(`/chat?sessionId=${encodeURIComponent(session.id)}`);
+      });
+    } finally {
+      isSendingRef.current = false;
+    }
   };
 
   const handleSendMessage = async (content: string) => {
@@ -284,6 +305,7 @@ export default function ChatPage() {
       });
     }
   };
+
 
   const applyStructuredMutation = async (mutation: SessionPlanMutation) => {
     if (!snapshot?.id) {
@@ -326,6 +348,7 @@ export default function ChatPage() {
       return;
     }
 
+    setOptimisticTrip(nextTrip);
     try {
       const mutation = buildOverviewMutation(trip, nextTrip);
       if (mutation) {
@@ -334,7 +357,9 @@ export default function ChatPage() {
         const updated = await updateSession(snapshot.id, { title: nextTrip.title });
         hydrate(updated);
       }
+      setOptimisticTrip(null);
     } catch (updateError) {
+      setOptimisticTrip(null);
       toast({
         title: "Could not update trip",
         description:
@@ -344,6 +369,13 @@ export default function ChatPage() {
         variant: "destructive"
       });
     }
+  };
+
+  const handleSlotAction = async (action: { field: string; value: string | number }, prompt: string) => {
+    const nextTrip = { ...displayedTrip, [action.field]: action.value };
+    await handleTripUpdate(nextTrip);
+    setDraftInput("");
+    await runSessionAction(prompt);
   };
 
   const handleDelete = async () => {
@@ -449,20 +481,25 @@ export default function ChatPage() {
     <div className="relative flex h-[100dvh] flex-col overflow-hidden bg-[white] text-[#1f1b16]">
       <TopNavigation
         trip={{
-          id: trip.id,
-          title: trip.title,
-          origin: trip.origin,
-          destination: trip.destination,
-          destinations: trip.destinations,
-          duration: trip.days ? `${trip.days} days` : "",
-          travelers: trip.travelers,
-          budget: trip.budget
+          id: displayedTrip.id,
+          title: displayedTrip.title,
+          origin: displayedTrip.origin,
+          destination: displayedTrip.destination,
+          destinations: displayedTrip.destinations,
+          startDate: displayedTrip.startDate,
+          endDate: displayedTrip.endDate,
+          dateFlexibility: displayedTrip.dateFlexibility,
+          duration: displayedTrip.days ? `${displayedTrip.days} days` : "",
+          travelers: displayedTrip.travelers,
+          budget: displayedTrip.budget
         }}
         onTripUpdate={(nextTrip) => {
           void handleTripUpdate({
-            ...trip,
+            ...displayedTrip,
             ...nextTrip,
-            days: Number.parseInt(nextTrip.duration || String(trip.days), 10) || trip.days
+            days:
+              Number.parseInt(nextTrip.duration || String(displayedTrip.days), 10) ||
+              displayedTrip.days
           });
         }}
         isRightPanelVisible={isRightPanelVisible}
@@ -490,6 +527,12 @@ export default function ChatPage() {
         }}
         onPopulateInput={setDraftInput}
       />
+
+      {planningUnavailable && (
+        <div className="z-40 w-full border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-sm font-medium text-amber-900 shadow-sm">
+          AI planning is temporarily unavailable. Roameo kept your last accepted trip visible until the provider recovers.
+        </div>
+      )}
 
       <div className="flex min-h-0 flex-1 overflow-hidden bg-transparent lg:flex-row">
         <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent">
@@ -521,7 +564,7 @@ export default function ChatPage() {
                 pois={mapData.pois}
                 isTyping={isStreaming}
                 detectedIntent={null}
-                planningActive={isStreaming}
+                planningActive={planningState?.status === "running"}
                 planningState={planningState}
                 savedIds={savedIds}
                 itineraryPoiIds={itineraryPoiIds}
@@ -531,12 +574,13 @@ export default function ChatPage() {
                 onAddPoi={(poi) => {
                   void handlePlanMutation(poi, "add");
                 }}
-                onReplan={(poi) => {
-                  void handlePlanMutation(poi, "replan");
-                }}
-                onPopulateInput={setDraftInput}
+                onReplan={(poi) => handlePlanMutation(poi, "replan")}
+                onPopulateInput={(text) => setDraftInput(text)}
+                onSlotAction={handleSlotAction}
                 inputValue={draftInput}
                 onInputChange={setDraftInput}
+                traces={snapshot?.traces}
+                activeTurnId={activeTurnId}
               />
             )}
 
@@ -558,6 +602,7 @@ export default function ChatPage() {
                   void handlePlanMutation(poi, "replan");
                 }}
                 isLoading={sessionQuery.isLoading && Boolean(sessionId)}
+                isSplitView={isRightPanelVisible}
               />
             )}
           </div>

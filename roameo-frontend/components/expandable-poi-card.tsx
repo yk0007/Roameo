@@ -7,6 +7,7 @@ import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Heart, Plus, MapPin, Star, Clock, Phone, Globe, Navigation, Check } from "lucide-react";
+import { resolvePoiImageUrl } from "@/lib/poi-image-url";
 import type { POI } from "@/lib/types";
 
 interface ExpandablePoiCardProps {
@@ -31,6 +32,7 @@ export function ExpandablePoiCard({
   const [active, setActive] = useState<boolean>(false);
   const ref = useRef<HTMLDivElement>(null);
   const id = useId();
+  const imageUrl = resolvePoiImageUrl(poi.photoUrl) || "/placeholder.svg";
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -98,7 +100,7 @@ export function ExpandablePoiCard({
             >
               <motion.div layoutId={`image-${poi.name}-${id}`}>
                 <Image
-                  src={poi.photoUrl || '/placeholder.svg'}
+                  src={imageUrl}
                   alt={poi.name}
                   className="w-full h-80 lg:h-80 sm:rounded-tr-lg sm:rounded-tl-lg object-cover"
                   width={500}
@@ -238,8 +240,8 @@ export function ExpandablePoiCard({
       >
         <div className="flex gap-4 flex-col md:flex-row">
           <motion.div layoutId={`image-${poi.name}-${id}`}>
-            <Image
-              src={poi.photoUrl || '/placeholder.svg'}
+              <Image
+              src={imageUrl}
               alt={poi.name}
               className="h-40 w-40 md:h-14 md:w-14 rounded-lg object-cover flex-shrink-0"
               width={160}

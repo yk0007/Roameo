@@ -1,0 +1,192 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e9]: roameo
+        - navigation [ref=e10]:
+          - link "How it works" [ref=e11] [cursor=pointer]:
+            - /url: "#how-it-works"
+          - link "Features" [ref=e12] [cursor=pointer]:
+            - /url: "#features"
+        - generic [ref=e13]:
+          - link "Log in" [ref=e14] [cursor=pointer]:
+            - /url: /auth/login
+            - button "Log in" [ref=e15]
+          - button "Get started" [ref=e16] [cursor=pointer]
+    - generic [ref=e24]:
+      - heading "Travel planning that finally feels composed." [level=1] [ref=e25]
+      - paragraph [ref=e26]: Start in chat, refine on the map, and keep every place, day, and decision tied together in one calmer travel workspace.
+      - generic [ref=e27]:
+        - button "Start planning" [ref=e28] [cursor=pointer]:
+          - text: Start planning
+          - img
+        - link "See how it works" [ref=e29] [cursor=pointer]:
+          - /url: "#how-it-works"
+      - generic [ref=e30]:
+        - generic [ref=e31]: Natural conversation
+        - generic [ref=e33]: Day-by-day itinerary stays synced
+        - generic [ref=e35]:
+          - img [ref=e36]
+          - text: Real destinations, not template fluff
+    - generic [ref=e40]:
+      - generic [ref=e41]:
+        - heading "How it Works" [level=2] [ref=e42]
+        - paragraph [ref=e43]: Discover the power of AI-driven travel planning
+      - generic [ref=e44]:
+        - generic [ref=e45]:
+          - img [ref=e47]
+          - generic [ref=e52]: Smart Destination Discovery
+          - paragraph [ref=e53]: AI-powered recommendations tailored to your preferences, budget, and travel style.
+        - generic [ref=e54]:
+          - img [ref=e56]
+          - generic [ref=e62]: Intelligent Planning Agent
+          - paragraph [ref=e63]: Our AI agent creates detailed itineraries with optimized routes and schedules.
+        - generic [ref=e64]:
+          - img [ref=e66]
+          - generic [ref=e71]: Real-time Itinerary Builder
+          - paragraph [ref=e72]: Dynamic day-by-day plans that adapt to your interests and constraints.
+        - generic [ref=e73]:
+          - img [ref=e75]
+          - generic [ref=e81]: Optimized Route Planning
+          - paragraph [ref=e82]: Efficient travel routes that maximize your time and minimize costs.
+        - generic [ref=e83]:
+          - img [ref=e85]
+          - generic [ref=e89]: Curated POI Recommendations
+          - paragraph [ref=e90]: Handpicked points of interest based on reviews, ratings, and relevance.
+        - generic [ref=e91]:
+          - img [ref=e93]
+          - generic [ref=e100]: Collaborative Trip Planning
+          - paragraph [ref=e101]: Share and collaborate on trips with friends and family in real-time.
+        - generic [ref=e102]:
+          - img [ref=e104]
+          - generic [ref=e108]: Secure & Private
+          - paragraph [ref=e109]: Your travel data is protected with enterprise-grade security measures.
+        - generic [ref=e110]:
+          - img [ref=e112]
+          - generic [ref=e117]: 24/7 Travel Assistant
+          - paragraph [ref=e118]: Get instant help and modifications to your travel plans anytime.
+    - generic [ref=e120]:
+      - generic [ref=e121]:
+        - heading "Features" [level=2] [ref=e122]
+        - paragraph [ref=e123]: Discover what makes Roameo your perfect travel companion
+      - generic [ref=e125]:
+        - generic [ref=e126]:
+          - generic [ref=e128]:
+            - button "Local Expertise" [ref=e131] [cursor=pointer]:
+              - img [ref=e136]
+            - button "Hidden Gems" [ref=e139] [cursor=pointer]:
+              - img [ref=e142]
+            - button "Smart Budgeting" [ref=e145] [cursor=pointer]:
+              - img [ref=e148]
+            - button "Cultural Sensitivity" [ref=e152] [cursor=pointer]:
+              - img [ref=e155]
+            - button "Seasonal Planning" [ref=e157] [cursor=pointer]:
+              - img [ref=e160]
+            - button "Real-time Updates" [ref=e164] [cursor=pointer]:
+              - img [ref=e167]
+          - generic [ref=e173]:
+            - paragraph [ref=e174]: Features
+            - paragraph [ref=e175]: "01"
+            - paragraph [ref=e176]: Select a node to inspect
+        - generic [ref=e177]:
+          - generic [ref=e178]:
+            - img [ref=e180]
+            - paragraph [ref=e184]: Features
+          - heading "Local Expertise" [level=3] [ref=e185]
+          - paragraph [ref=e186]: Navigate India's diverse regions with insider knowledge. Get authentic recommendations from local experts across hill stations and coastal areas.
+          - generic [ref=e187]:
+            - paragraph [ref=e188]: Why it matters
+            - paragraph [ref=e189]: Each option updates the conversation with travel context you can actually use while refining the trip.
+          - generic [ref=e191]:
+            - button "Local Expertise" [ref=e192] [cursor=pointer]
+            - button "Hidden Gems" [ref=e193] [cursor=pointer]
+            - button "Smart Budgeting" [ref=e194] [cursor=pointer]
+            - button "Cultural Sensitivity" [ref=e195] [cursor=pointer]
+            - button "Seasonal Planning" [ref=e196] [cursor=pointer]
+            - button "Real-time Updates" [ref=e197] [cursor=pointer]
+    - generic [ref=e199]:
+      - generic [ref=e200]:
+        - paragraph [ref=e201]: Trip moods
+        - heading "Choose the feeling of the trip before you choose every detail." [level=2] [ref=e202]
+        - paragraph [ref=e203]: Roameo helps you start with pace, atmosphere, and rhythm, then turns that mood into stays, route decisions, and day structure that already feel considered.
+        - paragraph [ref=e204]: Start broad, then let the planner narrow the trip into something that feels coherent.
+      - generic [ref=e205]:
+        - article [ref=e206]
+        - article [ref=e208]
+        - article [ref=e210]
+    - generic [ref=e213]:
+      - generic [ref=e215]:
+        - generic [ref=e216]:
+          - img "Luxury houseboat gliding through Kerala backwaters" [ref=e217]
+          - generic [ref=e219]:
+            - img [ref=e220]
+            - text: Alleppey, Kerala
+          - generic [ref=e223]:
+            - generic [ref=e224]:
+              - heading "Private Backwater Stay" [level=3] [ref=e225]
+              - generic [ref=e226]:
+                - generic [ref=e227]: Slow water route
+                - generic [ref=e228]: •
+                - generic [ref=e229]: Curated overnight stay
+            - generic [ref=e230]: Sunset deck suite
+        - generic [ref=e231]:
+          - img "Interior of a Kerala houseboat suite" [ref=e232]
+          - generic [ref=e233]:
+            - paragraph [ref=e234]: Stay details
+            - paragraph [ref=e235]: 2 travelers
+            - paragraph [ref=e236]: 2 nights on a private houseboat with dinner prepared on board.
+        - generic [ref=e237]:
+          - generic [ref=e238]:
+            - paragraph [ref=e239]: Check-in
+            - paragraph [ref=e240]: Nov 08
+          - generic [ref=e241]:
+            - paragraph [ref=e242]: Check-out
+            - paragraph [ref=e243]: Nov 10
+        - generic [ref=e244]:
+          - button "Book now" [ref=e245] [cursor=pointer]
+          - button "Add to trip" [ref=e246] [cursor=pointer]
+      - generic [ref=e247]:
+        - heading "Get personalized recommendations." [level=2] [ref=e248]
+        - paragraph [ref=e249]: Roameo turns a rough travel brief into well-matched stays, scenic routes, and pacing decisions that already feel considered before you start editing the trip.
+        - generic [ref=e250]:
+          - img [ref=e252]
+          - paragraph [ref=e255]: Save the options that fit, then keep route, timing, and places synced while you refine the plan.
+        - button "Save to Trip" [ref=e256] [cursor=pointer]
+    - contentinfo [ref=e257]:
+      - generic [ref=e260]:
+        - heading "Ready for the next trip?" [level=2] [ref=e261]
+        - paragraph [ref=e262]: Start in chat, refine on the map, and let every day, place, and timing decision stay connected while you plan.
+        - generic [ref=e263]:
+          - button "Start planning" [ref=e264] [cursor=pointer]:
+            - text: Start planning
+            - img
+          - link "Explore features" [ref=e265] [cursor=pointer]:
+            - /url: "#features"
+      - generic [ref=e266]:
+        - generic [ref=e267]:
+          - generic [ref=e268]:
+            - generic [ref=e272]: roameo
+            - paragraph [ref=e273]: Travel planning that keeps conversation, route, and day-by-day structure aligned from start to finish.
+          - generic [ref=e274]:
+            - paragraph [ref=e275]: Pages
+            - generic [ref=e276]:
+              - link "How it works" [ref=e277] [cursor=pointer]:
+                - /url: "#how-it-works"
+              - link "Features" [ref=e278] [cursor=pointer]:
+                - /url: "#features"
+              - link "Log in" [ref=e279] [cursor=pointer]:
+                - /url: /auth/login
+          - generic [ref=e280]:
+            - paragraph [ref=e281]: Information
+            - generic [ref=e282]:
+              - link "Privacy" [ref=e283] [cursor=pointer]:
+                - /url: "#"
+              - link "Terms" [ref=e284] [cursor=pointer]:
+                - /url: "#"
+              - link "Support" [ref=e285] [cursor=pointer]:
+                - /url: "#"
+        - generic [ref=e286]: © 2026 Roameo. Thoughtful travel planning from first message to final day.
+  - region "Notifications (F8)":
+    - list
+  - button "Open Next.js Dev Tools" [ref=e292] [cursor=pointer]:
+    - img [ref=e293]

@@ -22,9 +22,10 @@ interface SearchInterfaceProps {
   planningState?: SessionPlanningState
   searchStatus?: string
   hasBillingError?: boolean
+  isSplitView?: boolean
 }
 
-export const SearchInterface = memo(function SearchInterface({ activeView, onViewChange, results, savedIds, itineraryPoiIds, onAddPoi, onToggleSave, onReplan, isLoading = false, planningState, searchStatus, hasBillingError = false }: SearchInterfaceProps) {
+export const SearchInterface = memo(function SearchInterface({ activeView, onViewChange, results, savedIds, itineraryPoiIds, onAddPoi, onToggleSave, onReplan, isLoading = false, planningState, searchStatus, hasBillingError = false, isSplitView = false }: SearchInterfaceProps) {
   const [activeTab, setActiveTab] = useState("Stays")
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedQuery, setDebouncedQuery] = useState("")
@@ -148,21 +149,12 @@ export const SearchInterface = memo(function SearchInterface({ activeView, onVie
                 </div>
               </div>
             </div>
-          ) : planningState?.status === "unavailable" ? (
-            <div className="flex h-full items-center justify-center">
-              <div className="max-w-md rounded-[28px] border border-amber-200 bg-amber-50 px-6 py-5 text-center shadow-sm">
-                <h3 className="text-base font-semibold text-slate-900">AI search is temporarily unavailable</h3>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Roameo kept your last accepted places visible. Retry after the provider recovers to load fresh AI-backed recommendations.
-                </p>
-              </div>
-            </div>
           ) : !results ? (
             <div className="text-sm text-gray-500">No results yet. Ask Roameo to search for places.</div>
           ) : allResults.length === 0 ? (
             <div className="text-sm text-gray-500">No matches for your filters.</div>
           ) : (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-6">
+            <div className={`grid gap-x-6 gap-y-10 ${isSplitView ? 'grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'}`}>
               {allResults.map((poi) => (
                 <SearchCard
                   key={poi.id}

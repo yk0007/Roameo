@@ -6,7 +6,9 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Clock, ExternalLink, Heart, MapPin, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ShareButton } from "./share-button";
+import { PoiTypeIcon } from "./poi-type-icon";
 import { useOutsideClick } from "@/hooks/use-outside-click";
+import { resolvePoiImageUrl } from "@/lib/poi-image-url";
 import type { Activity, Itinerary, POI } from "@/lib/types";
 
 interface ItineraryPanelProps {
@@ -22,11 +24,23 @@ interface ItineraryPanelProps {
 }
 
 function activityToPoi(activity: Activity): POI {
+  const lowerName = activity.name.toLowerCase();
+  const type =
+    lowerName.includes("hotel") ||
+    lowerName.includes("resort") ||
+    lowerName.includes("stay")
+      ? "stay"
+      : lowerName.includes("restaurant") ||
+          lowerName.includes("cafe") ||
+          lowerName.includes("dinner") ||
+          lowerName.includes("lunch")
+        ? "restaurant"
+        : "attraction";
   return {
     id: activity.poiId || `${activity.name}-${activity.location}`,
     name: activity.name,
     photoUrl: activity.photoUrl,
-    type: "attraction",
+    type,
     rating: activity.rating,
     address: activity.location,
     lat: activity.lat ?? 0,
@@ -102,6 +116,7 @@ function ActivityModal({
 
   const poi = activityToPoi(activity);
   const isSaved = savedIds.has(poi.id);
+  const imageUrl = resolvePoiImageUrl(activity.photoUrl) || "/placeholder.svg";
 
   return (
     <AnimatePresence>
@@ -130,7 +145,7 @@ function ActivityModal({
           <Image
             width={520}
             height={320}
-            src={activity.photoUrl || "/placeholder.svg"}
+            src={imageUrl}
             alt={activity.name}
             className="h-72 w-full object-cover object-top md:h-80"
             priority
@@ -251,12 +266,12 @@ export function ItineraryPanel({
 
   return (
     <div className="relative flex h-full flex-col">
-      {(isLoading || planningStatus) && (
+      {isLoading && !itinerary?.daysPlan?.length && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/80 backdrop-blur-sm">
           <div className="flex flex-col items-center space-y-4">
             <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600" />
             <div className="text-sm font-medium text-gray-700">
-              {planningStatus || "Planning your itinerary..."}
+              Planning your itinerary...
             </div>
           </div>
         </div>
@@ -348,7 +363,10 @@ export function ItineraryPanel({
                         />
                       ) : (
                         <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-white/60 bg-blue-50/60 text-blue-500 shadow-sm backdrop-blur-md">
-                          <MapPin className="h-6 w-6 stroke-[1.5]" />
+                          <PoiTypeIcon
+                            poi={activityToPoi(activity)}
+                            className="h-6 w-6 stroke-[1.5]"
+                          />
                         </div>
                       )}
                       <div className="flex-1">

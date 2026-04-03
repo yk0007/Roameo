@@ -94,8 +94,7 @@ export const useSessionStore = create<SessionState>((set) => ({
             streamingMessage: {
               ...base,
               content: `${base.content}${event.data.delta}`
-            },
-            isStreaming: !event.data.done
+            }
           };
         }
         case "message.committed":

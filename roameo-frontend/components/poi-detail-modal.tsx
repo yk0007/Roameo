@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import Image from "next/image"
 import { Heart, Plus, MapPin, Star, Clock, Phone, Globe, Navigation, Check } from "lucide-react"
+import { resolvePoiImageUrl } from "@/lib/poi-image-url"
 import type { POI } from "@/lib/types"
 
 interface PoiDetailModalProps {
@@ -30,6 +31,7 @@ export function PoiDetailModal({
   onReplan
 }: PoiDetailModalProps) {
   if (!poi) return null
+  const imageUrl = resolvePoiImageUrl(poi.photoUrl) || "/placeholder.svg"
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -42,7 +44,7 @@ export function PoiDetailModal({
           {/* Hero Image */}
           <div className="relative">
             <Image
-              src={poi.photoUrl || '/placeholder.svg'}
+              src={imageUrl}
               alt={poi.name}
               className="w-full h-64 object-cover rounded-lg"
               width={600}

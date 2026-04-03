@@ -51,6 +51,9 @@ export type PlanningStateStatus = z.infer<typeof planningStateStatusSchema>;
 export const planningStateStageSchema = z.enum([
   "understanding",
   "researching",
+  "checking_dates",
+  "researching_events",
+  "researching_stays",
   "building_plan",
   "refining",
   "ready",
@@ -61,9 +64,40 @@ export type PlanningStateStage = z.infer<typeof planningStateStageSchema>;
 export const planningStateSourceSchema = z.enum([
   "provider",
   "places",
-  "directions"
+  "directions",
+  "weather",
+  "events",
+  "holidays",
+  "stays"
 ]);
 export type PlanningStateSource = z.infer<typeof planningStateSourceSchema>;
+
+export const dateFlexibilitySchema = z.enum([
+  "exact",
+  "approximate",
+  "open_ended"
+]);
+export type DateFlexibility = z.infer<typeof dateFlexibilitySchema>;
+
+export const dateAdvisoryItemSchema = z.object({
+  kind: z.enum(["prefer", "avoid", "weather", "event", "holiday", "seasonal"]),
+  title: z.string(),
+  detail: z.string(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional()
+});
+export type DateAdvisoryItem = z.infer<typeof dateAdvisoryItemSchema>;
+
+export const dateContextSchema = z.object({
+  requestedStartDate: z.string().optional(),
+  requestedEndDate: z.string().optional(),
+  inferredStartDate: z.string().optional(),
+  inferredEndDate: z.string().optional(),
+  flexibility: dateFlexibilitySchema.default("open_ended"),
+  derivedFrom: z.enum(["explicit", "relative", "suggested", "none"]).default("none"),
+  advisoryItems: z.array(dateAdvisoryItemSchema).default([])
+});
+export type DateContext = z.infer<typeof dateContextSchema>;
 
 export const planningStateSchema = z.object({
   status: planningStateStatusSchema.default("ready"),
@@ -80,6 +114,11 @@ export const sessionMemorySchema = z.object({
   destinationsDiscussed: z.array(z.string()).default([]),
   acceptedDecisions: z.array(z.string()).default([]),
   lastPlanVersion: z.number().default(0),
+  dateContext: dateContextSchema.default({
+    flexibility: "open_ended",
+    derivedFrom: "none",
+    advisoryItems: []
+  }),
   planningState: planningStateSchema.default({
     status: "ready",
     stage: "ready",
@@ -206,6 +245,9 @@ export const planSnapshotSchema = z.object({
   origin: z.string().optional(),
   destination: z.string().optional(),
   destinations: z.array(z.string()).default([]),
+  destinationImageUrl: z.string().optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
   totalDays: z.number().int().positive().default(1),
   travelerCount: z.number().int().positive().default(1),
   budgetTarget: budgetTargetSchema.optional(),
@@ -247,6 +289,19 @@ export const assistantResponseBlockSchema = z.discriminatedUnion("type", [
     text: z.string()
   }),
   z.object({
+    type: z.literal("capabilities_overview"),
+    title: z.string(),
+    intro: z.string().optional(),
+    sections: z.array(
+      z.object({
+        title: z.string(),
+        body: z.string()
+      })
+    ).min(1),
+    examplesTitle: z.string().optional(),
+    examples: z.array(z.string()).default([])
+  }),
+  z.object({
     type: z.literal("itinerary_template"),
     title: z.string(),
     subtitle: z.string().optional(),
@@ -285,6 +340,25 @@ export const assistantResponseBlockSchema = z.discriminatedUnion("type", [
     questions: z.array(z.string()).min(1)
   }),
   z.object({
+    type: z.literal("featured_poi"),
+    title: z.string().optional(),
+    body: z.string().optional(),
+    poiId: z.string()
+  }),
+  z.object({
+    type: z.literal("poi_story_list"),
+    title: z.string().optional(),
+    intro: z.string().optional(),
+    items: z.array(
+      z.object({
+        poiId: z.string(),
+        title: z.string().optional(),
+        badge: z.string().optional(),
+        body: z.string()
+      })
+    ).min(1)
+  }),
+  z.object({
     type: z.literal("place_card_row"),
     title: z.string().optional(),
     poiIds: z.array(z.string()).default([]),
@@ -312,7 +386,11 @@ export const assistantResponseBlockSchema = z.discriminatedUnion("type", [
     prompts: z.array(
       z.object({
         label: z.string(),
-        prompt: z.string()
+        prompt: z.string(),
+        slotAction: z.object({
+          field: z.string(),
+          value: z.union([z.string(), z.number()])
+        }).optional()
       })
     ).min(1)
   }),
@@ -332,6 +410,64 @@ export const assistantResponseBlockSchema = z.discriminatedUnion("type", [
     stage: planningStateStageSchema,
     label: z.string(),
     detail: z.string().optional()
+  }),
+  z.object({
+    type: z.literal("worker_progress"),
+    title: z.string().optional(),
+    steps: z.array(
+      z.object({
+        label: z.string(),
+        detail: z.string().optional(),
+        state: z.enum(["running", "completed"]).default("completed")
+      })
+    ).min(1)
+  }),
+  z.object({
+    type: z.literal("stay_recommendation_list"),
+    title: z.string(),
+    intro: z.string().optional(),
+    bookingDisclaimer: z.string().optional(),
+    bestOption: z.object({
+      poiId: z.string(),
+      title: z.string(),
+      rateLabel: z.string().optional(),
+      body: z.string(),
+      caveat: z.string().optional()
+    }),
+    alternativesTitle: z.string().optional(),
+    alternatives: z.array(
+      z.object({
+        poiId: z.string(),
+        title: z.string(),
+        rateLabel: z.string().optional(),
+        body: z.string()
+      })
+    ).default([]),
+    notFitTitle: z.string().optional(),
+    notFit: z.array(
+      z.object({
+        label: z.string(),
+        reason: z.string()
+      })
+    ).default([])
+  }),
+  z.object({
+    type: z.literal("date_advisory"),
+    title: z.string(),
+    summary: z.string(),
+    advisories: z.array(dateAdvisoryItemSchema).min(1)
+  }),
+  z.object({
+    type: z.literal("event_window_summary"),
+    title: z.string(),
+    summary: z.string().optional(),
+    items: z.array(
+      z.object({
+        title: z.string(),
+        detail: z.string(),
+        sourceLabel: z.string().optional()
+      })
+    ).min(1)
   })
 ]);
 export type AssistantResponseBlock = z.infer<typeof assistantResponseBlockSchema>;
@@ -513,6 +649,10 @@ export const planMutationInputSchema = z.discriminatedUnion("type", [
     title: z.string().optional(),
     origin: z.string().optional(),
     destination: z.string().optional(),
+    destinations: z.array(z.string()).optional(),
+    startDate: z.string().optional(),
+    endDate: z.string().optional(),
+    dateFlexibility: dateFlexibilitySchema.optional(),
     totalDays: z.number().int().positive().optional(),
     travelerCount: z.number().int().positive().optional(),
     budgetTotal: z.number().nonnegative().optional(),

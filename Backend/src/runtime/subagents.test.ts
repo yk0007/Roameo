@@ -21,6 +21,11 @@ function makeSession(): SessionSnapshot {
       destinationsDiscussed: [],
       acceptedDecisions: [],
       lastPlanVersion: 0,
+      dateContext: {
+        flexibility: "open_ended",
+        derivedFrom: "none",
+        advisoryItems: []
+      },
       planningState: {
         status: "ready",
         stage: "ready",
@@ -91,7 +96,12 @@ test("buildResponseBlocks emits canonical itinerary presentation blocks", () => 
       destination: "Kochi",
       totalDays: 1,
       travelerCount: 1,
-      styles: []
+      styles: [],
+      dateContext: {
+        flexibility: "open_ended",
+        derivedFrom: "none",
+        advisoryItems: []
+      }
     },
     narrative: {
       introTitle: "Kochi looks like a great fit",
@@ -162,7 +172,12 @@ test("buildResponseBlocks never references unknown POI ids", () => {
       intent: "search_places",
       destinations: ["Kochi"],
       destination: "Kochi",
-      styles: []
+      styles: [],
+      dateContext: {
+        flexibility: "open_ended",
+        derivedFrom: "none",
+        advisoryItems: []
+      }
     },
     narrative: {
       introTitle: "A few nice options are ready",
@@ -173,6 +188,7 @@ test("buildResponseBlocks never references unknown POI ids", () => {
     },
     research: {
       destinations: ["Kochi"],
+      focus: "general",
       catalog: session.poiCatalog,
       grouped: {
         stays: [],
@@ -236,4 +252,244 @@ test("resolveTurnIntent upgrades natural follow-up edit requests into refine_tri
   );
 
   assert.equal(resolution.intent, "refine_trip");
+});
+
+test("resolveTurnIntent anchors broad greetings to the current local context", async () => {
+  const session: SessionSnapshot = {
+    ...makeSession(),
+    memory: {
+      ...makeSession().memory,
+      destinationsDiscussed: ["Visakhapatnam"]
+    }
+  };
+
+  const providerService = {
+    generateObject: async () => ({
+      intent: "question",
+      destinations: [],
+      styles: []
+    })
+  } as any;
+
+  const resolution = await resolveTurnIntent(
+    providerService,
+    {} as any,
+    session,
+    "hello"
+  );
+
+  assert.equal(resolution.intent, "question");
+  assert.equal(resolution.questionFocus, "greeting");
+  assert.equal(resolution.destination, "Visakhapatnam");
+});
+
+test("resolveTurnIntent classifies plan trip requests deterministically", async () => {
+  const providerService = {
+    generateObject: async () => ({
+      intent: "question",
+      destinations: [],
+      styles: []
+    })
+  } as any;
+
+  const resolution = await resolveTurnIntent(
+    providerService,
+    {} as any,
+    makeSession(),
+    "plan trip to Araku for 2 days"
+  );
+
+  assert.equal(resolution.intent, "plan_trip");
+  assert.equal(resolution.destination, "Araku");
+  assert.equal(resolution.totalDays, 2);
+});
+
+test("resolveTurnIntent parses flexible date context from natural language", async () => {
+  const providerService = {
+    generateObject: async () => ({
+      intent: "question",
+      destinations: [],
+      styles: []
+    })
+  } as any;
+
+  const resolution = await resolveTurnIntent(
+    providerService,
+    {} as any,
+    makeSession(),
+    "plan trip to Hanoi for 2 days this weekend"
+  );
+
+  assert.equal(resolution.intent, "plan_trip");
+  assert.equal(resolution.dateContext.flexibility, "approximate");
+  assert.equal(resolution.dateContext.derivedFrom, "relative");
+  assert.ok(resolution.dateContext.inferredStartDate);
+});
+
+test("buildResponseBlocks emits capabilities and featured local card blocks", () => {
+  const session = makeSession();
+  const blocks = buildResponseBlocks({
+    session,
+    resolution: {
+      intent: "question",
+      destination: "Visakhapatnam",
+      destinations: ["Visakhapatnam"],
+      styles: [],
+      questionFocus: "capabilities",
+      dateContext: {
+        flexibility: "open_ended",
+        derivedFrom: "none",
+        advisoryItems: []
+      }
+    },
+    narrative: {
+      introTitle: "I can help you explore",
+      introBody: "I can make planning feel easy and concrete.",
+      leadText: "Here’s the main way I can help.",
+      promptChips: [],
+      clarifyingQuestions: []
+    },
+    research: {
+      destinations: ["Visakhapatnam"],
+      focus: "capabilities",
+      catalog: session.poiCatalog,
+      grouped: {
+        stays: [],
+        restaurants: [],
+        attractions: [session.poiCatalog.items["poi-1"]]
+      },
+      facts: []
+    }
+  });
+
+  assert.deepEqual(
+    blocks.map((block) => block.type),
+    [
+      "trip_intro",
+      "lead",
+      "capabilities_overview",
+      "featured_poi",
+      "place_card_row",
+      "assistant_prompt_chips"
+    ]
+  );
+});
+
+test("buildResponseBlocks emits discovery stories from canonical POIs", () => {
+  const session = makeSession();
+  const blocks = buildResponseBlocks({
+    session,
+    resolution: {
+      intent: "search_places",
+      destination: "Visakhapatnam",
+      destinations: ["Visakhapatnam"],
+      styles: [],
+      questionFocus: "hidden_gems",
+      dateContext: {
+        flexibility: "open_ended",
+        derivedFrom: "none",
+        advisoryItems: []
+      }
+    },
+    narrative: {
+      introTitle: "A few quieter local picks are ready",
+      introBody: "These give you a more local feel than the obvious first stops.",
+      leadText: "Here are a few strong places to start.",
+      promptChips: [],
+      clarifyingQuestions: []
+    },
+    research: {
+      destinations: ["Visakhapatnam"],
+      focus: "hidden_gems",
+      catalog: session.poiCatalog,
+      grouped: {
+        stays: [],
+        restaurants: [session.poiCatalog.items["poi-2"]],
+        attractions: [session.poiCatalog.items["poi-1"]]
+      },
+      facts: []
+    }
+  });
+
+  assert.ok(blocks.some((block) => block.type === "poi_story_list"));
+  const row = blocks.find((block) => block.type === "place_card_row");
+  assert.ok(row && row.type === "place_card_row");
+  assert.deepEqual(row.poiIds, ["poi-1", "poi-2"]);
+});
+
+test("buildResponseBlocks emits stay and date-aware blocks for stay mode", () => {
+  const session = makeSession();
+  session.poiCatalog.items["poi-3"] = {
+    id: "poi-3",
+    name: "Haritha Valley Resort",
+    type: "stay",
+    lat: 18.3,
+    lng: 82.8,
+    openingHours: [],
+    source: "google_places",
+    tags: [],
+    rating: 4.1,
+    priceLevel: 2
+  };
+  const blocks = buildResponseBlocks({
+    session,
+    resolution: {
+      intent: "search_places",
+      destination: "Araku",
+      destinations: ["Araku"],
+      styles: ["relaxed"],
+      questionFocus: "hotels",
+      stayMode: true,
+      dateContext: {
+        inferredStartDate: "2026-07-02",
+        inferredEndDate: "2026-07-03",
+        flexibility: "exact",
+        derivedFrom: "explicit",
+        advisoryItems: [
+          {
+            kind: "weather",
+            title: "Rain is possible",
+            detail: "Carry a light waterproof layer."
+          }
+        ]
+      }
+    },
+    narrative: {
+      introTitle: "A few stay options are ready",
+      introBody: "I scoped the strongest stay bases for the route.",
+      leadText: "Here are the best places to stay around Araku right now.",
+      promptChips: [],
+      clarifyingQuestions: []
+    },
+    research: {
+      destinations: ["Araku"],
+      focus: "hotels",
+      catalog: session.poiCatalog,
+      grouped: {
+        stays: [session.poiCatalog.items["poi-3"]],
+        restaurants: [],
+        attractions: [session.poiCatalog.items["poi-1"]]
+      },
+      facts: []
+    },
+    planningContext: {
+      workerProgress: [{ label: "Scouting Araku stays", state: "completed" }],
+      holidays: {
+        items: [
+          {
+            title: "Regional holiday",
+            detail: "Expect busier transport after lunch.",
+            sourceLabel: "Nager.Date"
+          }
+        ],
+        advisories: [],
+        summary: "There is one holiday note during this window."
+      }
+    }
+  });
+
+  assert.ok(blocks.some((block) => block.type === "worker_progress"));
+  assert.ok(blocks.some((block) => block.type === "date_advisory"));
+  assert.ok(blocks.some((block) => block.type === "event_window_summary"));
+  assert.ok(blocks.some((block) => block.type === "stay_recommendation_list"));
 });

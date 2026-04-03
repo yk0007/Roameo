@@ -7,6 +7,7 @@ import type {
   SessionPlanMutation,
   TripContext
 } from "./types";
+import { getBudgetOptionByLabel, getBudgetOptionByTotal } from "./budget-options";
 
 const CANONICAL_POI_SOURCES = new Set(["google_places", "google_maps", "web_research"]);
 
@@ -127,12 +128,19 @@ export function buildItinerary(session?: CanonicalSession): Itinerary | undefine
 
 export function buildMapData(session?: CanonicalSession): MapData {
   const plan = session?.plan;
-  if (!plan) {
-    return { pois: [], routes: [] };
-  }
-
   const poiMap = new Map<string, POI>();
   const routes: MapData["routes"] = [];
+
+  if (!plan) {
+    for (const poi of getCanonicalPois(session)) {
+      poiMap.set(poi.id, poi);
+    }
+
+    return {
+      pois: Array.from(poiMap.values()),
+      routes
+    };
+  }
 
   for (const day of plan.days) {
     const dayPois = day.activities
@@ -172,19 +180,21 @@ export function buildMapData(session?: CanonicalSession): MapData {
 
 export function buildTripContext(session?: CanonicalSession): TripContext {
   const plan = session?.plan;
+  const budgetLabel =
+    getBudgetOptionByTotal(plan?.budgetTarget?.total || plan?.budget?.total)?.label ||
+    "";
   return {
     id: session?.id || "",
     title: session?.title || "Untitled trip",
     origin: plan?.origin || "",
     destination: plan?.destination || "",
     destinations: plan?.destinations || [],
+    startDate: plan?.startDate,
+    endDate: plan?.endDate,
+    dateFlexibility: session?.memory.dateContext.flexibility,
     days: plan?.totalDays || 0,
     travelers: plan?.travelerCount ? String(plan.travelerCount) : "",
-    budget: plan?.budgetTarget?.total
-      ? `${plan.budgetTarget.currency} ${plan.budgetTarget.total.toLocaleString()}`
-      : plan?.budget?.total
-        ? `${plan.budget.currency} ${plan.budget.total.toLocaleString()}`
-      : ""
+    budget: budgetLabel
   };
 }
 
@@ -210,6 +220,14 @@ function parseBudgetInput(value: string): {
   const trimmed = value.trim();
   if (!trimmed) {
     return null;
+  }
+
+  const option = getBudgetOptionByLabel(trimmed);
+  if (option) {
+    return {
+      total: option.total,
+      currency: option.currency
+    };
   }
 
   const amountMatch = trimmed.match(/(\d[\d,]*)/);
@@ -249,6 +267,27 @@ export function buildOverviewMutation(
   }
   if (previous.destination !== next.destination && next.destination) {
     mutation.destination = next.destination;
+    hasChanges = true;
+  }
+  if (
+    JSON.stringify(previous.destinations || []) !==
+      JSON.stringify(next.destinations || []) &&
+    (next.destinations || []).length > 0
+  ) {
+    mutation.destinations = next.destinations;
+    mutation.destination = next.destinations[0];
+    hasChanges = true;
+  }
+  if (previous.startDate !== next.startDate && next.startDate) {
+    mutation.startDate = next.startDate;
+    hasChanges = true;
+  }
+  if (previous.endDate !== next.endDate && next.endDate) {
+    mutation.endDate = next.endDate;
+    hasChanges = true;
+  }
+  if (previous.dateFlexibility !== next.dateFlexibility && next.dateFlexibility) {
+    mutation.dateFlexibility = next.dateFlexibility;
     hasChanges = true;
   }
   if (previous.days !== next.days && next.days) {

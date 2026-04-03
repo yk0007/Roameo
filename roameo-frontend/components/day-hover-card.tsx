@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Clock, MapPin, Star, Camera } from "lucide-react"
 import { CachedImage } from "./cached-image"
+import { resolvePoiImageUrl } from "@/lib/poi-image-url"
 import type { ItineraryDay } from "@/lib/types"
 
 interface DayHoverCardProps {
@@ -43,9 +44,9 @@ export function DayHoverCard({ day, onClose, onDetailClick }: DayHoverCardProps)
               return (
                 <div key={index} className="flex gap-3 p-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
                   <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-200 flex items-center justify-center flex-shrink-0">
-                    {activity.photoUrl ? (
+                    {resolvePoiImageUrl(activity.photoUrl) ? (
                       <CachedImage
-                        src={activity.photoUrl}
+                        src={resolvePoiImageUrl(activity.photoUrl)}
                         alt={activity.name}
                         className="w-full h-full object-cover"
                       />

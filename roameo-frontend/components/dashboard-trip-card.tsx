@@ -5,6 +5,8 @@ import { ArrowRight, CalendarDays, MapPin, Plane } from "lucide-react";
 import { CachedImage } from "@/components/cached-image";
 import DestinationCardArt from "@/components/DestinationCardArt";
 import { cn } from "@/lib/utils";
+import { useState, useEffect } from "react";
+import { BACKEND_URL } from "@/lib/types";
 
 export type DashboardTripSummary = {
   id: string;
@@ -155,20 +157,6 @@ function getArtRecipe(index: number) {
   return ART_RECIPES[index % ART_RECIPES.length];
 }
 
-function getStockImageUrl(trip: DashboardTripSummary, index: number) {
-  if (trip.destinationImageUrl) {
-    return trip.destinationImageUrl;
-  }
-
-  const haystack = `${trip.title} ${trip.destination || ""}`;
-  const matched = STOCK_IMAGE_MATCHERS.find(({ pattern }) => pattern.test(haystack));
-  if (matched) {
-    return matched.url;
-  }
-
-  return STOCK_IMAGE_LIBRARY[index % STOCK_IMAGE_LIBRARY.length];
-}
-
 function getBadgeDotClass(tone: TripCardBadge["tone"]) {
   if (tone === "mint") {
     return "bg-emerald-500";
@@ -188,8 +176,81 @@ export function DashboardTripCard({
 }: DashboardTripCardProps) {
   const badge = buildTripBadge(trip);
   const artRecipe = getArtRecipe(index);
-  const coverImageUrl = getStockImageUrl(trip, index);
   const useAnimatedStamp = !trip.destination && !trip.days && !trip.destinationImageUrl;
+  const [dynamicImage, setDynamicImage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (useAnimatedStamp || trip.destinationImageUrl) return;
+
+    const haystack = `${trip.title} ${trip.destination || ""}`;
+    const matched = STOCK_IMAGE_MATCHERS.find(({ pattern }) => pattern.test(haystack));
+    if (matched) {
+      setDynamicImage(matched.url);
+      return;
+    }
+
+    if (!trip.destination) {
+      setDynamicImage(STOCK_IMAGE_LIBRARY[index % STOCK_IMAGE_LIBRARY.length]);
+      return;
+    }
+
+    let isMounted = true;
+    const fetchImage = async () => {
+      try {
+        const primaryLocation = trip.destination!.split(',')[0].trim();
+        let fetchedUrl = null;
+
+        // Step 1: Try the robust backend DestinationImageService (Google Places)
+        try {
+          const res = await fetch(`${BACKEND_URL}/api/destination-image?q=${encodeURIComponent(primaryLocation)}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.imageUrl) {
+              fetchedUrl = data.imageUrl;
+            }
+          }
+        } catch (backendErr) {
+          console.error("Backend image fetch failed:", backendErr);
+        }
+
+        if (!isMounted) return;
+
+        // Step 2: Fallback to Wikipedia if Google Places failed or has no image
+        if (!fetchedUrl) {
+          const wikiRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(primaryLocation)}`);
+          if (wikiRes.ok) {
+            const data = await wikiRes.json();
+            if (data.originalimage?.source) {
+              fetchedUrl = data.originalimage.source;
+            } else if (data.thumbnail?.source) {
+              fetchedUrl = data.thumbnail.source;
+            }
+          }
+        }
+
+        if (!isMounted) return;
+
+        if (fetchedUrl) {
+          setDynamicImage(fetchedUrl);
+        } else {
+          setDynamicImage(STOCK_IMAGE_LIBRARY[index % STOCK_IMAGE_LIBRARY.length]);
+        }
+      } catch (err) {
+        if (isMounted) {
+          setDynamicImage(STOCK_IMAGE_LIBRARY[index % STOCK_IMAGE_LIBRARY.length]);
+        }
+      }
+    };
+
+    fetchImage();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [trip.destination, trip.title, trip.destinationImageUrl, useAnimatedStamp, index]);
+
+  const coverImageUrl = trip.destinationImageUrl || dynamicImage || STOCK_IMAGE_LIBRARY[index % STOCK_IMAGE_LIBRARY.length];
+
   const entryAnimation = skipEntryAnimation
     ? {}
     : {

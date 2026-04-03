@@ -106,6 +106,32 @@ function finalizePlan(
   });
 }
 
+function shiftPlanDates(
+  plan: PlanSnapshot,
+  startDate?: string,
+  endDate?: string
+): PlanSnapshot {
+  if (!startDate || !endDate) {
+    return plan;
+  }
+
+  return {
+    ...plan,
+    startDate,
+    endDate,
+    days: plan.days.map((day, index) => ({
+      ...day,
+      date: addDaysIso(startDate, index)
+    }))
+  };
+}
+
+function addDaysIso(date: string, days: number): string {
+  const next = new Date(`${date}T00:00:00.000Z`);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next.toISOString().slice(0, 10);
+}
+
 function buildActivityFromPoi(poi: Poi): ItineraryActivity {
   const notes = [];
   if (typeof poi.rating === "number") {
@@ -279,12 +305,16 @@ function reorderActivities(
 function buildMutationMemory(
   session: SessionSnapshot,
   plan: PlanSnapshot,
-  decision: string
+  decision: string,
+  dateContextOverrides?: Partial<SessionSnapshot["memory"]["dateContext"]>
 ): SessionSnapshot["memory"] {
   let acceptedDecisions = appendUnique(session.memory.acceptedDecisions, decision);
   const destinationsDiscussed = Array.from(
     new Set([...session.memory.destinationsDiscussed, ...plan.destinations])
   );
+  const effectiveFlexibility =
+    dateContextOverrides?.flexibility ||
+    (plan.startDate && plan.endDate ? "exact" : session.memory.dateContext.flexibility);
 
   if (plan.destination) {
     acceptedDecisions = appendUnique(
@@ -302,13 +332,58 @@ function buildMutationMemory(
       `Budget target: ${plan.budgetTarget.currency} ${plan.budgetTarget.total.toLocaleString()}`
     );
   }
+  if (plan.startDate && plan.endDate && effectiveFlexibility === "exact") {
+    acceptedDecisions = appendUnique(
+      acceptedDecisions,
+      `Dates: ${plan.startDate} to ${plan.endDate}`
+    );
+  } else if (plan.startDate && effectiveFlexibility !== "exact") {
+    acceptedDecisions = appendUnique(
+      acceptedDecisions,
+      `Flexible timing: ${plan.startDate} for ${plan.totalDays} days`
+    );
+  }
 
   return {
     ...session.memory,
     summary: decision.slice(0, 400),
     lastPlanVersion: plan.version,
     destinationsDiscussed,
-    acceptedDecisions
+    acceptedDecisions,
+    dateContext: {
+      ...session.memory.dateContext,
+      ...dateContextOverrides,
+      inferredStartDate: plan.startDate || session.memory.dateContext.inferredStartDate,
+      inferredEndDate: plan.endDate || session.memory.dateContext.inferredEndDate,
+      flexibility: effectiveFlexibility,
+      derivedFrom:
+        dateContextOverrides?.derivedFrom ||
+        (plan.startDate && plan.endDate
+          ? "explicit"
+          : session.memory.dateContext.derivedFrom)
+    }
+  };
+}
+
+function buildDateContextOverrides(
+  session: SessionSnapshot,
+  mutation: Extract<PlanMutationInput, { type: "update_overview" }>,
+  flexibility?: SessionSnapshot["memory"]["dateContext"]["flexibility"]
+): Partial<SessionSnapshot["memory"]["dateContext"]> | undefined {
+  if (!flexibility) {
+    return undefined;
+  }
+
+  const derivedFrom: SessionSnapshot["memory"]["dateContext"]["derivedFrom"] =
+    flexibility === "exact" ? "explicit" : "suggested";
+
+  return {
+    requestedStartDate: mutation.startDate || session.memory.dateContext.requestedStartDate,
+    requestedEndDate: mutation.endDate || session.memory.dateContext.requestedEndDate,
+    inferredStartDate: mutation.startDate || session.memory.dateContext.inferredStartDate,
+    inferredEndDate: mutation.endDate || session.memory.dateContext.inferredEndDate,
+    flexibility,
+    derivedFrom
   };
 }
 
@@ -400,6 +475,7 @@ export class PlanMutationService {
       decision: string;
       confirmation?: string;
       sessionTitle?: string;
+      dateContextOverrides?: Partial<SessionSnapshot["memory"]["dateContext"]>;
     }
   ): Promise<SessionSnapshot> {
     if (!change.plan) {
@@ -413,7 +489,12 @@ export class PlanMutationService {
     }
 
     await this.repository.savePlan(session.id, change.plan, change.catalog || session.poiCatalog);
-    const memory = buildMutationMemory(session, change.plan, change.decision);
+    const memory = buildMutationMemory(
+      session,
+      change.plan,
+      change.decision,
+      change.dateContextOverrides
+    );
     await this.repository.updateSession(session.id, {
       title: change.plan.title,
       memory
@@ -705,38 +786,62 @@ export class PlanMutationService {
               "INR"
           }
         : plan.budgetTarget;
+    const nextDateFlexibility =
+      mutation.dateFlexibility || (mutation.startDate && mutation.endDate ? "exact" : undefined);
 
     const requiresRegeneration =
       Boolean(mutation.destination && mutation.destination !== plan.destination) ||
+      Boolean(
+        mutation.destinations &&
+          JSON.stringify(mutation.destinations) !== JSON.stringify(plan.destinations)
+      ) ||
       Boolean(mutation.totalDays && mutation.totalDays !== plan.totalDays);
 
     if (!requiresRegeneration) {
       const nextPlan = await enrichPlanLogistics(
         this.tools,
-        finalizePlan({
-          ...plan,
-          title: mutation.title || plan.title,
-          origin: mutation.origin || plan.origin,
-          travelerCount: mutation.travelerCount || plan.travelerCount,
-          budgetTarget: nextBudgetTarget
-        }),
+        finalizePlan(
+          shiftPlanDates(
+            {
+              ...plan,
+              title: mutation.title || plan.title,
+              origin: mutation.origin || plan.origin,
+              destination: mutation.destination || mutation.destinations?.[0] || plan.destination,
+              destinations:
+                mutation.destinations && mutation.destinations.length > 0
+                  ? mutation.destinations
+                  : plan.destinations,
+              travelerCount: mutation.travelerCount || plan.travelerCount,
+              budgetTarget: nextBudgetTarget
+            },
+            mutation.startDate || plan.startDate,
+            mutation.endDate || plan.endDate
+          )
+        ),
         session.poiCatalog
       );
 
       return {
         plan: nextPlan,
         decision: "Updated trip overview",
-        confirmation: "Updated the trip overview and kept the itinerary synced."
+        confirmation: "Updated the trip overview and kept the itinerary synced.",
+        dateContextOverrides: buildDateContextOverrides(
+          session,
+          mutation,
+          nextDateFlexibility
+        )
       };
     }
 
-    const destination = mutation.destination || plan.destination;
+    const destination = mutation.destination || mutation.destinations?.[0] || plan.destination;
     if (!destination) {
       throw new Error("A destination is required to regenerate this itinerary");
     }
 
     const destinations =
-      mutation.destination && mutation.destination !== plan.destination
+      mutation.destinations && mutation.destinations.length > 0
+        ? mutation.destinations
+        : mutation.destination && mutation.destination !== plan.destination
         ? [destination]
         : plan.destinations.length > 0
           ? plan.destinations
@@ -757,7 +862,26 @@ export class PlanMutationService {
       budgetNote: nextBudgetTarget
         ? `${nextBudgetTarget.currency} ${nextBudgetTarget.total}`
         : undefined,
-      styles: session.memory.preferences.styles
+      styles: session.memory.preferences.styles,
+      dateContext: {
+        ...session.memory.dateContext,
+        inferredStartDate:
+          mutation.startDate ||
+          plan.startDate ||
+          session.memory.dateContext.inferredStartDate,
+        inferredEndDate:
+          mutation.endDate ||
+          plan.endDate ||
+          session.memory.dateContext.inferredEndDate,
+        flexibility:
+          nextDateFlexibility || session.memory.dateContext.flexibility,
+        derivedFrom:
+          nextDateFlexibility === "exact"
+            ? "explicit"
+            : nextDateFlexibility
+              ? "suggested"
+              : session.memory.dateContext.derivedFrom
+      }
     };
 
     let nextPlan = await synthesizePlan(
@@ -774,6 +898,10 @@ export class PlanMutationService {
       ...nextPlan,
       title: mutation.title || nextPlan.title,
       origin: mutation.origin || nextPlan.origin,
+      destination,
+      destinations,
+      startDate: mutation.startDate || nextPlan.startDate,
+      endDate: mutation.endDate || nextPlan.endDate,
       travelerCount: mutation.travelerCount || nextPlan.travelerCount,
       budgetTarget: nextBudgetTarget
     });
@@ -787,7 +915,12 @@ export class PlanMutationService {
       plan: nextPlan,
       catalog: mergeCatalogs(session.poiCatalog, research.catalog),
       decision: "Regenerated the trip overview",
-      confirmation: "Updated the trip overview and regenerated the itinerary to keep every panel in sync."
+      confirmation: "Updated the trip overview and regenerated the itinerary to keep every panel in sync.",
+      dateContextOverrides: buildDateContextOverrides(
+        session,
+        mutation,
+        nextDateFlexibility
+      )
     };
   }
 

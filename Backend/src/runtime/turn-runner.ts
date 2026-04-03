@@ -17,10 +17,15 @@ import { StreamHub } from "../core/stream-hub.js";
 import {
   answerConversationally,
   buildResponseBlocks,
+  criticizeAndRefinePlan,
   enrichPlanLogistics,
+  type PlanningContext,
   researchDestinations,
+  resolveDiscoveryFocus,
   resolveTurnIntent,
+  shouldResearchResolution,
   synthesizePlan,
+  transitAdvisor,
   updateSessionMemory
 } from "./subagents.js";
 
@@ -182,32 +187,66 @@ export class TurnRunner {
 
       let reply = "";
       let latestPlan = nextSession.plan;
+      const planningContext: PlanningContext = {
+        workerProgress: []
+      };
+      const pushProgress = (
+        label: string,
+        detail?: string,
+        state: "running" | "completed" = "completed"
+      ) => {
+        planningContext.workerProgress?.push({ label, detail, state });
+      };
 
-      const shouldResearch =
-        resolution.destinations.length > 0 &&
-        (resolution.intent === "plan_trip" ||
-          resolution.intent === "refine_trip" ||
-          resolution.intent === "search_places");
+      const shouldResearch = shouldResearchResolution(resolution);
 
       let research;
       if (shouldResearch) {
         nextSession = await persistPlanningState(nextSession, {
           status: "running",
-          stage: "researching",
-          source: "places",
+          stage: resolution.stayMode ? "researching_stays" : "researching",
+          source: resolution.stayMode ? "stays" : "places",
           reason: undefined,
           retryable: true
         });
+        const focusLabel = (() => {
+          const focus = resolveDiscoveryFocus(resolution);
+          switch (focus) {
+            case "restaurants": return "Searching restaurants";
+            case "seafood": return "Finding seafood spots";
+            case "hotels": return "Scouting stays";
+            case "hidden_gems": return "Discovering hidden gems";
+            case "beaches": return "Finding beaches";
+            case "culture": return "Researching culture spots";
+            case "attractions": return "Discovering attractions";
+            case "family": return "Finding family-friendly places";
+            case "day_trips": return "Looking up day trips";
+            default: return resolution.stayMode ? "Scouting stays" : "Discovering places";
+          }
+        })();
         await emitTrace(
-          "destination-research-agent",
+          resolution.stayMode ? "stay-search-agent" : "discovery-search-agent",
           "running",
-          `Researching ${resolution.destinations.join(", ")}`
+          `${focusLabel} in ${resolution.destinations.join(", ")}`
         );
-        research = await researchDestinations(this.tools, resolution.destinations);
+        research = await researchDestinations(
+          this.tools,
+          resolution.destinations,
+          resolveDiscoveryFocus(resolution),
+          // Use Tavily deep-research for plan_trip so the LLM has richer editorial
+          // context (best time to visit, local tips, culture notes, etc.)
+          resolution.intent === "plan_trip"
+        );
+        const poiCount = Object.keys(research.catalog.items).length;
         await emitTrace(
-          "destination-research-agent",
+          resolution.stayMode ? "stay-search-agent" : "discovery-search-agent",
           "completed",
-          `Fetched ${Object.keys(research.catalog.items).length} POIs`
+          `Found ${poiCount} places`,
+          `Pulled ${poiCount} real places into the catalog.`
+        );
+        pushProgress(
+          resolution.stayMode ? "Scouting local stays" : `Discovering places in ${resolution.destinations.join(", ")}`,
+          `Pulled ${poiCount} real places into the catalog.`
         );
 
         if (!(resolution.intent === "plan_trip" || resolution.intent === "refine_trip")) {
@@ -216,7 +255,61 @@ export class TurnRunner {
         }
       }
 
-      if (research && (resolution.intent === "plan_trip" || resolution.intent === "refine_trip")) {
+      const isMissingInfo = resolution.intent === "plan_trip" && (!resolution.totalDays && !nextSession.plan?.totalDays);
+
+      if (
+        !isMissingInfo &&
+        (resolution.dateContext.inferredStartDate ||
+          resolution.questionFocus === "events" ||
+          resolution.intent === "plan_trip" ||
+          resolution.intent === "refine_trip")
+      ) {
+        nextSession = await persistPlanningState(nextSession, {
+          status: "running",
+          stage: "checking_dates",
+          source: "weather",
+          reason: undefined,
+          retryable: true
+        });
+        await emitTrace("date-context-agent", "running", "Checking weather and timing");
+        planningContext.weather = await this.tools.getWeatherSummary(
+          resolution.destination || resolution.destinations[0] || nextSession.plan?.destination || "",
+          resolution.dateContext
+        );
+        await emitTrace("date-context-agent", "completed", "Date and weather notes ready");
+        pushProgress(
+          "Checking your dates",
+          planningContext.weather.summary || "Dates normalized and weather notes prepared."
+        );
+
+        nextSession = await persistPlanningState(nextSession, {
+          status: "running",
+          stage: "researching_events",
+          source: "events",
+          reason: undefined,
+          retryable: true
+        });
+        await emitTrace("events-culture-agent", "running", "Searching festivals and local events");
+        const destinationForEvents =
+          resolution.destination || resolution.destinations[0] || nextSession.plan?.destination || "";
+        planningContext.events = await this.tools.getEventSummary(
+          destinationForEvents,
+          resolution.dateContext
+        );
+        planningContext.holidays = await this.tools.getHolidaySummary(
+          destinationForEvents,
+          resolution.dateContext
+        );
+        await emitTrace("events-culture-agent", "completed", "Festival and holiday notes ready");
+        pushProgress(
+          "Checking festivals and local timing",
+          planningContext.events.summary ||
+            planningContext.holidays.summary ||
+            "Added event and holiday context where available."
+        );
+      }
+
+      if (research && (resolution.intent === "plan_trip" || resolution.intent === "refine_trip") && !isMissingInfo) {
         nextSession = await persistPlanningState(nextSession, {
           status: "running",
           stage:
@@ -225,7 +318,7 @@ export class TurnRunner {
           reason: undefined,
           retryable: true
         });
-        await emitTrace("itinerary-synthesis-agent", "running", "Building plan");
+        await emitTrace("itinerary-planner", "running", "Building your itinerary");
         let plan = await synthesizePlan(
           this.providerService,
           resolvedProvider,
@@ -233,10 +326,41 @@ export class TurnRunner {
           resolution,
           research
         );
-        await emitTrace("feasibility-validator", "running", "Validating logistics");
+        await emitTrace("feasibility-validator", "running", "Evaluating logistics and routing");
         plan = await enrichPlanLogistics(this.tools, plan, research.catalog);
-        await emitTrace("feasibility-validator", "completed", "Plan validated");
+
+        // ── Feasibility Critic pass ────────────────────────────────────────────
+        // Non-blocking: the critic mutates the plan in-memory (trim over-scheduled
+        // days, flag long transfers, fill missing accommodation).  Each critique
+        // is emitted as an agent trace visible in the agentic status panel.
+        await emitTrace("feasibility-critic", "running", "Running feasibility check");
+        const { plan: critiquedPlan, critiques } = criticizeAndRefinePlan(plan, research.catalog);
+        plan = critiquedPlan;
+        for (const critique of critiques) {
+          await emitTrace("feasibility-critic", "completed", critique);
+        }
+        await emitTrace("feasibility-validator", "completed", "Logistics validated");
+
+        // ── Transit Advisor pass ───────────────────────────────────────────────
+        // Only meaningful for multi-destination trips.
+        if (plan.destinationSegments.length > 1) {
+          await emitTrace("transit-advisor", "running", "Planning inter-city transit");
+          const { segments } = transitAdvisor(plan, research);
+          for (const seg of segments) {
+            await emitTrace(
+              "transit-advisor",
+              "completed",
+              `${seg.from} → ${seg.to}: ${seg.durationLabel}`,
+              seg.bookingNote
+            );
+          }
+        }
+
         latestPlan = plan;
+        pushProgress(
+          "Building the itinerary",
+          "Scored the strongest places, checked routing, and assembled the day-by-day plan."
+        );
 
         await this.repository.savePlan(session.id, plan, research.catalog);
         this.streamHub.emit(session.id, {
@@ -251,20 +375,28 @@ export class TurnRunner {
         nextSession = (await this.repository.getSession(session.id, userId)) || nextSession;
       }
 
+      const narrativeTraceLabel =
+        resolution.intent === "plan_trip" || resolution.intent === "refine_trip"
+          ? "Crafting your travel narrative"
+          : "Drafting response";
+      await emitTrace("narrator", "running", narrativeTraceLabel);
       const narrative = await answerConversationally(
         this.providerService,
         resolvedProvider,
         nextSession,
         resolution,
-        research
+        research,
+        planningContext
       );
+      await emitTrace("narrator", "completed", "Response ready");
       reply = [narrative.introBody, narrative.leadText].filter(Boolean).join(" ");
       const responseBlocks = buildResponseBlocks({
         session: nextSession,
         resolution,
         narrative,
         research,
-        plan: latestPlan
+        plan: latestPlan,
+        planningContext
       });
 
       const assistantMessageId = randomUUID();

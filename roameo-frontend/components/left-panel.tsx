@@ -58,8 +58,8 @@ export function LeftPanel({ activeView, onViewChange, messages, onSendMessage }:
         )}
 
         {activeView === "search" && (
-          <div className="h-full overflow-y-auto p-4 pt-20">
-            <SearchInterface/>
+          <div className="h-full">
+            <SearchInterface />
           </div>
         )}
 
