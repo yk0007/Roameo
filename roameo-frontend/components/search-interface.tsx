@@ -12,12 +12,15 @@ import type { SearchResults, POI, SessionPlanningState } from "@/lib/types"
 interface SearchInterfaceProps {
   activeView?: "chat" | "search" | "saved"
   onViewChange?: (view: "chat" | "search" | "saved") => void
+  sessionId?: string
+  destination?: string
   results?: SearchResults
   savedIds?: Set<string>
   itineraryPoiIds?: Set<string>
   onAddPoi?: (poi: POI) => void
   onToggleSave?: (poi: POI, nextSaved: boolean) => void
   onReplan?: (poi?: POI) => void
+  onDiscoverCategory?: (category: "stay" | "restaurant" | "attraction") => void
   isLoading?: boolean
   planningState?: SessionPlanningState
   searchStatus?: string
@@ -25,12 +28,13 @@ interface SearchInterfaceProps {
   isSplitView?: boolean
 }
 
-export const SearchInterface = memo(function SearchInterface({ activeView, onViewChange, results, savedIds, itineraryPoiIds, onAddPoi, onToggleSave, onReplan, isLoading = false, planningState, searchStatus, hasBillingError = false, isSplitView = false }: SearchInterfaceProps) {
+export const SearchInterface = memo(function SearchInterface({ activeView, onViewChange, sessionId, destination, results, savedIds, itineraryPoiIds, onAddPoi, onToggleSave, onReplan, onDiscoverCategory, isLoading = false, planningState, searchStatus, hasBillingError = false, isSplitView = false }: SearchInterfaceProps) {
   const [activeTab, setActiveTab] = useState("Stays")
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedQuery, setDebouncedQuery] = useState("")
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const scrollPosRef = useRef<Record<string, number>>({ Stays: 0, Restaurants: 0, Attractions: 0 })
+  const requestedCategoriesRef = useRef<Set<string>>(new Set())
 
   const tabs = ["Stays", "Restaurants", "Attractions"]
   const contentShellClassName = "w-full px-6 lg:px-8 xl:px-10 2xl:px-12"
@@ -45,22 +49,62 @@ export const SearchInterface = memo(function SearchInterface({ activeView, onVie
     debouncedSetQuery(searchQuery)
   }, [searchQuery, debouncedSetQuery])
 
+  const currentResults = useMemo(() => {
+    if (!results) return [] as POI[]
+    if (activeTab === "Stays") return results.stays || []
+    if (activeTab === "Restaurants") return results.restaurants || []
+    return results.attractions || []
+  }, [activeTab, results])
+
   const allResults = useMemo(() => {
     const q = debouncedQuery.trim().toLowerCase()
-    let arr: POI[] = []
-    
-    if (!results) return arr
-    if (activeTab === "Stays") arr = results.stays || []
-    if (activeTab === "Restaurants") arr = results.restaurants || []
-    if (activeTab === "Attractions") arr = results.attractions || []
-    
-    if (!q) return arr
-    
-    // Filter results based on search query
-    return arr.filter((p) => 
+    if (!q) return currentResults
+
+    return currentResults.filter((p) =>
       p.name.toLowerCase().includes(q) || (p.address || "").toLowerCase().includes(q)
     )
-  }, [results, activeTab, debouncedQuery])
+  }, [currentResults, debouncedQuery])
+
+  useEffect(() => {
+    requestedCategoriesRef.current.clear()
+  }, [destination, sessionId])
+
+  useEffect(() => {
+    if (
+      activeView !== "search" ||
+      !sessionId ||
+      !destination ||
+      !onDiscoverCategory ||
+      isLoading ||
+      searchStatus
+    ) {
+      return
+    }
+
+    const category =
+      activeTab === "Stays"
+        ? "stay"
+        : activeTab === "Restaurants"
+          ? "restaurant"
+          : "attraction"
+
+    const requestKey = `${destination}::${category}`
+    if (currentResults.length > 0 || requestedCategoriesRef.current.has(requestKey)) {
+      return
+    }
+
+    requestedCategoriesRef.current.add(requestKey)
+    onDiscoverCategory(category)
+  }, [
+    activeTab,
+    activeView,
+    currentResults.length,
+    destination,
+    isLoading,
+    onDiscoverCategory,
+    searchStatus,
+    sessionId
+  ])
 
   // Restore scroll position on tab switch
   useEffect(() => {
@@ -115,7 +159,23 @@ export const SearchInterface = memo(function SearchInterface({ activeView, onVie
                 className="h-14 rounded-full border border-[rgba(255,255,255,0.7)] bg-[rgba(255,255,255,0.8)] pl-11 pr-4 text-[14px] shadow-[0_8px_32px_rgba(0,0,0,0.12)] backdrop-blur-xl"
               />
             </div>
-            <Button className="h-14 shrink-0 rounded-full bg-[#4a4a4a] px-8 text-white hover:bg-[#3f3f3f]" onClick={useCallback(() => { /* hook to future manual search */ }, [])}>
+            <Button
+              className="h-14 shrink-0 rounded-full bg-[#4a4a4a] px-8 text-white hover:bg-[#3f3f3f]"
+              onClick={useCallback(() => {
+                if (activeView !== "search" || !sessionId || !destination || !onDiscoverCategory) {
+                  return
+                }
+
+                const category =
+                  activeTab === "Stays"
+                    ? "stay"
+                    : activeTab === "Restaurants"
+                      ? "restaurant"
+                      : "attraction"
+                requestedCategoriesRef.current.delete(`${destination}::${category}`)
+                onDiscoverCategory(category)
+              }, [activeTab, activeView, destination, onDiscoverCategory, sessionId])}
+            >
               Search
             </Button>
           </div>

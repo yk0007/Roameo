@@ -239,6 +239,7 @@ export default function MapView({
   const overlayRef = useRef<any | null>(null);
   const markersByIdRef = useRef<Record<string, any>>({});
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hoveredCardPoiIdRef = useRef<string | null>(null);
   const persistentInfoWindowRef = useRef<any | null>(null);
   const reactRootsRef = useRef<Map<Element, Root>>(new Map()); // Track React roots for cleanup
   const [customStyle, setCustomStyle] = useState(true);
@@ -280,6 +281,9 @@ export default function MapView({
   const [billingError, setBillingError] = useState<boolean>(false);
   const resizeObsRef = useRef<ResizeObserver | null>(null);
   const [forceReinitMarkers, setForceReinitMarkers] = useState(0);
+  const [isMapTransitionActive, setIsMapTransitionActive] = useState(false);
+  const transitionFinishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previousMapSignatureRef = useRef<string | null>(null);
 
   const pois = mapData?.pois || [];
   const filteredPois = useMemo(() => {
@@ -304,6 +308,37 @@ export default function MapView({
     addedOnly,
     localItineraryPoiIds,
   ]);
+  const mapTransitionSignature = useMemo(() => {
+    const poiKey = filteredPois
+      .map((poi) => {
+        const saved = savedIds?.has(poi.id) ? "saved" : "";
+        const added = localItineraryPoiIds?.has(poi.id) ? "added" : "";
+        return `${poi.id}:${saved}:${added}:${poi.lat}:${poi.lng}`;
+      })
+      .join("|");
+    const routeKey = (mapData?.routes || [])
+      .map((route) => `${route.from.join(",")}->${route.to.join(",")}`)
+      .join("|");
+    return `${poiKey}::${routeKey}`;
+  }, [filteredPois, localItineraryPoiIds, mapData?.routes, savedIds]);
+
+  const startMapTransition = () => {
+    if (transitionFinishTimerRef.current) {
+      clearTimeout(transitionFinishTimerRef.current);
+      transitionFinishTimerRef.current = null;
+    }
+    setIsMapTransitionActive(true);
+  };
+
+  const finishMapTransition = (delay = 220) => {
+    if (transitionFinishTimerRef.current) {
+      clearTimeout(transitionFinishTimerRef.current);
+    }
+    transitionFinishTimerRef.current = setTimeout(() => {
+      setIsMapTransitionActive(false);
+      transitionFinishTimerRef.current = null;
+    }, delay);
+  };
 
   // Helper: Fit the map view to currently visible POIs and rendered routes
   const fitToContent = () => {
@@ -388,8 +423,27 @@ export default function MapView({
   useEffect(() => {
     return () => {
       disposeAllReactRoots(reactRootsRef.current);
+      if (transitionFinishTimerRef.current) {
+        clearTimeout(transitionFinishTimerRef.current);
+      }
     };
   }, []);
+
+  useEffect(() => {
+    if (!mapInstance.current || isMapLoading) {
+      previousMapSignatureRef.current = mapTransitionSignature;
+      return;
+    }
+
+    if (
+      previousMapSignatureRef.current &&
+      previousMapSignatureRef.current !== mapTransitionSignature
+    ) {
+      startMapTransition();
+    }
+
+    previousMapSignatureRef.current = mapTransitionSignature;
+  }, [isMapLoading, mapTransitionSignature]);
 
   // Load Google Maps script (and notify when ready)
   useEffect(() => {
@@ -632,9 +686,17 @@ export default function MapView({
     // Add a small delay to ensure map is fully ready after tab switch
     const timeoutId = setTimeout(() => {
       // Clear existing markers and info windows
-      markersRef.current.forEach((m) => m.setMap(null));
+      markersRef.current.forEach((m) => {
+        window.google.maps.event.clearInstanceListeners(m);
+        m.setMap(null);
+      });
       markersRef.current = [];
       markersByIdRef.current = {};
+      hoveredCardPoiIdRef.current = null;
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current);
+        hoverTimeoutRef.current = null;
+      }
 
       disposeAllReactRoots(reactRootsRef.current);
 
@@ -755,6 +817,7 @@ export default function MapView({
             activeInfoWindowRef.current !== persistentInfoWindowRef.current
           ) {
             activeInfoWindowRef.current.close();
+            activeInfoWindowRef.current = null;
           }
           if (
             persistentInfoWindowRef.current &&
@@ -764,6 +827,7 @@ export default function MapView({
             persistentInfoWindowRef.current = null;
           }
 
+          window.google.maps.event.clearListeners(infoWindow, "domready");
           infoWindow.addListener("domready", () => {
             const content = document.getElementById(
               `info-window-content-${poi.id}`,
@@ -846,28 +910,42 @@ export default function MapView({
                   (content.closest(".gm-style-iw") as HTMLElement | null) ||
                   (content.parentElement as HTMLElement | null);
                 if (iwWrapperEl) {
-                  let hoverTimeout: NodeJS.Timeout | null = null;
-
                   iwWrapperEl.addEventListener("mouseenter", () => {
-                    if (hoverTimeout) {
-                      clearTimeout(hoverTimeout);
-                      hoverTimeout = null;
+                    hoveredCardPoiIdRef.current = poi.id;
+                    if (hoverTimeoutRef.current) {
+                      clearTimeout(hoverTimeoutRef.current);
+                      hoverTimeoutRef.current = null;
                     }
                   });
 
                   iwWrapperEl.addEventListener("mouseleave", () => {
-                    hoverTimeout = setTimeout(() => {
+                    hoveredCardPoiIdRef.current = null;
+                    hoverTimeoutRef.current = setTimeout(() => {
                       if (
-                        activeInfoWindowRef.current &&
+                        activeInfoWindowRef.current === infoWindow &&
                         activeInfoWindowRef.current !==
                           persistentInfoWindowRef.current
                       ) {
                         activeInfoWindowRef.current.close();
+                        activeInfoWindowRef.current = null;
                       }
                     }, 200);
                   });
                 }
               }
+            }
+          });
+
+          window.google.maps.event.clearListeners(infoWindow, "closeclick");
+          infoWindow.addListener("closeclick", () => {
+            if (activeInfoWindowRef.current === infoWindow) {
+              activeInfoWindowRef.current = null;
+            }
+            if (persistentInfoWindowRef.current === infoWindow) {
+              persistentInfoWindowRef.current = null;
+            }
+            if (hoveredCardPoiIdRef.current === poi.id) {
+              hoveredCardPoiIdRef.current = null;
             }
           });
 
@@ -885,27 +963,24 @@ export default function MapView({
           showInfoWindow(e, false);
         });
 
-        marker.addListener("mousemove", (e: google.maps.MapMouseEvent) => {
-          if (persistentInfoWindowRef.current) return;
-          showInfoWindow(e, false);
-        });
-
         marker.addListener("click", (e: google.maps.MapMouseEvent) => {
+          hoveredCardPoiIdRef.current = null;
           showInfoWindow(e, true);
         });
 
         marker.addListener("mouseout", () => {
           // Only close hover cards, not persistent ones
-          setTimeout(() => {
+          if (hoverTimeoutRef.current) {
+            clearTimeout(hoverTimeoutRef.current);
+          }
+          hoverTimeoutRef.current = setTimeout(() => {
             if (
-              activeInfoWindowRef.current &&
+              activeInfoWindowRef.current === infoWindow &&
               activeInfoWindowRef.current !== persistentInfoWindowRef.current
             ) {
-              const iwWrapper = document.querySelector(".gm-style-iw-wrapper");
-
-              // Only close if not hovering over the card
-              if (!iwWrapper || !iwWrapper.matches(":hover")) {
+              if (hoveredCardPoiIdRef.current !== poi.id) {
                 activeInfoWindowRef.current.close();
+                activeInfoWindowRef.current = null;
               }
             }
           }, 200);
@@ -917,6 +992,7 @@ export default function MapView({
 
       // After markers are rendered, fit to content
       fitToContent();
+      finishMapTransition(240);
     }, 100); // Small delay to ensure map is ready
 
     return () => clearTimeout(timeoutId);
@@ -938,6 +1014,7 @@ export default function MapView({
       // Show world view when no content
       mapInstance.current.setCenter({ lat: 20, lng: 0 });
       mapInstance.current.setZoom(2);
+      finishMapTransition(180);
       return;
     }
     fitToContent();
@@ -1019,10 +1096,16 @@ export default function MapView({
               directionsRenderer.setDirections(response);
               // Fit to content after last segment is rendered
               if (index === itinerary.destinationSegments!.length - 1) {
-                setTimeout(() => fitToContent(), 100);
+                setTimeout(() => {
+                  fitToContent();
+                  finishMapTransition(220);
+                }, 100);
               }
             } else {
               console.error(`Directions request failed for segment ${index}:`, status);
+              if (index === itinerary.destinationSegments!.length - 1) {
+                finishMapTransition(180);
+              }
             }
           }
         );
@@ -1065,9 +1148,13 @@ export default function MapView({
         (response: google.maps.DirectionsResult, status: google.maps.DirectionsStatus) => {
           if (status === window.google.maps.DirectionsStatus.OK) {
             directionsRenderer.setDirections(response);
-            setTimeout(() => fitToContent(), 0);
+            setTimeout(() => {
+              fitToContent();
+              finishMapTransition(220);
+            }, 0);
           } else {
             console.error("Directions request failed due to", status);
+            finishMapTransition(180);
           }
         }
       );
@@ -1158,7 +1245,23 @@ export default function MapView({
         </div>
       )}
 
-      <div ref={mapRef} className="h-full w-full rounded-tl-[24px] overflow-hidden" />
+      <div
+        className={`h-full w-full rounded-tl-[24px] overflow-hidden transition-[filter,transform,opacity] duration-300 ease-out ${
+          isMapTransitionActive ? "scale-[1.015] opacity-[0.92]" : "scale-100 opacity-100"
+        }`}
+        style={{
+          filter: isMapTransitionActive ? "blur(10px) saturate(0.9)" : "blur(0px) saturate(1)",
+          transformOrigin: "center center",
+        }}
+      >
+        <div ref={mapRef} className="h-full w-full rounded-tl-[24px] overflow-hidden" />
+      </div>
+
+      <div
+        className={`pointer-events-none absolute inset-0 z-10 rounded-tl-[24px] bg-[radial-gradient(circle_at_50%_35%,rgba(255,255,255,0.22),rgba(255,255,255,0.08)_45%,rgba(255,255,255,0)_75%)] transition-opacity duration-300 ease-out ${
+          isMapTransitionActive ? "opacity-100" : "opacity-0"
+        }`}
+      />
 
       {/* Map Controls - bottom right */}
       <div className="absolute bottom-4 right-4 z-20 flex flex-col gap-2">

@@ -57,6 +57,7 @@ app.use(
   buildApiRouter({
     planMutationService,
     repository,
+    travelTools,
     turnRunner,
     streamHub
   })

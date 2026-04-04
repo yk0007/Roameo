@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Loader2, Sparkles } from "lucide-react"
+import { BUDGET_OPTIONS } from "@/lib/budget-options"
 
 interface TravelPlanFormProps {
   onPlanGenerated: (itinerary: any) => void
@@ -121,14 +122,22 @@ export function TravelPlanForm({ onPlanGenerated, isLoading, setIsLoading }: Tra
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="budget">Budget (INR)</Label>
-                <Input
-                  id="budget"
-                  type="number"
-                  placeholder="15000"
+                <Label htmlFor="budget">Budget</Label>
+                <Select
                   value={formData.budget}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, budget: e.target.value }))}
-                />
+                  onValueChange={(value) => setFormData((prev) => ({ ...prev, budget: value }))}
+                >
+                  <SelectTrigger id="budget">
+                    <SelectValue placeholder="Select a budget style" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {BUDGET_OPTIONS.map((option) => (
+                      <SelectItem key={option.id} value={option.label}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 

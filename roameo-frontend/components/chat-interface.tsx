@@ -118,7 +118,13 @@ export function ChatInterface({
     "general" | "planning" | null
   >(null);
   const lastAssistantIdRef = useRef<string | null>(null);
-  const typedMessageIdsRef = useRef<Set<string>>(new Set());
+  const [streamingRender, setStreamingRender] = useState<{
+    id: string | null;
+    content: string;
+  }>({
+    id: null,
+    content: "",
+  });
   const isSubmittingRef = useRef(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -186,6 +192,73 @@ export function ChatInterface({
     return undefined;
   }, [visibleMessages]);
   const lastAssistantHasStructuredBlocks = Boolean(lastAssistant?.meta?.responseBlocks?.length);
+  const activeStreamingAssistant =
+    lastMessage?.role === "assistant" && !lastMessage.meta?.responseBlocks?.length
+      ? lastMessage
+      : undefined;
+  const hasActiveStreamingResponse =
+    Boolean(activeStreamingAssistant?.id) &&
+    Boolean(activeStreamingAssistant?.content?.trim().length);
+
+  useEffect(() => {
+    if (!activeStreamingAssistant) {
+      setStreamingRender((current) =>
+        current.id === null && current.content === ""
+          ? current
+          : { id: null, content: "" }
+      );
+      return;
+    }
+
+    const targetId = activeStreamingAssistant.id;
+    const targetContent = String(activeStreamingAssistant.content || "");
+    if (!targetId) {
+      return;
+    }
+
+    setStreamingRender((current) => {
+      if (current.id !== targetId) {
+        return {
+          id: targetId,
+          content: isTyping ? "" : targetContent,
+        };
+      }
+
+      if (!isTyping || current.content.length >= targetContent.length) {
+        return current.content === targetContent
+          ? current
+          : { id: targetId, content: targetContent };
+      }
+
+      return current;
+    });
+
+    if (!isTyping) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      setStreamingRender((current) => {
+        if (current.id !== targetId) {
+          return current;
+        }
+
+        if (current.content.length >= targetContent.length) {
+          return current;
+        }
+
+        const remaining = targetContent.length - current.content.length;
+        const nextChars = Math.min(remaining, Math.max(1, Math.ceil(remaining / 12)));
+
+        return {
+          id: targetId,
+          content: targetContent.slice(0, current.content.length + nextChars),
+        };
+      });
+    }, 24);
+
+    return () => window.clearInterval(interval);
+  }, [activeStreamingAssistant?.id, activeStreamingAssistant?.content, isTyping]);
 
   // Decide when to show the suggestion chip: only after a substantive assistant reply,
   // only once per assistant turn, and only on the Chat view, and not when user just sent a message
@@ -836,7 +909,7 @@ export function ChatInterface({
                   <div
                     className={`max-w-none ${
                       message.role === "user"
-                        ? `rounded-[24px] ml-auto w-fit min-w-[72px] bg-white px-5 py-4 text-[#1a1a1a] shadow-[0_12px_24px_rgba(0,0,0,0.04),0_2px_8px_rgba(0,0,0,0.02)] ${
+                        ? `rounded-[24px] ml-auto w-fit min-w-[72px] bg-white px-5 py-4 text-[#1a1a1a] shadow-[0_28px_48px_rgba(15,23,42,0.12),0_12px_24px_rgba(15,23,42,0.08),0_2px_8px_rgba(15,23,42,0.05),inset_0_1px_0_rgba(255,255,255,0.9)] ${
                             isRightPanelVisible ? "max-w-[400px]" : "max-w-[430px]"
                           }`
                         : `${isRightPanelVisible ? "max-w-[76%]" : "max-w-[72%]"} pt-1`
@@ -851,10 +924,13 @@ export function ChatInterface({
                         </ReactMarkdown>
                       ) : (
                         renderFormattedContent(
-                          String(message.content).replace(
-                            /\[object Object\]/g,
-                            "",
-                          ),
+                          (
+                            message.role === "assistant" &&
+                            message.id &&
+                            streamingRender.id === message.id
+                              ? streamingRender.content
+                              : String(message.content)
+                          ).replace(/\[object Object\]/g, ""),
                         )
                       )}
                     </div>
@@ -901,6 +977,10 @@ export function ChatInterface({
            */}
           {(planningActive || isTyping) &&
             (() => {
+              if (hasActiveStreamingResponse) {
+                return null;
+              }
+
               // If planning is no longer active, check whether a very recent
               // assistant message was just committed — if so, suppress the
               // indicator so there's no "flash" between message arrival and

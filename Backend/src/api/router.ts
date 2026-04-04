@@ -3,6 +3,7 @@ import { Router, type NextFunction, type Response } from "express";
 import {
   createSessionInputSchema,
   planMutationInputSchema,
+  poiCatalogSchema,
   providerCredentialInputSchema,
   providerSchema,
   sendMessageInputSchema,
@@ -23,11 +24,13 @@ import {
 import { TurnRunner } from "../runtime/turn-runner.js";
 import { SessionRepository } from "../services/session-repository.js";
 import { PlanMutationService } from "../services/plan-mutation-service.js";
+import { TravelToolsService } from "../services/travel-tools.js";
 import { DestinationImageService } from "../tools/destination-images.js";
 
 type RouterDeps = {
   repository: SessionRepository;
   planMutationService: PlanMutationService;
+  travelTools: TravelToolsService;
   turnRunner: TurnRunner;
   streamHub: StreamHub;
 };
@@ -36,6 +39,24 @@ const savePoiBodySchema = z.object({
   poiId: z.string().min(1),
   saved: z.boolean()
 });
+
+const discoveryRequestSchema = z.object({
+  destination: z.string().trim().optional(),
+  category: z.enum(["stay", "restaurant", "attraction", "all"]).default("all")
+});
+
+function mergeCatalogs(base: unknown, next: unknown) {
+  const left = poiCatalogSchema.parse(base ?? { version: 1, items: {} });
+  const right = poiCatalogSchema.parse(next ?? { version: 1, items: {} });
+
+  return {
+    version: Math.max(left.version, right.version) + 1,
+    items: {
+      ...left.items,
+      ...right.items
+    }
+  };
+}
 
 function sendEvent(response: Response, event: StreamEvent) {
   const payload = streamEventSchema.parse(event);
@@ -46,6 +67,7 @@ function sendEvent(response: Response, event: StreamEvent) {
 export function buildApiRouter({
   planMutationService,
   repository,
+  travelTools,
   turnRunner,
   streamHub
 }: RouterDeps) {
@@ -321,6 +343,57 @@ export function buildApiRouter({
           }
         });
       }
+      streamHub.emit(updated.id, {
+        type: "session.snapshot",
+        data: updated
+      });
+
+      return res.json(updated);
+    }
+  );
+
+  router.post(
+    "/sessions/:sessionId/discovery",
+    authenticateUser,
+    async (req: AuthenticatedRequest, res) => {
+      const sessionId = String(req.params.sessionId);
+      const input = discoveryRequestSchema.parse(req.body ?? {});
+      const session = await repository.getSession(sessionId, req.userId);
+      if (!session) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+
+      const destination =
+        input.destination?.trim() ||
+        session.plan?.destination?.trim() ||
+        session.memory.destinationsDiscussed.at(-1)?.trim();
+
+      if (!destination) {
+        return res.status(400).json({ error: "Destination is required to load places" });
+      }
+
+      const nextCatalog =
+        input.category === "all"
+          ? mergeCatalogs(
+              session.poiCatalog,
+              (await travelTools.searchPlacesForDestination(destination, "general")).catalog
+            )
+          : mergeCatalogs(session.poiCatalog, {
+              version: 1,
+              items: Object.fromEntries(
+                (await travelTools.searchPlaces(destination, input.category)).map((poi) => [
+                  poi.id,
+                  poi
+                ])
+              )
+            });
+
+      await repository.savePoiCatalog(session.id, nextCatalog);
+      const updated = await repository.getSession(session.id, req.userId);
+      if (!updated) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+
       streamHub.emit(updated.id, {
         type: "session.snapshot",
         data: updated

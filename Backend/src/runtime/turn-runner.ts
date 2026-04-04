@@ -8,7 +8,7 @@ import type {
   StreamEvent
 } from "@roameo/contracts";
 import { SessionRepository } from "../services/session-repository.js";
-import { ProviderService } from "../services/provider-service.js";
+import { ProviderService, type ResolvedProvider } from "../services/provider-service.js";
 import {
   PlanningToolError,
   TravelToolsService
@@ -20,7 +20,11 @@ import {
   criticizeAndRefinePlan,
   derivePendingFollowUpContext,
   enrichPlanLogistics,
+  type ImmediateAssistantReply,
+  researchPlanningDestinations,
   resolveFastTurnResponse,
+  resolveDeterministicTurnIntent,
+  resolveOversizedPlanResponse,
   type PlanningContext,
   researchDestinations,
   resolveDiscoveryFocus,
@@ -166,66 +170,31 @@ export class TurnRunner {
 
     const fastTurn = resolveFastTurnResponse(session, input.content);
     if (fastTurn) {
-      const assistantMessageId = randomUUID();
-      const chunks = chunkText(fastTurn.reply);
-      for (let index = 0; index < chunks.length; index += 1) {
-        this.streamHub.emit(session.id, {
-          type: "message.delta",
-          data: {
-            sessionId: session.id,
-            turnId,
-            messageId: assistantMessageId,
-            role: "assistant",
-            delta: chunks[index],
-            done: index === chunks.length - 1
-          }
-        });
-      }
-
-      const assistantMessage: ConversationMessage = {
-        id: assistantMessageId,
-        sessionId: session.id,
-        role: "assistant",
-        content: fastTurn.reply,
-        createdAt: new Date().toISOString(),
-        phase: "final",
-        meta: {
-          turnId,
-          responseBlocks: fastTurn.responseBlocks
-        }
-      };
-      await this.repository.saveMessage(assistantMessage);
-      this.streamHub.emit(session.id, {
-        type: "message.committed",
-        data: assistantMessage
-      });
-
-      const updated = await this.repository.updateSession(session.id, {
-        providerSettings: settings,
+      await commitImmediateAssistantReply({
+        repository: this.repository,
+        streamHub: this.streamHub,
+        session,
+        settings,
+        turnId,
+        reply: fastTurn,
         memory: fastTurn.memory
-      });
-      if (updated) {
-        updated.memory = fastTurn.memory;
-        this.streamHub.emit(session.id, {
-          type: "session.snapshot",
-          data: updated
-        });
-      }
-
-      this.streamHub.emit(session.id, {
-        type: "turn.completed",
-        data: {
-          sessionId: session.id,
-          turnId
-        }
       });
       return;
     }
 
-    const resolvedProvider = await this.providerService.resolveProvider(
-      userId,
-      settings
-    );
+    let resolvedProvider: ResolvedProvider | null = null;
+    const getResolvedProvider = async (): Promise<ResolvedProvider> => {
+      if (resolvedProvider) {
+        return resolvedProvider;
+      }
+      resolvedProvider = await this.providerService.resolveProvider(
+        userId,
+        settings
+      );
+      return resolvedProvider;
+    };
+    const currentProvider = () =>
+      resolvedProvider ? resolvedProvider.provider : undefined;
 
     const emitTrace = async (
       agent: string,
@@ -270,14 +239,62 @@ export class TurnRunner {
         retryable: true
       });
 
-      await emitTrace("lead", "running", "Resolving intent");
-      const resolution = await resolveTurnIntent(
-        this.providerService,
-        resolvedProvider,
-        nextSession,
-        input.content
-      );
-      await emitTrace("intent-slot-resolver", "completed", resolution.intent);
+      let resolution = resolveDeterministicTurnIntent(nextSession, input.content);
+      if (resolution) {
+        await emitTrace(
+          "intent-slot-resolver",
+          "completed",
+          resolution.intent,
+          "Resolved locally without the intent model."
+        );
+      } else {
+        await emitTrace("lead", "running", "Resolving intent");
+        resolution = await resolveTurnIntent(
+          this.providerService,
+          await getResolvedProvider(),
+          nextSession,
+          input.content
+        );
+        await emitTrace("intent-slot-resolver", "completed", resolution.intent);
+      }
+
+      const oversizedPlanResponse = resolveOversizedPlanResponse(resolution);
+      if (oversizedPlanResponse) {
+        await emitTrace(
+          "itinerary-planner",
+          "completed",
+          "Suggested a phased plan instead",
+          "Trip length is too large for a useful day-by-day itinerary."
+        );
+        const nextMemory = updateSessionMemory(
+          nextSession,
+          resolution,
+          oversizedPlanResponse.reply,
+          undefined,
+          null
+        );
+        nextMemory.planningState = createPlanningState(
+          nextSession.memory.planningState,
+          {
+            status: "ready",
+            stage: "ready",
+            source: undefined,
+            reason: undefined,
+            retryable: true
+          }
+        );
+        await commitImmediateAssistantReply({
+          repository: this.repository,
+          streamHub: this.streamHub,
+          session,
+          settings,
+          turnId,
+          reply: oversizedPlanResponse,
+          memory: nextMemory,
+          title: deriveSessionTitle(nextSession, resolution, undefined)
+        });
+        return;
+      }
 
       let reply = "";
       let latestPlan = nextSession.plan;
@@ -323,14 +340,20 @@ export class TurnRunner {
           "running",
           `${focusLabel} in ${resolution.destinations.join(", ")}`
         );
-        research = await researchDestinations(
-          this.tools,
-          resolution.destinations,
-          resolveDiscoveryFocus(resolution),
-          // Use Tavily deep-research for plan_trip so the LLM has richer editorial
-          // context (best time to visit, local tips, culture notes, etc.)
-          resolution.intent === "plan_trip"
-        );
+        research =
+          resolution.intent === "plan_trip" || resolution.intent === "refine_trip"
+            ? await researchPlanningDestinations(
+                this.tools,
+                resolution.destinations,
+                resolveDiscoveryFocus(resolution),
+                resolution.intent === "plan_trip"
+              )
+            : await researchDestinations(
+                this.tools,
+                resolution.destinations,
+                resolveDiscoveryFocus(resolution),
+                false
+              );
         const poiCount = Object.keys(research.catalog.items).length;
         await emitTrace(
           resolution.stayMode ? "stay-search-agent" : "discovery-search-agent",
@@ -415,7 +438,7 @@ export class TurnRunner {
         await emitTrace("itinerary-planner", "running", "Building your itinerary");
         let plan = await synthesizePlan(
           this.providerService,
-          resolvedProvider,
+          await getResolvedProvider(),
           nextSession,
           resolution,
           research
@@ -476,7 +499,7 @@ export class TurnRunner {
       await emitTrace("narrator", "running", narrativeTraceLabel);
       const narrative = await answerConversationally(
         this.providerService,
-        resolvedProvider,
+        await getResolvedProvider(),
         nextSession,
         resolution,
         research,
@@ -525,7 +548,7 @@ export class TurnRunner {
         createdAt: new Date().toISOString(),
         phase: "final",
         meta: {
-          provider: resolvedProvider.provider,
+          provider: currentProvider(),
           turnId,
           responseBlocks,
           followUpContext: followUpContext || undefined
@@ -620,7 +643,7 @@ export class TurnRunner {
         createdAt: new Date().toISOString(),
         phase: "final",
         meta: {
-          provider: resolvedProvider.provider,
+          provider: currentProvider(),
           turnId,
           responseBlocks: [
             {
@@ -670,4 +693,81 @@ export class TurnRunner {
       throw error;
     }
   }
+}
+
+async function commitImmediateAssistantReply(params: {
+  repository: SessionRepository;
+  streamHub: StreamHub;
+  session: SessionSnapshot;
+  settings: SessionSnapshot["providerSettings"];
+  turnId: string;
+  reply: ImmediateAssistantReply;
+  memory: SessionSnapshot["memory"];
+  title?: string;
+}): Promise<void> {
+  const {
+    repository,
+    streamHub,
+    session,
+    settings,
+    turnId,
+    reply,
+    memory,
+    title
+  } = params;
+  const assistantMessageId = randomUUID();
+  const chunks = chunkText(reply.reply);
+
+  for (let index = 0; index < chunks.length; index += 1) {
+    streamHub.emit(session.id, {
+      type: "message.delta",
+      data: {
+        sessionId: session.id,
+        turnId,
+        messageId: assistantMessageId,
+        role: "assistant",
+        delta: chunks[index],
+        done: index === chunks.length - 1
+      }
+    });
+  }
+
+  const assistantMessage: ConversationMessage = {
+    id: assistantMessageId,
+    sessionId: session.id,
+    role: "assistant",
+    content: reply.reply,
+    createdAt: new Date().toISOString(),
+    phase: "final",
+    meta: {
+      turnId,
+      responseBlocks: reply.responseBlocks
+    }
+  };
+  await repository.saveMessage(assistantMessage);
+  streamHub.emit(session.id, {
+    type: "message.committed",
+    data: assistantMessage
+  });
+
+  const updated = await repository.updateSession(session.id, {
+    providerSettings: settings,
+    memory,
+    title
+  });
+  if (updated) {
+    updated.memory = memory;
+    streamHub.emit(session.id, {
+      type: "session.snapshot",
+      data: updated
+    });
+  }
+
+  streamHub.emit(session.id, {
+    type: "turn.completed",
+    data: {
+      sessionId: session.id,
+      turnId
+    }
+  });
 }

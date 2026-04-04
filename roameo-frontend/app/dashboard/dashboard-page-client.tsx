@@ -15,6 +15,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { DashboardTripCard, type DashboardTripSummary } from "@/components/dashboard-trip-card"
 import { ArrowRight, User, LogOut, Github, Heart, ExternalLink } from "lucide-react"
 import { DotDistortionShaderBg } from "@/components/ui/dot-distortion-shader-bg"
+import { BUDGET_OPTIONS } from "@/lib/budget-options"
 
 export default function Dashboard() {
   const router = useRouter()
@@ -175,7 +176,7 @@ export default function Dashboard() {
     
     // Add budget information if provided
     if (budget) {
-      prompt += ` with a budget of INR ${budget}`
+      prompt += ` with a ${budget.toLowerCase()} budget`
     }
     
     // Add specific requirements based on trip type
@@ -201,7 +202,7 @@ export default function Dashboard() {
     prompt += `. Please provide a detailed itinerary with:`
     prompt += `\n- Day-by-day schedule with specific activities`
     prompt += `\n- Recommended places to visit with brief descriptions`
-    prompt += `\n- Accommodation suggestions${budget ? ' within the specified budget' : ''}`
+    prompt += `\n- Accommodation suggestions${budget ? ` suited to a ${budget.toLowerCase()} budget` : ''}`
     prompt += `\n- Transportation options and travel tips`
     prompt += `\n- Local cuisine recommendations`
     prompt += `\n- Important travel information and safety tips`
@@ -223,7 +224,7 @@ export default function Dashboard() {
 
   const handleInputChange = (field: string, value: string) => {
     // For integer fields, only allow numbers
-    if (field === 'days' || field === 'budget') {
+    if (field === 'days') {
       const numericValue = value.replace(/[^0-9]/g, '')
       setPlanningForm(prev => ({...prev, [field]: numericValue}))
     } else {
@@ -535,15 +536,29 @@ export default function Dashboard() {
                 {/* Budget */}
                 <div className="flex-1 min-w-0">
                   <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 whitespace-nowrap truncate transition-colors duration-300 group-hover:text-gray-700">Budget</div>
-                  <Input 
-                    placeholder="INR (Optional)"
+                  <Select
                     value={planningForm.budget}
-                    onChange={(e) => handleInputChange('budget', e.target.value)}
-                    onFocus={() => setActiveInput('form')}
-                    className="h-9 w-full border-0 bg-transparent px-0 text-gray-900 shadow-none outline-none truncate placeholder:truncate placeholder:text-gray-400 focus-visible:ring-0"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                  />
+                    onValueChange={(value) => handleInputChange('budget', value)}
+                    onOpenChange={() => setActiveInput('form')}
+                  >
+                    <SelectTrigger
+                      className="h-9 w-full border-0 bg-transparent px-0 focus:ring-0 shadow-none truncate"
+                      onFocus={() => setActiveInput('form')}
+                    >
+                      <SelectValue placeholder="Select budget" className="text-gray-400 truncate" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white border-0 shadow-lg rounded-lg animate-fade-in">
+                      {BUDGET_OPTIONS.map((option) => (
+                        <SelectItem
+                          key={option.id}
+                          value={option.label}
+                          className="hover:bg-blue-50 transition-colors duration-200"
+                        >
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 {/* Divider */}

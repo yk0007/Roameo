@@ -222,6 +222,15 @@ function isCapabilitiesMessage(message: string): boolean {
 }
 
 function inferQuestionFocus(message: string, intent: TravelIntent): string | undefined {
+  const suppressSecondaryServiceFocus =
+    (intent === "plan_trip" || intent === "refine_trip") &&
+    (
+      /please provide a detailed itinerary/i.test(message) ||
+      /\b(include|accommodation suggestions|local cuisine recommendations|transportation options|travel tips|budget estimates|important travel information|safety tips)\b/i.test(
+        message
+      )
+    );
+
   if (isCapabilitiesMessage(message)) {
     return "capabilities";
   }
@@ -237,13 +246,16 @@ function inferQuestionFocus(message: string, intent: TravelIntent): string | und
   if (/\bseafood\b/i.test(message)) {
     return "seafood";
   }
-  if (/\b(restaurants?|food spots?|where to eat|dining|cafes?|cuisine|eat(?:ing|en)?)\b/i.test(message)) {
+  if (
+    !suppressSecondaryServiceFocus &&
+    /\b(restaurants?|food spots?|where to eat|dining|cafes?|cuisine|eat(?:ing|en)?)\b/i.test(message)
+  ) {
     return "restaurants";
   }
   if (/\b(cultural attractions?|heritage|museums?|history)\b/i.test(message)) {
     return "culture";
   }
-  if (/\b(hotels?|stays?|accommodation)\b/i.test(message)) {
+  if (!suppressSecondaryServiceFocus && /\b(hotels?|stays?|accommodation)\b/i.test(message)) {
     return "hotels";
   }
   if (/\b(attractions?|things to do|places to visit|sightseeing|landmarks?|viewpoints?)\b/i.test(message)) {
@@ -471,6 +483,27 @@ function localDestinationFromSession(session: SessionSnapshot): string | undefin
   );
 }
 
+function localOriginFromSession(session: SessionSnapshot): string | undefined {
+  const acceptedOrigin = [...session.memory.acceptedDecisions]
+    .reverse()
+    .find((decision) => decision.startsWith("Origin: "))
+    ?.replace(/^Origin:\s*/, "")
+    .trim();
+
+  return session.plan?.origin || acceptedOrigin || undefined;
+}
+
+function primaryLocationLabel(location?: string): string | undefined {
+  if (!location) {
+    return undefined;
+  }
+  const [firstPart] = location
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return firstPart || location.trim() || undefined;
+}
+
 function localTotalDaysFromSession(session: SessionSnapshot): number | undefined {
   const durationDecision = [...session.memory.acceptedDecisions]
     .reverse()
@@ -618,6 +651,27 @@ function inferTravelerCount(message: string): number | undefined {
   return undefined;
 }
 
+function isComprehensivePlanningRequest(
+  message: string,
+  rememberedDestination?: string,
+  rememberedTotalDays?: number
+): boolean {
+  const normalized = message.toLowerCase();
+  const asksForPlan = /\b(plan|itinerary|trip)\b/.test(normalized);
+  const hasDurationCue =
+    /\b(\d+\s*days?|weekend|day[- ]by[- ]day)\b/.test(normalized) ||
+    Boolean(rememberedDestination && rememberedTotalDays);
+  const hasPlanningDeliverables =
+    /\b(detailed itinerary|day[- ]by[- ]day schedule|day[- ]by[- ]day|accommodation suggestions|transportation options|travel tips|budget estimates|important travel information|safety tips)\b/i.test(
+      message
+    );
+  const hasStructuredRequirements =
+    /please provide a detailed itinerary/i.test(message) ||
+    /\n[-•]/.test(message);
+
+  return asksForPlan && (hasDurationCue || hasPlanningDeliverables || hasStructuredRequirements);
+}
+
 function inferStyles(message: string): TurnResolution["styles"] {
   const styles = new Set<TurnResolution["styles"][number]>();
   for (const cue of styleCueMatchers) {
@@ -677,12 +731,13 @@ function inferIntentFromMessage(
     return "question";
   }
 
-  const explicitDiscovery =
-    /\b(hidden gems?|unique local activities?|best beaches?|seafood|restaurants?|cultural attractions?|heritage|museums?|day trips?|hotels?|stays?|family[- ]friendly)\b/.test(
-      normalized
-    );
-  if (explicitDiscovery) {
-    return "search_places";
+  const comprehensivePlanningRequest = isComprehensivePlanningRequest(
+    message,
+    rememberedDestination,
+    rememberedTotalDays
+  );
+  if (current === "plan_trip" && comprehensivePlanningRequest) {
+    return "plan_trip";
   }
 
   const itineraryFollowUp =
@@ -691,8 +746,19 @@ function inferIntentFromMessage(
     ) ||
     /\bwhere(?:'s| is)\s+(?:the\s+)?itinerary\b/.test(normalized) ||
     /\b(itinerary|trip plan)\s+(?:now|please)\b/.test(normalized);
-  if (!session.plan && itineraryFollowUp && rememberedDestination && rememberedTotalDays) {
+  if (
+    comprehensivePlanningRequest ||
+    (!session.plan && itineraryFollowUp && rememberedDestination && rememberedTotalDays)
+  ) {
     return "plan_trip";
+  }
+
+  const explicitDiscovery =
+    /\b(hidden gems?|unique local activities?|best beaches?|seafood|restaurants?|cultural attractions?|heritage|museums?|day trips?|hotels?|stays?|family[- ]friendly)\b/.test(
+      normalized
+    );
+  if (explicitDiscovery) {
+    return "search_places";
   }
 
   const asksForPlan =
@@ -816,6 +882,99 @@ function finalizeResolution(
   };
 }
 
+function shouldResolveDeterministically(
+  session: SessionSnapshot,
+  message: string
+): boolean {
+  const trimmed = message.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  const inferredIntent = inferIntentFromMessage(session, trimmed, "question");
+  const inferredFocus = inferQuestionFocus(trimmed, inferredIntent);
+  const inferredDestinations = inferDestinationFromMessage(trimmed);
+  const pendingFollowUp = getPendingFollowUpContext(session);
+  const hasLocalDestination = Boolean(localDestinationFromSession(session));
+  const hasLocalDuration = Boolean(localTotalDaysFromSession(session));
+  const requestedRestaurantCategory = inferRestaurantCategoryFromMessage(trimmed);
+  const referentialFollowUp =
+    /\b(that one|those|this one|more|show me more|another one|another|similar|like this)\b/i.test(
+      trimmed
+    );
+
+  if (
+    pendingFollowUp &&
+    (isAffirmationMessage(trimmed) ||
+      Boolean(requestedRestaurantCategory) ||
+      referentialFollowUp)
+  ) {
+    return true;
+  }
+
+  if (session.plan && inferredIntent === "refine_trip") {
+    return true;
+  }
+
+  if (
+    inferredIntent === "search_places" &&
+    Boolean(inferredFocus) &&
+    (inferredDestinations.length > 0 || hasLocalDestination || Boolean(pendingFollowUp))
+  ) {
+    return true;
+  }
+
+  if (
+    inferredIntent === "plan_trip" &&
+    ((inferredDestinations.length > 0 &&
+      (Boolean(inferTotalDays(trimmed)) || /\b(weekend|day[- ]by[- ]day)\b/i.test(trimmed))) ||
+      (hasLocalDestination &&
+        hasLocalDuration &&
+        /\b(plan|itinerary|trip)\b/i.test(trimmed)))
+  ) {
+    return true;
+  }
+
+  if (
+    inferredIntent === "question" &&
+    inferredFocus === "followup_clarify"
+  ) {
+    return true;
+  }
+
+  if (
+    inferredIntent === "question" &&
+    Boolean(inferredFocus) &&
+    (inferredDestinations.length > 0 || hasLocalDestination)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+export function resolveDeterministicTurnIntent(
+  session: SessionSnapshot,
+  message: string
+): TurnResolution | null {
+  if (!shouldResolveDeterministically(session, message)) {
+    return null;
+  }
+
+  const inferredDestinations = inferDestinationFromMessage(message);
+  const heuristicFocus = inferQuestionFocus(message, "question");
+
+  return finalizeResolution(session, message, {
+    intent: "question",
+    destination: inferredDestinations[0],
+    destinations: inferredDestinations,
+    totalDays: inferTotalDays(message),
+    travelerCount: inferTravelerCount(message),
+    styles: [],
+    questionFocus: heuristicFocus
+  });
+}
+
 const resolverSchema = z.object({
   intent: z.preprocess(normalizeTravelIntent, travelIntentSchema),
   destination: z.string().optional(),
@@ -910,12 +1069,36 @@ function isCanonicalPoiId(catalog: PoiCatalog, poiId?: string): poiId is string 
   return Boolean(poiId && catalog.items[poiId]);
 }
 
-function formatBudgetLabel(plan?: PlanSnapshot): string | undefined {
-  if (plan?.budget?.total) {
-    return `${plan.budget.currency} ${plan.budget.total.toLocaleString()}`;
+const BUDGET_EXPECTATION_BANDS = [
+  { label: "Budget-friendly", maxPerTravelerPerDay: 3500 },
+  { label: "Mid-range", maxPerTravelerPerDay: 7000 },
+  { label: "Comfortable", maxPerTravelerPerDay: 12000 },
+  { label: "Premium", maxPerTravelerPerDay: Number.POSITIVE_INFINITY }
+] as const;
+
+function inferBudgetExpectation(plan?: PlanSnapshot): string | undefined {
+  const total =
+    plan?.budgetTarget?.total ||
+    plan?.budget?.total;
+  const days = plan?.totalDays || plan?.days.length || 0;
+  const travelers = Math.max(plan?.travelerCount || 1, 1);
+
+  if (!total || days <= 0) {
+    return undefined;
   }
-  if (plan?.budgetTarget?.total) {
-    return `${plan.budgetTarget.currency} ${plan.budgetTarget.total.toLocaleString()}`;
+
+  const perTravelerPerDay = total / days / travelers;
+  return (
+    BUDGET_EXPECTATION_BANDS.find(
+      (band) => perTravelerPerDay <= band.maxPerTravelerPerDay
+    )?.label || "Mid-range"
+  );
+}
+
+function formatBudgetLabel(plan?: PlanSnapshot): string | undefined {
+  const expectation = inferBudgetExpectation(plan);
+  if (expectation) {
+    return `Expected spend: ${expectation}`;
   }
   return undefined;
 }
@@ -981,6 +1164,31 @@ function aggregateCatalog(research: DestinationResearch[]): DestinationResearch 
   return combined;
 }
 
+export async function researchPlanningDestinations(
+  tools: TravelToolsService,
+  destinations: string[],
+  focus: DiscoveryFocus = "general",
+  includeDeepResearch = false
+): Promise<DestinationResearch> {
+  const baseline = await researchDestinations(
+    tools,
+    destinations,
+    "general",
+    includeDeepResearch
+  );
+
+  if (
+    focus === "general" ||
+    focus === "greeting" ||
+    focus === "capabilities"
+  ) {
+    return baseline;
+  }
+
+  const focused = await researchDestinations(tools, destinations, focus, false);
+  return aggregateCatalog([baseline, focused]);
+}
+
 function scorePoi(
   poi: Poi,
   resolution: TurnResolution,
@@ -1005,6 +1213,183 @@ function sortPois(
   category: "stay" | "restaurant" | "attraction"
 ): Poi[] {
   return [...pois].sort((left, right) => scorePoi(right, resolution, category) - scorePoi(left, resolution, category));
+}
+
+function matchesDestinationName(poi: Poi, destination: string): boolean {
+  const haystack = `${poi.name} ${poi.address || ""} ${(poi.tags || []).join(" ")}`
+    .toLowerCase();
+  return haystack.includes(destination.toLowerCase());
+}
+
+function destinationSortedPois(
+  pois: Poi[],
+  resolution: TurnResolution,
+  category: "stay" | "restaurant" | "attraction",
+  destination: string
+): Poi[] {
+  const sorted = sortPois(pois, resolution, category);
+  const matched = sorted.filter((poi) => matchesDestinationName(poi, destination));
+  return matched.length > 0 ? matched : sorted;
+}
+
+const MEAL_ACTIVITY_PATTERN =
+  /\b(breakfast|brunch|lunch|dinner|meal|cafe|coffee|snack|eat)\b/i;
+const STAY_ACTIVITY_PATTERN =
+  /\b(check[- ]?in|check in|hotel|resort|stay|accommodation|settle in)\b/i;
+
+function labelForMealActivity(activity: { title: string; startTime: string }): string {
+  const title = activity.title.toLowerCase();
+  if (/\bbreakfast|brunch|coffee|cafe\b/.test(title)) {
+    return "Breakfast";
+  }
+  if (/\bdinner\b/.test(title)) {
+    return "Dinner";
+  }
+  if (/\blunch\b/.test(title)) {
+    return "Lunch";
+  }
+
+  const period = periodForTimeLabel(activity.startTime);
+  if (period === "evening") {
+    return "Dinner";
+  }
+  if (period === "morning") {
+    return "Breakfast";
+  }
+  return "Lunch";
+}
+
+function findMealInsertionIndex(
+  activities: Array<{ startTime: string }>
+): number {
+  const afternoonIndex = activities.findIndex(
+    (activity) => periodForTimeLabel(activity.startTime) === "afternoon"
+  );
+  if (afternoonIndex >= 0) {
+    return afternoonIndex;
+  }
+
+  const morningActivities = activities.filter(
+    (activity) => periodForTimeLabel(activity.startTime) === "morning"
+  ).length;
+  return Math.min(Math.max(morningActivities, 1), activities.length);
+}
+
+export function applyPlanHospitalitySelections(
+  plan: PlanSnapshot,
+  resolution: TurnResolution,
+  research: DestinationResearch
+): PlanSnapshot {
+  const rankedRestaurants = sortPois(
+    research.grouped.restaurants,
+    resolution,
+    "restaurant"
+  );
+  const rankedStays = sortPois(research.grouped.stays, resolution, "stay");
+  if (!rankedRestaurants.length && !rankedStays.length) {
+    return plan;
+  }
+
+  const catalog = research.catalog;
+  const usedRestaurantIds = new Set<string>();
+  const days = plan.days.map((day, index) => {
+    let activities = [...day.activities];
+    let accommodationPoiId = day.accommodationPoiId;
+    const restaurantsForDay = destinationSortedPois(
+      rankedRestaurants,
+      resolution,
+      "restaurant",
+      day.destination
+    );
+    const staysForDay = destinationSortedPois(
+      rankedStays,
+      resolution,
+      "stay",
+      day.destination
+    );
+
+    const selectedRestaurant =
+      restaurantsForDay.find((poi) => !usedRestaurantIds.has(poi.id)) ||
+      restaurantsForDay[0];
+    if (selectedRestaurant) {
+      const mealIndex = activities.findIndex((activity) => {
+        const activityPoi = activity.poiId ? catalog.items[activity.poiId] : undefined;
+        return activityPoi?.type === "restaurant" || MEAL_ACTIVITY_PATTERN.test(activity.title);
+      });
+
+      if (mealIndex >= 0) {
+        const existing = activities[mealIndex];
+        const existingPoi = existing.poiId ? catalog.items[existing.poiId] : undefined;
+        if (existingPoi?.type !== "restaurant") {
+          const mealLabel = labelForMealActivity(existing);
+          activities[mealIndex] = {
+            ...existing,
+            poiId: selectedRestaurant.id,
+            title: `${mealLabel} at ${selectedRestaurant.name}`,
+            summary:
+              existing.summary ||
+              `Use ${selectedRestaurant.name} for a dependable local ${mealLabel.toLowerCase()} stop in ${day.destination}.`
+          };
+        }
+        usedRestaurantIds.add(selectedRestaurant.id);
+      } else if (activities.length < 5) {
+        const insertionIndex = findMealInsertionIndex(activities);
+        activities.splice(insertionIndex, 0, {
+          id: randomUUID(),
+          poiId: selectedRestaurant.id,
+          title: `Lunch at ${selectedRestaurant.name}`,
+          summary: `Pause at ${selectedRestaurant.name} for a well-placed local meal without breaking the route.`,
+          startTime: "13:00",
+          endTime: "14:15",
+          notes: []
+        });
+        usedRestaurantIds.add(selectedRestaurant.id);
+      }
+    }
+
+    const isOvernightDay = plan.days.length > 1 && index < plan.days.length - 1;
+    const selectedStay = staysForDay[0];
+    if (selectedStay && isOvernightDay) {
+      accommodationPoiId = accommodationPoiId || selectedStay.id;
+      const stayActivityIndex = activities.findIndex((activity) => {
+        const activityPoi = activity.poiId ? catalog.items[activity.poiId] : undefined;
+        return activityPoi?.type === "stay" || STAY_ACTIVITY_PATTERN.test(activity.title);
+      });
+
+      if (stayActivityIndex >= 0) {
+        const existing = activities[stayActivityIndex];
+        const existingPoi = existing.poiId ? catalog.items[existing.poiId] : undefined;
+        if (existingPoi?.type !== "stay") {
+          activities[stayActivityIndex] = {
+            ...existing,
+            poiId: selectedStay.id,
+            title: `Check in at ${selectedStay.name}`,
+            summary:
+              existing.summary ||
+              `Settle in at ${selectedStay.name} so the rest of the trip stays easy and family-friendly.`
+          };
+        }
+      } else if (activities.length < 5) {
+        activities.push({
+          id: randomUUID(),
+          poiId: selectedStay.id,
+          title: `Check in at ${selectedStay.name}`,
+          summary: `Use ${selectedStay.name} as your base for the night in ${day.destination}.`,
+          startTime: "18:30",
+          endTime: "19:15",
+          notes: []
+        });
+      }
+    }
+
+    return {
+      ...day,
+      accommodationPoiId,
+      activities
+    };
+  });
+
+  return { ...plan, days };
 }
 
 function mergeAdvisories(...groups: Array<DateAdvisoryItem[] | undefined>): DateAdvisoryItem[] {
@@ -1112,17 +1497,25 @@ export async function synthesizePlan(
   resolution: TurnResolution,
   research: DestinationResearch
 ): Promise<PlanSnapshot> {
+  const rankedStays = sortPois(research.grouped.stays, resolution, "stay");
+  const rankedRestaurants = sortPois(
+    research.grouped.restaurants,
+    resolution,
+    "restaurant"
+  );
   const poiSummary = JSON.stringify(
     {
-      stays: sortPois(research.grouped.stays, resolution, "stay").map((poi) => ({
+      stays: rankedStays.map((poi) => ({
         id: poi.id,
         name: poi.name,
+        address: poi.address,
         priceLevel: poi.priceLevel,
         rating: poi.rating
       })),
-      restaurants: sortPois(research.grouped.restaurants, resolution, "restaurant").map((poi) => ({
+      restaurants: rankedRestaurants.map((poi) => ({
         id: poi.id,
         name: poi.name,
+        address: poi.address,
         priceLevel: poi.priceLevel,
         rating: poi.rating
       })),
@@ -1156,7 +1549,9 @@ Rules:
 - Create a plan with ${resolution.totalDays || session.plan?.totalDays || 3} days.
 - Keep each day feasible, with 3 to 5 activities.
 - Keep the same destination structure the user asked for.
-- Include accommodationPoiId when a stay is available.
+- When stay POIs are available for an overnight stop, set accommodationPoiId and anchor the day to a specific stay choice.
+- When restaurant POIs are available, use them for meal stops instead of leaving meals generic.
+- If the traveller asked for accommodation, food, local cuisine, or a family-friendly plan, treat stay and restaurant choices as required parts of the itinerary, not optional side notes.
 - Do not fabricate POIs that are not in the list.`
   });
 
@@ -1197,7 +1592,7 @@ Rules:
     lastUserIntent: resolution.intent
   });
 
-  return normalized;
+  return applyPlanHospitalitySelections(normalized, resolution, research);
 }
 
 export async function enrichPlanLogistics(
@@ -1425,6 +1820,11 @@ export type FastTurnResponse = {
   memory: SessionSnapshot["memory"];
 };
 
+export type ImmediateAssistantReply = {
+  reply: string;
+  responseBlocks: AssistantResponseBlock[];
+};
+
 // ─── Conversation Mode ───────────────────────────────────────────────────────
 
 export type ConversationMode =
@@ -1439,6 +1839,8 @@ export type MissingSlot =
   | "missing_duration"
   | "missing_budget"
   | null;
+
+const MAX_DAY_BY_DAY_TRIP_DAYS = 21;
 
 /**
  * Determines the high-level conversation mode for the current turn.
@@ -1505,6 +1907,117 @@ export function resolveMissingSlot(resolution: TurnResolution): MissingSlot {
   return null;
 }
 
+function formatLongTripPromptPrefix(destination: string | undefined, totalDays: number): string {
+  if (destination) {
+    return `${destination} for ${totalDays} days`;
+  }
+  return `${totalDays} days`;
+}
+
+export function resolveOversizedPlanResponse(
+  resolution: TurnResolution
+): ImmediateAssistantReply | null {
+  const totalDays = resolution.totalDays;
+  if (resolution.intent !== "plan_trip" || !totalDays || totalDays <= MAX_DAY_BY_DAY_TRIP_DAYS) {
+    return null;
+  }
+
+  const destination = resolution.destination || resolution.destinations[0];
+  const planLabel = formatLongTripPromptPrefix(destination, totalDays);
+  const title = destination
+    ? `${destination} needs a phased plan`
+    : "This trip needs a phased plan";
+
+  let body =
+    `I can help with ${planLabel}, but once a trip stretches past about three weeks, a strict day-by-day itinerary stops being useful.`;
+  if (totalDays >= 365) {
+    body =
+      `I can help with ${planLabel}, but a day-by-day itinerary that long is less “trip planning” and more “new life chapter.”`;
+  } else if (totalDays >= 45) {
+    body =
+      `I can help with ${planLabel}, but a day-by-day itinerary that long would turn into a small travel novel.`;
+  }
+
+  const lead =
+    destination
+      ? `Smarter move: I break ${destination} into phases, base cities, and priorities, then detail only the first stretch you actually want to book now.`
+      : "Smarter move: I break it into phases, base cities, and priorities, then detail only the first stretch you actually want to book now.";
+
+  const prompts = totalDays >= 365
+    ? [
+        {
+          label: "First 14 days",
+          prompt: destination
+            ? `Plan the first 14 days of my ${totalDays}-day trip to ${destination}.`
+            : `Plan the first 14 days of my ${totalDays}-day trip.`
+        },
+        {
+          label: "First month",
+          prompt: destination
+            ? `Plan the first 30 days of my ${totalDays}-day trip to ${destination}.`
+            : `Plan the first 30 days of my ${totalDays}-day trip.`
+        },
+        {
+          label: "Quarterly phases",
+          prompt: destination
+            ? `Break my ${totalDays}-day trip to ${destination} into quarterly phases with base cities, seasons, and priorities.`
+            : `Break my ${totalDays}-day trip into quarterly phases with base cities, seasons, and priorities.`
+        },
+        {
+          label: "High-level route",
+          prompt: destination
+            ? `Give me a high-level route and seasonal strategy for a ${totalDays}-day trip to ${destination}.`
+            : `Give me a high-level route and seasonal strategy for a ${totalDays}-day trip.`
+        }
+      ]
+    : [
+        {
+          label: "First 7 days",
+          prompt: destination
+            ? `Plan the first 7 days of my ${totalDays}-day trip to ${destination}.`
+            : `Plan the first 7 days of my ${totalDays}-day trip.`
+        },
+        {
+          label: "First 10 days",
+          prompt: destination
+            ? `Plan the first 10 days of my ${totalDays}-day trip to ${destination}.`
+            : `Plan the first 10 days of my ${totalDays}-day trip.`
+        },
+        {
+          label: "Weekly phases",
+          prompt: destination
+            ? `Break my ${totalDays}-day trip to ${destination} into weekly phases with base cities and priorities.`
+            : `Break my ${totalDays}-day trip into weekly phases with base cities and priorities.`
+        },
+        {
+          label: "Route only",
+          prompt: destination
+            ? `Give me a high-level route for a ${totalDays}-day trip to ${destination}.`
+            : `Give me a high-level route for a ${totalDays}-day trip.`
+        }
+      ];
+
+  return {
+    reply: `${body} ${lead}`,
+    responseBlocks: [
+      {
+        type: "trip_intro",
+        title,
+        body
+      },
+      {
+        type: "lead",
+        text: lead
+      },
+      {
+        type: "assistant_prompt_chips",
+        title: "Better ways to structure it",
+        prompts
+      }
+    ]
+  };
+}
+
 // ─── Narrative instructions ───────────────────────────────────────────────────
 
 const AUTONOMOUS_NARRATIVE_INSTRUCTIONS = `
@@ -1561,6 +2074,7 @@ GLOBAL RULES:
 - NEVER repeat the same introTitle as any previous assistant message in the digest.
 - Use at most one emoji across all text fields combined.
 - Keep each field SHORT — introBody max 2 sentences, leadText max 1 sentence.
+- NEVER give fake-precise currency totals or exact INR-style estimates. Use expectation-level language like Budget-friendly, Mid-range, Comfortable, Premium, lower-cost, moderate, or upscale instead.
 - Never bullet-list the missing fields; always address only the single most important gap.
 - Never say "As an AI" or "I don't have access to real-time data".
 - Never open with "Of course!", "Certainly!", "Absolutely!", "Great choice!", or "Sure!".
@@ -1642,12 +2156,13 @@ Return fields:
   });
 }
 
-function buildCapabilitiesSections(destination?: string) {
+function buildCapabilitiesSections(destination?: string, origin?: string) {
   const locality = destination ? ` around ${destination}` : "";
+  const nearbyOrigin = !destination && origin ? ` near ${origin}` : "";
   return [
     {
       title: "Personalized recommendations",
-      body: `Find restaurants, attractions, stays, and hidden gems${locality} based on the vibe you want.`
+      body: `Find restaurants, attractions, stays, and hidden gems${locality || nearbyOrigin} based on the vibe you want.`
     },
     {
       title: "Itinerary planning",
@@ -1667,18 +2182,29 @@ function buildCapabilitiesSections(destination?: string) {
     },
     {
       title: "Local tips",
-      body: "Share timing, neighborhood context, and practical travel notes that make the plan easier to use."
+      body: origin
+        ? `Use your current base in ${origin} to suggest nearby states, city breaks, cultural spots, and practical travel timing.`
+        : "Share timing, neighborhood context, and practical travel notes that make the plan easier to use."
     }
   ];
 }
 
-function buildCapabilityExamples(destination?: string) {
+function buildCapabilityExamples(destination?: string, origin?: string) {
   if (destination) {
     return [
       `Best beaches near ${destination}?`,
       `Local seafood spots in ${destination}?`,
       `Plan a 2-day trip from ${destination}.`,
       `Family-friendly hotel options in ${destination}?`
+    ];
+  }
+
+  if (origin) {
+    return [
+      `Weekend trips near ${origin}?`,
+      `Best local food spots around ${origin}?`,
+      `Cultural places near ${origin}?`,
+      `Suggest a good 2-day getaway from ${origin}.`
     ];
   }
 
@@ -1985,13 +2511,22 @@ function buildMissingDurationChips(
 }
 
 function buildGreetingChips(
-  sessionDestination?: string
+  sessionDestination?: string,
+  sessionOrigin?: string
 ): Array<{ label: string; prompt: string }> {
   if (sessionDestination) {
     return [
       { label: `Plan ${sessionDestination} trip`, prompt: `Plan me a trip to ${sessionDestination}` },
       { label: "Best beaches nearby", prompt: `Best beaches near ${sessionDestination}?` },
       { label: "Local food spots", prompt: `Best local food spots in ${sessionDestination}?` },
+      { label: "What can you do?", prompt: "What can you help me with?" }
+    ];
+  }
+  if (sessionOrigin) {
+    return [
+      { label: `Trips near ${sessionOrigin}`, prompt: `Suggest weekend trips near ${sessionOrigin}` },
+      { label: `Food near ${sessionOrigin}`, prompt: `Best local food spots around ${sessionOrigin}?` },
+      { label: `Culture near ${sessionOrigin}`, prompt: `Show me cultural places near ${sessionOrigin}` },
       { label: "What can you do?", prompt: "What can you help me with?" }
     ];
   }
@@ -2051,6 +2586,7 @@ export function resolveFastTurnResponse(
   }
 
   const existingName = inferredUserName(session);
+  const origin = primaryLocationLabel(localOriginFromSession(session));
   const introMatch = trimmed.match(
     /^(?:hi|hello|hey)?[\s,!-]*(?:my name is|i am|i'm|im|call me)\s+([\p{L}\p{M}][\p{L}\p{M}\s'-]{0,40})$/iu
   );
@@ -2076,7 +2612,7 @@ export function resolveFastTurnResponse(
   }
 
   const destination = localDestinationFromSession(session);
-  const prompts = buildGreetingChips(destination);
+  const prompts = buildGreetingChips(destination, origin);
   const acceptedDecisions = session.memory.acceptedDecisions.filter(
     (decision: string) => !decision.startsWith("Name: ")
   );
@@ -2091,39 +2627,57 @@ export function resolveFastTurnResponse(
     acceptedDecisions.push(`Name: ${name}`);
     reply = `Nice to meet you, ${name}. Tell me where you want to go, when you’re thinking, or just the kind of trip you want.`;
     title = `Nice to meet you, ${name}`;
-    body = "I’ll keep that in mind for the rest of this conversation.";
-    lead = "Tell me a destination, dates, or just a vibe and I’ll take it from there.";
+    body = origin
+      ? `I’ll keep that in mind, and I can also use your current base in ${origin} when nearby suggestions would help.`
+      : "I’ll keep that in mind for the rest of this conversation.";
+    lead = origin
+      ? `Tell me a destination, dates, or just a vibe and I can also suggest smart options around ${origin}.`
+      : "Tell me a destination, dates, or just a vibe and I’ll take it from there.";
   } else if (greetingOnly) {
     const greetingName = existingName ? `, ${existingName}` : "";
     reply = `Hey${greetingName}. Tell me where you want to go, when you want to travel, or what kind of trip you want.`;
     title = `Hey${greetingName}`;
-    body = "I’m ready when you are.";
-    lead = "Give me a destination, dates, or a travel vibe and I’ll start there.";
+    body = origin ? `I’m ready when you are, and I can use ${origin} as your starting context for nearby ideas.` : "I’m ready when you are.";
+    lead = origin
+      ? `Give me a destination, dates, or a travel vibe and I can also suggest good options from around ${origin}.`
+      : "Give me a destination, dates, or a travel vibe and I’ll start there.";
   } else if (capabilitiesOnly || identityOnly) {
     const guideName = existingName ? `, ${existingName}` : "";
     reply = `I’m Roameo${guideName}. I can plan trips, find restaurants and stays, suggest attractions, surface local events, and help refine dates, budget, and route decisions.`;
     title = "Your Roameo travel guide";
     body =
-      "I’m here to help you plan trips, discover places worth visiting, and refine the details without making you spell out everything up front.";
+      origin
+        ? `I’m here to help you plan trips, discover places worth visiting, and use your current base in ${origin} for nearby states, cities, food, and culture when that helps.`
+        : "I’m here to help you plan trips, discover places worth visiting, and refine the details without making you spell out everything up front.";
     lead =
       destination
         ? `I can start with ${destination}, or you can ask for restaurants, stays, local gems, better dates, or a full itinerary.`
-        : "Give me a destination, a rough vibe, or just tell me whether you want ideas for a trip, places to eat, or places to stay.";
+        : origin
+          ? `I can start from ${origin}, suggest nearby escapes, or help with restaurants, stays, and local culture anywhere you want.`
+          : "Give me a destination, a rough vibe, or just tell me whether you want ideas for a trip, places to eat, or places to stay.";
   } else if (smallTalkOnly) {
     const smallTalkName = existingName ? `, ${existingName}` : "";
     reply = `I’m good${smallTalkName}. Whenever you’re ready, give me a destination, a date range, or even just a rough travel vibe.`;
     title = `Ready when you are${smallTalkName}`;
-    body = "I can keep things simple and start from very little information.";
+    body = origin
+      ? `I can keep things simple and even start from your current location in ${origin}.`
+      : "I can keep things simple and start from very little information.";
     lead =
       destination
         ? `We can keep building around ${destination}, or switch to a different place anytime.`
-        : "A destination name, a budget, or even a one-line idea is enough to get started.";
+        : origin
+          ? `A destination name, a budget, or even “show me places near ${origin}” is enough to get started.`
+          : "A destination name, a budget, or even a one-line idea is enough to get started.";
   } else {
     const acknowledgementName = existingName ? `, ${existingName}` : "";
     reply = `Got it${acknowledgementName}. Tell me where you want to go or what you want to figure out next.`;
     title = `Got it${acknowledgementName}`;
-    body = "I’m ready for the next step whenever you are.";
-    lead = "A destination, dates, or even a rough travel idea is enough to get moving.";
+    body = origin
+      ? `I’m ready for the next step, and I can use ${origin} for nearby suggestions if that helps.`
+      : "I’m ready for the next step whenever you are.";
+    lead = origin
+      ? `A destination, dates, or even “what’s worth doing near ${origin}?” is enough to get moving.`
+      : "A destination, dates, or even a rough travel idea is enough to get moving.";
   }
 
   return {
@@ -2211,14 +2765,6 @@ export function buildResponseBlocks(params: {
     }
   ];
 
-  if (planningContext?.workerProgress?.length) {
-    blocks.push({
-      type: "worker_progress",
-      title: resolution.stayMode ? "Scouting options" : "Working through your trip",
-      steps: planningContext.workerProgress
-    });
-  }
-
   // ── MISSING INFO: short circuit, return chips only ──────────────────────────
   if (mode === "missing_info") {
     const dest = resolution.destination || resolution.destinations[0] || "";
@@ -2249,6 +2795,7 @@ export function buildResponseBlocks(params: {
   // ── GREETING: capabilities + featured POI + greeting chips ──────────────────
   if (mode === "greeting") {
     const sessionDestination = localDestinationFromSession(session);
+    const sessionOrigin = primaryLocationLabel(localOriginFromSession(session));
 
     if (resolution.questionFocus === "capabilities") {
       blocks.push({
@@ -2256,10 +2803,12 @@ export function buildResponseBlocks(params: {
         title: "What I can do for you",
         intro: resolution.destination
           ? `I can help you explore ${resolution.destination} with real places, practical planning, and low-friction next steps.`
-          : "I can help with real places, practical planning, and easy next steps.",
-        sections: buildCapabilitiesSections(resolution.destination),
+          : sessionOrigin
+            ? `I can help with real places, practical planning, and nearby suggestions from ${sessionOrigin}.`
+            : "I can help with real places, practical planning, and easy next steps.",
+        sections: buildCapabilitiesSections(resolution.destination, sessionOrigin),
         examplesTitle: "Example help",
-        examples: buildCapabilityExamples(resolution.destination)
+        examples: buildCapabilityExamples(resolution.destination, sessionOrigin)
       });
     }
 
@@ -2292,7 +2841,10 @@ export function buildResponseBlocks(params: {
     blocks.push({
       type: "assistant_prompt_chips",
       title: "Easy next steps",
-      prompts: narrative.promptChips.length > 0 ? narrative.promptChips : buildGreetingChips(sessionDestination)
+      prompts:
+        narrative.promptChips.length > 0
+          ? narrative.promptChips
+          : buildGreetingChips(sessionDestination, sessionOrigin)
     });
 
     return blocks;
@@ -2342,27 +2894,6 @@ export function buildResponseBlocks(params: {
             isCanonicalPoiId(session.poiCatalog, poi.id)
           )
         : [];
-
-      if (showAttractions) {
-        const rankedAttractions = sortPois(research.grouped.attractions, resolution, "attraction")
-          .filter((poi) => isCanonicalPoiId(session.poiCatalog, poi.id));
-
-        if (rankedAttractions.length > 0) {
-          const attrTitle =
-            discoveryFocus === "hidden_gems" ? (dest ? `Hidden gems in ${dest}` : "Hidden gems")
-              : discoveryFocus === "beaches" ? (dest ? `Beaches near ${dest}` : "Beaches")
-              : discoveryFocus === "culture" ? (dest ? `Culture & heritage in ${dest}` : "Culture & heritage")
-              : discoveryFocus === "family" ? (dest ? `Family-friendly in ${dest}` : "Family-friendly places")
-              : discoveryFocus === "attractions" ? (dest ? `Things to do in ${dest}` : "Things to do")
-              : dest ? `Attractions in ${dest}` : "Top attractions";
-          blocks.push({
-            type: "place_card_row",
-            title: attrTitle,
-            poiIds: rankedAttractions.slice(0, 4).map((p) => p.id),
-            display: "carousel"
-          });
-        }
-      }
 
       // poi_story_list: use focus-appropriate POIs only
       const storySource = isFoodFocus
@@ -2560,7 +3091,7 @@ export function buildResponseBlocks(params: {
             accent: day.theme,
             periods: Array.from(grouped.entries()).map(([key, entries]) => ({ key, ...labelForPeriod(key), entries })),
             stayPoiId: isCanonicalPoiId(session.poiCatalog, day.accommodationPoiId) ? day.accommodationPoiId : undefined,
-            footer: day.budget?.total ? `${day.budget.currency} ${day.budget.total.toLocaleString()} for the day` : undefined
+            footer: undefined
           };
         })
       });
@@ -2624,7 +3155,7 @@ export function buildResponseBlocks(params: {
             accent: day.theme,
             periods: Array.from(grouped.entries()).map(([key, entries]) => ({ key, ...labelForPeriod(key), entries })),
             stayPoiId: isCanonicalPoiId(session.poiCatalog, day.accommodationPoiId) ? day.accommodationPoiId : undefined,
-            footer: day.budget?.total ? `${day.budget.currency} ${day.budget.total.toLocaleString()} for the day` : undefined
+            footer: undefined
           };
         })
       });

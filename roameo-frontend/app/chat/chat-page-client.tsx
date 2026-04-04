@@ -15,6 +15,7 @@ import { toast } from "@/hooks/use-toast";
 import {
   createSession,
   deleteTrip,
+  discoverPlaces,
   getSession,
   mutatePlan,
   savePoi,
@@ -54,6 +55,7 @@ export default function ChatPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [draftInput, setDraftInput] = useState("");
   const [optimisticTrip, setOptimisticTrip] = useState<TripContext | null>(null);
+  const [searchStatus, setSearchStatus] = useState<string | null>(null);
   const handledQueryRef = useRef<string | null>(null);
   const searchParamsRef = useRef(searchParams);
   searchParamsRef.current = searchParams;
@@ -456,6 +458,49 @@ export default function ChatPage() {
     }
   };
 
+  const handleDiscoverCategory = async (
+    category: "stay" | "restaurant" | "attraction" | "all"
+  ) => {
+    if (!snapshot?.id) {
+      return;
+    }
+
+    const destination = displayedTrip.destination?.trim();
+    if (!destination) {
+      return;
+    }
+
+    const label =
+      category === "stay"
+        ? "stays"
+        : category === "restaurant"
+          ? "restaurants"
+          : category === "attraction"
+            ? "attractions"
+            : "places";
+
+    setSearchStatus(`Finding ${label} in ${destination}...`);
+
+    try {
+      const updated = await discoverPlaces(snapshot.id, {
+        destination,
+        category
+      });
+      hydrate(updated);
+    } catch (discoverError) {
+      toast({
+        title: `Could not load ${label}`,
+        description:
+          discoverError instanceof Error
+            ? discoverError.message
+            : "Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setSearchStatus(null);
+    }
+  };
+
   if (!authReady) {
     return (
       <div className="flex h-[100dvh] items-center justify-center overflow-hidden bg-white relative">
@@ -588,6 +633,8 @@ export default function ChatPage() {
               <SearchInterface
                 activeView={activeLeftView}
                 onViewChange={setActiveLeftView}
+                sessionId={snapshot?.id}
+                destination={displayedTrip.destination}
                 results={activeLeftView === "saved" ? savedResults : searchResults}
                 planningState={planningState}
                 savedIds={savedIds}
@@ -601,7 +648,11 @@ export default function ChatPage() {
                 onReplan={(poi) => {
                   void handlePlanMutation(poi, "replan");
                 }}
+                onDiscoverCategory={(category) => {
+                  void handleDiscoverCategory(category);
+                }}
                 isLoading={sessionQuery.isLoading && Boolean(sessionId)}
+                searchStatus={searchStatus ?? undefined}
                 isSplitView={isRightPanelVisible}
               />
             )}

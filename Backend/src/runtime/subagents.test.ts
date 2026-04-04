@@ -1,10 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  researchPlanningDestinations,
   buildResponseBlocks,
   normalizeTravelIntent,
+  resolveDeterministicTurnIntent,
   resolveFastTurnResponse,
+  resolveOversizedPlanResponse,
   resolveTurnIntent,
+  synthesizePlan,
   updateSessionMemory
 } from "./subagents.js";
 import type { SessionSnapshot } from "@roameo/contracts";
@@ -111,6 +115,25 @@ test("resolveFastTurnResponse stores the user's name from a simple introduction"
   );
 });
 
+test("resolveFastTurnResponse uses origin context in casual replies and chips", () => {
+  const session = makeSession();
+  session.memory.acceptedDecisions.push("Origin: Visakhapatnam, Andhra Pradesh");
+
+  const fast = resolveFastTurnResponse(session, "hi");
+
+  assert.ok(fast);
+  assert.match(fast.reply, /tell me where you want to go/i);
+  assert.match(
+    (fast.responseBlocks.find((block) => block.type === "lead") as any).text,
+    /visakhapatnam/i
+  );
+  const chips = fast.responseBlocks.find(
+    (block) => block.type === "assistant_prompt_chips"
+  );
+  assert.ok(chips && chips.type === "assistant_prompt_chips");
+  assert.ok(chips.prompts.some((prompt) => /visakhapatnam/i.test(prompt.prompt)));
+});
+
 test("resolveFastTurnResponse handles capability questions without the full pipeline", () => {
   const fast = resolveFastTurnResponse(makeSession(), "what can u do?");
 
@@ -125,6 +148,275 @@ test("resolveFastTurnResponse handles identity questions without the full pipeli
   assert.ok(fast);
   assert.match(fast.reply, /roameo/i);
   assert.equal(fast.memory.planningState.status, "ready");
+});
+
+test("resolveDeterministicTurnIntent handles obvious restaurant discovery locally", () => {
+  const session = makeSession();
+  session.memory.destinationsDiscussed = ["Goa"];
+
+  const resolution = resolveDeterministicTurnIntent(
+    session,
+    "show me some restaurants"
+  );
+
+  assert.ok(resolution);
+  assert.equal(resolution.intent, "search_places");
+  assert.equal(resolution.questionFocus, "restaurants");
+  assert.deepEqual(resolution.destinations, ["Goa"]);
+});
+
+test("resolveDeterministicTurnIntent handles obvious planning requests locally", () => {
+  const resolution = resolveDeterministicTurnIntent(
+    makeSession(),
+    "plan trip to araku for 2 days"
+  );
+
+  assert.ok(resolution);
+  assert.equal(resolution.intent, "plan_trip");
+  assert.equal(resolution.totalDays, 2);
+  assert.equal(resolution.destinations[0], "araku");
+});
+
+test("resolveDeterministicTurnIntent keeps full itinerary prompts in planning mode", () => {
+  const resolution = resolveDeterministicTurnIntent(
+    makeSession(),
+    `Plan a family trip to shimla for 4 days. Include family-friendly activities, suitable accommodations, and child-safe attractions. Please provide a detailed itinerary with:
+
+Day-by-day schedule with specific activities
+Recommended places to visit with brief descriptions
+Accommodation suggestions
+Transportation options and travel tips
+Local cuisine recommendations
+Important travel information and safety tips
+Budget estimates for different expense categories`
+  );
+
+  assert.ok(resolution);
+  assert.equal(resolution.intent, "plan_trip");
+  assert.equal(resolution.destination, "shimla");
+  assert.equal(resolution.totalDays, 4);
+  assert.notEqual(resolution.questionFocus, "restaurants");
+});
+
+test("researchPlanningDestinations keeps hospitality categories available for planning", async () => {
+  const attraction = {
+    id: "poi-attraction",
+    name: "Ridge",
+    type: "attraction" as const,
+    lat: 31.1,
+    lng: 77.1,
+    openingHours: [],
+    source: "google_places" as const,
+    tags: ["Shimla"]
+  };
+  const stay = {
+    id: "poi-stay",
+    name: "Family Pine Resort",
+    type: "stay" as const,
+    lat: 31.2,
+    lng: 77.2,
+    openingHours: [],
+    source: "google_places" as const,
+    tags: ["Shimla"]
+  };
+  const restaurant = {
+    id: "poi-restaurant",
+    name: "Himachal Family Kitchen",
+    type: "restaurant" as const,
+    lat: 31.3,
+    lng: 77.3,
+    openingHours: [],
+    source: "google_places" as const,
+    tags: ["Shimla"]
+  };
+
+  const calls: string[] = [];
+  const tools = {
+    async searchPlacesForDestination(_destination: string, focus: string) {
+      calls.push(focus);
+      return {
+        stays: focus === "family" || focus === "general" ? [stay] : [],
+        restaurants: focus === "general" ? [restaurant] : [],
+        attractions: [attraction],
+        catalog: {
+          version: 1,
+          items: {
+            [attraction.id]: attraction,
+            ...(focus === "general" ? { [restaurant.id]: restaurant } : {}),
+            ...(focus === "family" || focus === "general" ? { [stay.id]: stay } : {})
+          }
+        }
+      };
+    },
+    async getDestinationFacts() {
+      return [];
+    }
+  } as any;
+
+  const research = await researchPlanningDestinations(
+    tools,
+    ["Shimla"],
+    "family",
+    false
+  );
+
+  assert.deepEqual(calls, ["general", "family"]);
+  assert.equal(research.grouped.restaurants[0]?.id, "poi-restaurant");
+  assert.equal(research.grouped.stays[0]?.id, "poi-stay");
+});
+
+test("synthesizePlan upgrades generic meals and accommodation to real POIs", async () => {
+  const session = makeSession();
+  const stay = {
+    id: "stay-1",
+    name: "Pine View Resort",
+    type: "stay" as const,
+    lat: 31.1,
+    lng: 77.1,
+    address: "Shimla",
+    openingHours: [],
+    source: "google_places" as const,
+    tags: ["Shimla"]
+  };
+  const restaurant = {
+    id: "restaurant-1",
+    name: "Himachal Rasoi",
+    type: "restaurant" as const,
+    lat: 31.2,
+    lng: 77.2,
+    address: "Shimla",
+    openingHours: [],
+    source: "google_places" as const,
+    tags: ["Shimla"]
+  };
+  const attraction = {
+    id: "attraction-1",
+    name: "The Ridge",
+    type: "attraction" as const,
+    lat: 31.3,
+    lng: 77.3,
+    address: "Shimla",
+    openingHours: [],
+    source: "google_places" as const,
+    tags: ["Shimla"]
+  };
+  const research = {
+    destinations: ["Shimla"],
+    focus: "family" as const,
+    catalog: {
+      version: 1,
+      items: {
+        [stay.id]: stay,
+        [restaurant.id]: restaurant,
+        [attraction.id]: attraction
+      }
+    },
+    grouped: {
+      stays: [stay],
+      restaurants: [restaurant],
+      attractions: [attraction]
+    },
+    facts: []
+  };
+
+  const plan = await synthesizePlan(
+    {
+      async generateObject() {
+        return {
+          title: "Shimla family reset",
+          destination: "Shimla",
+          destinations: ["Shimla"],
+          totalDays: 2,
+          travelerCount: 2,
+          notes: [],
+          destinationSegments: [],
+          days: [
+            {
+              day: 1,
+              title: "Soft arrival",
+              destination: "Shimla",
+              activities: [
+                {
+                  title: "The Ridge walk",
+                  poiId: attraction.id,
+                  startTime: "09:00",
+                  endTime: "10:30",
+                  notes: []
+                },
+                {
+                  title: "Lunch",
+                  startTime: "13:00",
+                  endTime: "14:00",
+                  notes: []
+                }
+              ]
+            },
+            {
+              day: 2,
+              title: "Garden day",
+              destination: "Shimla",
+              activities: [
+                {
+                  title: "Morning stroll",
+                  poiId: attraction.id,
+                  startTime: "09:00",
+                  endTime: "10:30",
+                  notes: []
+                }
+              ]
+            }
+          ]
+        };
+      }
+    } as any,
+    {} as any,
+    session,
+    {
+      intent: "plan_trip",
+      destination: "Shimla",
+      destinations: ["Shimla"],
+      totalDays: 2,
+      travelerCount: 2,
+      styles: ["family"],
+      dateContext: {
+        flexibility: "open_ended",
+        derivedFrom: "none",
+        advisoryItems: []
+      }
+    },
+    research
+  );
+
+  assert.equal(plan.days[0]?.accommodationPoiId, stay.id);
+  assert.ok(
+    plan.days[0]?.activities.some(
+      (activity) =>
+        activity.poiId === restaurant.id &&
+        /lunch at himachal rasoi/i.test(activity.title)
+    )
+  );
+});
+
+test("resolveOversizedPlanResponse pushes very long trips into phased planning", () => {
+  const response = resolveOversizedPlanResponse({
+    intent: "plan_trip",
+    destination: "Araku Valley",
+    destinations: ["Araku Valley"],
+    totalDays: 50,
+    styles: [],
+    dateContext: {
+      flexibility: "open_ended",
+      derivedFrom: "none",
+      advisoryItems: []
+    }
+  });
+
+  assert.ok(response);
+  assert.match(response.reply, /small travel novel/i);
+  assert.deepEqual(
+    response.responseBlocks.map((block) => block.type),
+    ["trip_intro", "lead", "assistant_prompt_chips"]
+  );
 });
 
 test("updateSessionMemory keeps pre-plan destination and duration in canonical memory", () => {
@@ -193,6 +485,15 @@ test("buildResponseBlocks emits canonical itinerary presentation blocks", () => 
       destinations: ["Kochi"],
       totalDays: 1,
       travelerCount: 1,
+      budget: {
+        accommodation: 2500,
+        food: 1400,
+        transport: 600,
+        activities: 700,
+        misc: 500,
+        total: 5700,
+        currency: "INR"
+      },
       notes: [],
       destinationSegments: [],
       days: [
@@ -230,6 +531,11 @@ test("buildResponseBlocks emits canonical itinerary presentation blocks", () => 
     blocks.map((block) => block.type),
     ["trip_intro", "lead", "itinerary_template", "place_card_row", "assistant_prompt_chips"]
   );
+
+  const itinerary = blocks.find((block) => block.type === "itinerary_template");
+  assert.ok(itinerary && itinerary.type === "itinerary_template");
+  assert.equal(itinerary.budgetLabel, "Expected spend: Mid-range");
+  assert.ok(itinerary.days.every((day) => day.footer === undefined));
 });
 
 test("buildResponseBlocks never references unknown POI ids", () => {
@@ -279,9 +585,9 @@ test("buildResponseBlocks never references unknown POI ids", () => {
     }
   });
 
-  const row = blocks.find((block) => block.type === "place_card_row");
-  assert.ok(row && row.type === "place_card_row");
-  assert.deepEqual(row.poiIds, ["poi-1"]);
+  const stories = blocks.find((block) => block.type === "poi_story_list");
+  assert.ok(stories && stories.type === "poi_story_list");
+  assert.deepEqual(stories.items.map((item) => item.poiId), ["poi-1"]);
 });
 
 test("resolveTurnIntent upgrades natural follow-up edit requests into refine_trip", async () => {
@@ -480,9 +786,7 @@ test("buildResponseBlocks emits discovery stories from canonical POIs", () => {
   });
 
   assert.ok(blocks.some((block) => block.type === "poi_story_list"));
-  const row = blocks.find((block) => block.type === "place_card_row");
-  assert.ok(row && row.type === "place_card_row");
-  assert.deepEqual(row.poiIds, ["poi-1"]);
+  assert.ok(!blocks.some((block) => block.type === "place_card_row"));
 });
 
 test("buildResponseBlocks emits categorized restaurant rows for food discovery", () => {
@@ -552,6 +856,54 @@ test("buildResponseBlocks emits categorized restaurant rows for food discovery",
   const grouped = blocks.find((block) => block.type === "categorized_place_rows");
   assert.ok(grouped && grouped.type === "categorized_place_rows");
   assert.ok(grouped.sections.length >= 2);
+});
+
+test("buildResponseBlocks does not persist worker progress in final replies", () => {
+  const session = makeSession();
+  const blocks = buildResponseBlocks({
+    session,
+    resolution: {
+      intent: "search_places",
+      destination: "Shimla",
+      destinations: ["Shimla"],
+      styles: [],
+      questionFocus: "restaurants",
+      dateContext: {
+        flexibility: "open_ended",
+        derivedFrom: "none",
+        advisoryItems: []
+      }
+    },
+    narrative: {
+      introTitle: "Shimla food worth your time",
+      introBody: "A few picks are ready.",
+      leadText: "Start with these.",
+      promptChips: [],
+      clarifyingQuestions: []
+    },
+    research: {
+      destinations: ["Shimla"],
+      focus: "restaurants",
+      catalog: session.poiCatalog,
+      grouped: {
+        stays: [],
+        restaurants: [session.poiCatalog.items["poi-2"]],
+        attractions: []
+      },
+      facts: []
+    },
+    planningContext: {
+      workerProgress: [
+        {
+          label: "Discovering places in Shimla",
+          detail: "Pulled real places into the catalog.",
+          state: "completed"
+        }
+      ]
+    }
+  });
+
+  assert.ok(!blocks.some((block) => block.type === "worker_progress"));
 });
 
 test("buildResponseBlocks emits stay and date-aware blocks for stay mode", () => {
@@ -625,7 +977,7 @@ test("buildResponseBlocks emits stay and date-aware blocks for stay mode", () =>
     }
   });
 
-  assert.ok(blocks.some((block) => block.type === "worker_progress"));
+  assert.ok(!blocks.some((block) => block.type === "worker_progress"));
   assert.ok(blocks.some((block) => block.type === "date_advisory"));
   assert.ok(blocks.some((block) => block.type === "event_window_summary"));
   assert.ok(blocks.some((block) => block.type === "stay_recommendation_list"));

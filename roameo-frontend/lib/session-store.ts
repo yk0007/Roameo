@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ChatMessage, CanonicalSession, WsEvent } from "./types";
+import type { AgentTraceEvent, ChatMessage, CanonicalSession, WsEvent } from "./types";
 
 type SessionState = {
   snapshot?: CanonicalSession;
@@ -24,6 +24,19 @@ function upsertMessage(messages: ChatMessage[], next: ChatMessage) {
   );
 }
 
+function upsertTrace(traces: AgentTraceEvent[], next: AgentTraceEvent) {
+  const existing = traces.findIndex((trace) => trace.id === next.id);
+  if (existing === -1) {
+    return [...traces, next];
+  }
+
+  return traces.map((trace, index) => (index === existing ? next : trace));
+}
+
+function uniqueTraces(traces: AgentTraceEvent[]) {
+  return traces.reduce<AgentTraceEvent[]>((acc, trace) => upsertTrace(acc, trace), []);
+}
+
 export const useSessionStore = create<SessionState>((set) => ({
   snapshot: undefined,
   streamingMessage: undefined,
@@ -40,7 +53,10 @@ export const useSessionStore = create<SessionState>((set) => ({
     }),
   hydrate: (snapshot) =>
     set({
-      snapshot,
+      snapshot: {
+        ...snapshot,
+        traces: uniqueTraces(snapshot.traces || [])
+      },
       streamingMessage: undefined,
       activeTurnId: undefined,
       isStreaming: false,
@@ -60,7 +76,10 @@ export const useSessionStore = create<SessionState>((set) => ({
       switch (event.type) {
         case "session.snapshot":
           return {
-            snapshot: event.data,
+            snapshot: {
+              ...event.data,
+              traces: uniqueTraces(event.data.traces || [])
+            },
             streamingMessage:
               state.streamingMessage &&
               event.data.messages.some(
@@ -138,7 +157,7 @@ export const useSessionStore = create<SessionState>((set) => ({
             snapshot: state.snapshot
               ? {
                   ...state.snapshot,
-                  traces: [...state.snapshot.traces, event.data]
+                  traces: upsertTrace(state.snapshot.traces, event.data)
                 }
               : state.snapshot
           };

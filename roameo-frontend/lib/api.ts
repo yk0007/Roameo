@@ -86,6 +86,22 @@ export async function mutatePlan(
   );
 }
 
+export async function discoverPlaces(
+  sessionId: string,
+  input: {
+    destination?: string;
+    category: "stay" | "restaurant" | "attraction" | "all";
+  }
+) {
+  return apiFetch<CanonicalSession>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/discovery`,
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
 export async function deleteSession(sessionId: string) {
   return apiFetch<void>(`/api/sessions/${encodeURIComponent(sessionId)}`, {
     method: "DELETE"

@@ -388,11 +388,18 @@ export function AgenticStatus({
   traces = [],
   turnId,
 }: AgenticStatusProps) {
+  const uniqueTraces = traces.reduce<AgentTraceEvent[]>((acc, trace) => {
+    if (acc.some((item) => item.id === trace.id)) {
+      return acc.map((item) => (item.id === trace.id ? trace : item));
+    }
+    return [...acc, trace];
+  }, []);
+
   // Filter to traces for this turn if we have a turnId,
   // otherwise show all currently-running ones
   const turnTraces = turnId
-    ? traces.filter((t) => t.turnId === turnId)
-    : traces;
+    ? uniqueTraces.filter((t) => t.turnId === turnId)
+    : uniqueTraces;
 
   // Pick the most recent running trace
   const runningTrace =
@@ -451,7 +458,7 @@ export function AgenticStatus({
               trace.status === "completed" || trace.status === "failed";
             return (
               <motion.div
-                key={trace.id}
+                key={`${trace.id}-${trace.status}-${trace.label}`}
                 initial={{ opacity: 0, x: -6 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.2 }}
