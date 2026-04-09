@@ -703,6 +703,7 @@ export default function ChatPage() {
             onViewChange={setActiveRightView}
             trip={trip}
             itinerary={itinerary}
+            pois={catalogPois}
             planVersionKey={planVersionKey}
             mapData={mapData}
             onClose={() => setIsRightPanelVisible(false)}

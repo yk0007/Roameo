@@ -15,6 +15,7 @@ import type { Activity, Itinerary, POI } from "@/lib/types";
 interface ItineraryPanelProps {
   itinerary?: Itinerary;
   trip: any;
+  pois?: POI[];
   onPOISelect?: (pois: any[]) => void;
   savedIds?: Set<string>;
   onToggleSave?: (poi: POI, nextSaved: boolean) => void;
@@ -22,6 +23,57 @@ interface ItineraryPanelProps {
   onReplan?: (poi: POI) => void;
   isLoading?: boolean;
   planningStatus?: string;
+}
+
+function normalizeMatchText(value?: string) {
+  return (value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function resolveActivityImage(activity: Activity, pois?: POI[]) {
+  const direct = resolvePoiImageUrl(activity.photoUrl);
+  if (direct) {
+    return direct;
+  }
+
+  const candidates = pois || [];
+  const byId = activity.poiId
+    ? candidates.find((poi) => poi.id === activity.poiId)
+    : undefined;
+  const byIdImage = resolvePoiImageUrl(byId?.photoUrl);
+  if (byIdImage) {
+    return byIdImage;
+  }
+
+  const activityName = normalizeMatchText(activity.name);
+  const activityLocation = normalizeMatchText(activity.location);
+
+  const byName = candidates.find((poi) => {
+    const poiName = normalizeMatchText(poi.name);
+    return (
+      poiName &&
+      activityName &&
+      (activityName.includes(poiName) || poiName.includes(activityName))
+    );
+  });
+  const byNameImage = resolvePoiImageUrl(byName?.photoUrl);
+  if (byNameImage) {
+    return byNameImage;
+  }
+
+  const byLocation = candidates.find((poi) => {
+    const poiAddress = normalizeMatchText(poi.address);
+    return (
+      poiAddress &&
+      activityLocation &&
+      (poiAddress.includes(activityLocation) || activityLocation.includes(poiAddress))
+    );
+  });
+
+  return resolvePoiImageUrl(byLocation?.photoUrl);
 }
 
 function activityToPoi(activity: Activity): POI {
@@ -227,6 +279,7 @@ function ActivityModal({
 export function ItineraryPanel({
   itinerary,
   trip,
+  pois,
   savedIds = new Set(),
   onToggleSave = () => {},
   isLoading = false,
@@ -351,10 +404,10 @@ export function ItineraryPanel({
                       transition={{ duration: 0.16, ease: "easeOut" }}
                       className="mb-4 flex cursor-pointer items-center gap-4 rounded-2xl border border-white/60 bg-white/50 px-4 py-4 shadow-[0_8px_20px_rgba(15,23,42,0.04)] backdrop-blur-md transition-[border-color,box-shadow,background-color] hover:border-white/80 hover:bg-white/70 hover:shadow-[0_12px_26px_rgba(15,23,42,0.06)]"
                     >
-                      {resolvePoiImageUrl(activity.photoUrl) ? (
+                      {resolveActivityImage(activity, pois) ? (
                         <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-white/40 shadow-sm">
                           <CachedImage
-                            src={activity.photoUrl}
+                            src={resolveActivityImage(activity, pois)}
                             alt={activity.name}
                             className="h-14 w-14 object-cover object-top"
                             quality={90}

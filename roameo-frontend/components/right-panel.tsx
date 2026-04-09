@@ -11,6 +11,7 @@ interface RightPanelProps {
   onViewChange: (view: "map" | "itinerary") => void
   trip: any
   itinerary?: Itinerary
+  pois?: POI[]
   planVersionKey?: string
   mapData?: { pois: any[]; routes: Array<{ from: [number, number]; to: [number, number]; polyline?: string }> }
   onClose: () => void
@@ -28,6 +29,7 @@ export function RightPanel({
   onViewChange,
   trip,
   itinerary,
+  pois,
   planVersionKey = "no-plan",
   mapData,
   onClose,
@@ -121,6 +123,7 @@ export function RightPanel({
               key={`itinerary-${planVersionKey}`}
               itinerary={itinerary} 
               trip={trip}
+              pois={pois}
               savedIds={savedIds}
               onToggleSave={onToggleSave}
               onAddPoi={onAddPoi}
