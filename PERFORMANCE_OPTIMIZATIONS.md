@@ -1,12 +1,24 @@
 # Performance and Scalability Notes
 
-This file reflects the current canonical implementation, not the older cache-wrapper or WebSocket-first architecture.
+This file reflects the current canonical implementation.
 
 ## Current performance priorities
 
+### Router-first execution
+
+The biggest practical win is not a cache trick, it is using the heavy pipeline only when a turn actually needs it.
+
+Current direction:
+
+- trivial conversation -> fast local response
+- normal travel turns -> semantic router
+- only then -> discovery / enrichment / planning tools
+
+That reduces unnecessary provider calls and noisy “thinking” states.
+
 ### Snapshot-first state flow
 
-The biggest performance and correctness win is architectural consistency:
+The biggest correctness win remains architectural consistency:
 
 - one `SessionSnapshot`
 - one canonical plan
@@ -15,46 +27,19 @@ The biggest performance and correctness win is architectural consistency:
 
 That prevents duplicated reconstruction across chat, itinerary, map, and saved POI panels.
 
-### Shared contracts and fail-fast validation
+### Merged POI catalogs
 
-The contracts package centralizes validation for:
+Discovery no longer behaves like a throwaway turn-local cache.
 
-- session payloads
-- messages
-- plan mutations
-- stream events
-- settings
-- response blocks
+By merging POI catalogs across turns:
 
-This keeps bad payloads from leaking deep into the runtime.
-
-### Coarse-grained persistence
-
-The repository persists a small number of coarse shapes:
-
-- session root
-- messages
-- latest plan snapshot
-- latest POI catalog
-- saved POI ids
-- trace events
-
-That keeps session rehydration straightforward and predictable.
-
-### SSE over duplicate live channels
-
-The canonical live path is SSE.
-
-Benefits:
-
-- easier reconnect behavior
-- immediate snapshot replay
-- less state duplication than parallel live transports
-- schema-validated stream payloads
+- refreshes keep prior stay/restaurant/attraction cards resolvable
+- the model and frontend can work from a richer accumulated context
+- the user does not lose useful discovery state every time they change topic
 
 ### Direct integration model
 
-The current runtime uses direct integrations instead of adapters:
+The current runtime uses direct integrations instead of wrappers:
 
 - Google Places and Directions
 - Open-Meteo
@@ -62,42 +47,44 @@ The current runtime uses direct integrations instead of adapters:
 - Nager.Date
 - Supabase
 
-That reduces translation layers and keeps failure handling explicit.
+That keeps latency and failure handling explicit.
 
 ## Current bottlenecks to watch
 
-- provider latency from Gemini/OpenAI model calls
+- semantic router latency
+- narrative/synthesis latency
 - Google Places and Directions latency
 - Tavily latency on deep-research turns
-- Supabase round-trips for snapshot rebuilds
+- Supabase round-trips for full snapshot rebuilds
 - large itinerary payloads and long trace histories
-- client-side map route rendering cost on dense itineraries
+- client-side Google Maps marker and hover-card churn
 
 ## Current mitigations
 
-- snapshot-derived UI instead of panel-specific business state
-- preserved last accepted plan on failures
-- plan and catalog stored separately so discovery can survive failed replans
+- fast-path conversation handling
+- router-first turn understanding
 - deterministic plan mutations for targeted edits
-- structured response blocks instead of markdown parsing heuristics
-- optimistic header editing with reconciliation back to the snapshot
+- merged session POI catalogs
+- right-panel remounting on plan-version changes
+- plan-only itinerary projection
+- full-catalog chat card rendering instead of map-slice-only rendering
 
 ## Scale-oriented implementation rules
 
 For production-grade behavior, the repo direction remains:
 
 - one canonical codepath
-- one source of truth for business schemas
+- one source of truth for schemas and state
 - direct integrations
 - fail-fast validation
-- snapshot-first UI projections
-
-These matter more than micro-optimizations because the main scaling risk is state drift across surfaces.
+- explicit tool surfaces for autonomous agents
+- session-level context invalidation instead of sticky branch logic
 
 ## Future optimization directions
 
 - route-result caching per waypoint set
-- POI metadata and image normalization
+- cached semantic reranking for fuzzy prompts
 - trace compaction for long-lived sessions
 - snapshot diff emission for especially chatty streams
-- selective caching around destination research and geocoding
+- selective caching around geocoding and destination research
+- optional Gemini Maps-grounded semantic expansion layered on top of direct Places retrieval

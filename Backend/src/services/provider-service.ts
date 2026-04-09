@@ -22,6 +22,7 @@ type GenerateTextArgs = {
   resolved: ResolvedProvider;
   instructions: string;
   input: string;
+  models?: string[];
 };
 
 type GenerateObjectArgs<T> = GenerateTextArgs & {
@@ -45,6 +46,11 @@ function parseJsonBlock<T>(text: string, schema: ZodSchema<T>): T {
   return schema.parse(JSON.parse(match[0]));
 }
 
+function candidateModels(resolved: ResolvedProvider, overrides?: string[]): string[] {
+  const models = [...(overrides || []), resolved.model].filter(Boolean);
+  return Array.from(new Set(models));
+}
+
 async function generateOpenAIText(args: GenerateTextArgs): Promise<string> {
   const client = new OpenAI({ apiKey: args.resolved.apiKey });
   const response = await client.responses.create({
@@ -59,43 +65,59 @@ async function generateOpenAIText(args: GenerateTextArgs): Promise<string> {
 
 async function generateGeminiText(args: GenerateTextArgs): Promise<string> {
   const ai = new GoogleGenAI({ apiKey: args.resolved.apiKey });
-  const response = await ai.models.generateContent({
-    model: args.resolved.model,
-    contents: args.input,
-    config: {
-      systemInstruction: args.instructions,
-      temperature: 0.3,
-      topP: 0.9,
-      maxOutputTokens: 8192
-    }
-  });
+  let lastError: unknown;
+  for (const model of candidateModels(args.resolved, args.models)) {
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: args.input,
+        config: {
+          systemInstruction: args.instructions,
+          temperature: 0.3,
+          topP: 0.9,
+          maxOutputTokens: 8192
+        }
+      });
 
-  return response.text?.trim() || "";
+      return response.text?.trim() || "";
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Gemini text generation failed");
 }
 
 async function generateGeminiObject<T>(
   args: GenerateObjectArgs<T>
 ): Promise<T> {
   const ai = new GoogleGenAI({ apiKey: args.resolved.apiKey });
-  const response = await ai.models.generateContent({
-    model: args.resolved.model,
-    contents: args.input,
-    config: {
-      systemInstruction: args.instructions,
-      temperature: 0.2,
-      topP: 0.9,
-      maxOutputTokens: 8192,
-      responseMimeType: "application/json",
-      responseJsonSchema: z.toJSONSchema(args.schema)
+  let lastError: unknown;
+  for (const model of candidateModels(args.resolved, args.models)) {
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: args.input,
+        config: {
+          systemInstruction: args.instructions,
+          temperature: 0.2,
+          topP: 0.9,
+          maxOutputTokens: 8192,
+          responseMimeType: "application/json",
+          responseJsonSchema: z.toJSONSchema(args.schema)
+        }
+      });
+
+      const text = response.text?.trim();
+      if (!text) {
+        throw new Error("Gemini returned an empty structured response");
+      }
+
+      return parseJsonBlock(text, args.schema);
+    } catch (error) {
+      lastError = error;
     }
-  });
-
-  const text = response.text?.trim();
-  if (!text) {
-    throw new Error("Gemini returned an empty structured response");
   }
-
-  return parseJsonBlock(text, args.schema);
+  throw lastError instanceof Error ? lastError : new Error("Gemini structured generation failed");
 }
 
 export class ProviderService {
@@ -161,5 +183,13 @@ Return only valid JSON that matches the requested schema "${args.schemaName}".`;
     });
 
     return parseJsonBlock(text, args.schema);
+  }
+
+  routerModels(resolved: ResolvedProvider): string[] | undefined {
+    return resolved.provider === "gemini" ? config.models.geminiTasks.router : undefined;
+  }
+
+  narrativeModels(resolved: ResolvedProvider): string[] | undefined {
+    return resolved.provider === "gemini" ? config.models.geminiTasks.narrative : undefined;
   }
 }

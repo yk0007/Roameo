@@ -6,6 +6,7 @@ The canonical planning runtime lives in:
 - [Backend/src/runtime/subagents.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/runtime/subagents.ts)
 - [Backend/src/services/travel-tools.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/services/travel-tools.ts)
 - [Backend/src/services/plan-mutation-service.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/services/plan-mutation-service.ts)
+- [Backend/src/services/agent-tool-service.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/services/agent-tool-service.ts)
 
 ## Canonical intents
 
@@ -18,32 +19,105 @@ The shared `travelIntentSchema` defines:
 - `settings`
 - `meta`
 
-The runtime derives more specific conversational modes on top of those intents, including greeting, discovery, planning, refinement, and missing-info branches.
+The runtime derives conversational modes on top of those intents:
 
-## Turn phases
+- greeting
+- missing-info
+- discovery
+- planning
+- refinement
 
-The standard turn pipeline is:
+## Current execution model
 
-1. intent resolution
-2. research gate
-3. destination discovery
-4. weather, event, and holiday enrichment
-5. structured plan synthesis for planning/refinement turns
-6. logistics enrichment
-7. feasibility critic
-8. transit advisor
-9. narration and response block generation
-10. session commit
+### 1. Fast path
 
-## Planning state
+Non-travel trivial messages are handled by `resolveFastTurnResponse()`.
 
-Canonical planning statuses:
+This path exists to avoid paying the full planning pipeline for:
+
+- greetings
+- acknowledgements
+- identity/capability questions
+- low-value small talk
+
+### 2. Semantic router
+
+Normal travel turns should flow through the semantic router, not a keyword-only local branch.
+
+Current task-oriented Gemini routing:
+
+- router: `gemma-4-31b-it`
+- fallback: `gemini-2.5-flash`
+
+The router resolves:
+
+- intent
+- destination scope
+- traveler count
+- style cues
+- date context
+- active domain
+- whether the turn is a new trip or follow-up refinement
+
+### 3. Discovery and enrichment
+
+Discovery builds a canonical `PoiCatalog` from live integrations.
+
+Current source types:
+
+- `google_places`
+- `google_maps`
+- `web_research`
+- `manual`
+
+Rules:
+
+- every Places request applies strict category filtering
+- planning turns use `researchPlanningDestinations()` so hospitality categories remain available even for family/culture/nature planning prompts
+- discovery POIs are merged into the session catalog across turns
+
+### 4. Plan synthesis and repair
+
+Planning/refinement turns use:
+
+- `synthesizePlan()`
+- `enrichPlanLogistics()`
+- `criticizeAndRefinePlan()`
+- `transitAdvisor()`
+
+Current synthesis behavior includes deterministic hospitality repair:
+
+- overnight days get real stay POIs when available
+- generic meal slots are upgraded into actual restaurant POIs when the request calls for food/cuisine support
+
+### 5. Narration and blocks
+
+`answerConversationally()` plus `buildResponseBlocks()` create the final assistant response.
+
+Current narrative model routing:
+
+- primary: `gemini-flash-latest`
+- fallback: `gemini-2.5-flash`
+
+### 6. Session commit
+
+At the end of the turn the runtime:
+
+- persists the assistant message
+- persists follow-up context
+- updates session memory
+- sets `planningState.status = "ready"`
+- emits the final `session.snapshot`
+
+## Current planning state model
+
+Canonical statuses:
 
 - `ready`
 - `running`
 - `unavailable`
 
-Canonical planning stages:
+Canonical stages:
 
 - `understanding`
 - `researching`
@@ -55,7 +129,7 @@ Canonical planning stages:
 - `ready`
 - `unavailable`
 
-Canonical planning sources:
+Canonical sources:
 
 - `provider`
 - `places`
@@ -65,115 +139,46 @@ Canonical planning sources:
 - `holidays`
 - `stays`
 
-Successful turns must end with `planningState.status = "ready"` and `stage = "ready"`.
+## Context maintenance and invalidation
 
-## Discovery runtime
+This is now an explicit runtime concern.
 
-Discovery builds a canonical `PoiCatalog` from live integrations.
+Current rules:
 
-Current source types:
+- explicit new-trip requests replace stale active trip context
+- multi-city trips preserve their active destination set
+- explicit new discovery asks override stale follow-up context
+- accepted decisions are replaced by key, not appended forever
+- the latest destination/origin/duration/budget/travelers entries are the authoritative remembered values
 
-- `google_places`
-- `google_maps`
-- `web_research`
-- `manual`
+This behavior is implemented in:
 
-The active discovery behavior enforces strict type filtering in Google Places:
+- `updateSessionMemory()` in [Backend/src/runtime/subagents.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/runtime/subagents.ts)
+- `resetActiveTripContext()` in [Backend/src/services/agent-tool-service.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/services/agent-tool-service.ts)
 
-- stays -> `lodging`
-- restaurants -> `restaurant`
-- attractions -> `tourist_attraction`
+## Plan-only projection rules
 
-This is a required guardrail against category bleed.
+Current product rule:
 
-## Date-aware runtime
+- itinerary tab is driven only by the canonical plan
+- itinerary route polylines and numbered route markers are driven only by itinerary-linked POIs
+- broader discovered POIs may appear on the map as non-route markers
+- non-itinerary discovery turns should not mutate the canonical plan
 
-Canonical date context is stored in `session.memory.dateContext`.
+## Deterministic plan mutations
 
-Tracked fields include:
+Direct itinerary edits should go through `PlanMutationService`.
 
-- requested dates
-- inferred dates
-- flexibility: `exact`, `approximate`, `open_ended`
-- derivation source
-- advisory items
+Supported mutations:
 
-Behavioral rules:
+- `add_poi`
+- `remove_poi`
+- `move_activity`
+- `regenerate_day`
+- `rebalance_trip`
+- `update_overview`
 
-- relative dates are normalized before planning
-- open-ended dates can still produce seasonal guidance
-- long-range trips outside forecast windows fall back to advisory-only weather notes
-- the runtime should not silently rewrite accepted dates
-
-## External enrichments
-
-Current direct integrations:
-
-- Open-Meteo for weather forecasts
-- Tavily for destination facts and event research
-- Nager.Date for public holiday windows
-
-These integrations produce advisory context, not guaranteed booking or inventory truth.
-
-## Structured response model
-
-The runtime emits shared response blocks instead of relying on markdown-only rendering.
-
-Block types actively used by the current runtime include:
-
-- `trip_intro`
-- `lead`
-- `capabilities_overview`
-- `featured_poi`
-- `poi_story_list`
-- `place_card_row`
-- `itinerary_template`
-- `stay_recommendation_list`
-- `assistant_prompt_chips`
-- `planning_status`
-- `worker_progress`
-- `date_advisory`
-- `event_window_summary`
-- `clarifying_questions`
-
-The frontend should treat `responseBlocks` as the canonical assistant presentation surface.
-
-## Planning and refinement
-
-`synthesizePlan()` is used for:
-
-- new trip creation
-- itinerary refinement
-- some regenerated overview flows triggered by plan mutations
-
-`enrichPlanLogistics()` then computes:
-
-- `travelTimeMinutesFromPrevious`
-- day budgets
-- trip budget totals
-
-`criticizeAndRefinePlan()` applies deterministic post-processing:
-
-- caps overloaded days
-- flags long transfers
-- trims overloaded final days
-- fills missing accommodation on multi-day plans
-
-`transitAdvisor()` emits trace guidance for multi-destination trips but does not currently persist transit segments into the plan schema.
-
-## Session memory
-
-Canonical memory fields include:
-
-- rolling summary
-- destinations discussed
-- accepted decisions
-- last plan version
-- date context
-- planning state
-- user preferences
-
-The runtime updates memory after each successful turn so follow-up turns can reuse accepted trip context.
+The new `AgentToolService` wraps this into a cleaner tool surface for autonomous agents.
 
 ## Failure behavior
 
@@ -185,17 +190,3 @@ If provider or tool execution fails:
 - `turn.failed` is emitted
 
 The runtime should not fabricate replacement planning content after a failed turn.
-
-## Deterministic plan mutations
-
-Not every change requires a broad conversational turn.
-
-`PlanMutationService` handles direct edits for:
-
-- header changes
-- add/remove POI
-- move activity
-- regenerate day
-- rebalance trip
-
-This preserves the snapshot as the source of truth and avoids parallel business logic paths.

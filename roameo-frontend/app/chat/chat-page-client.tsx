@@ -11,6 +11,7 @@ import { RightPanel } from "@/components/right-panel";
 import { SearchInterface } from "@/components/search-interface";
 import { TopNavigation } from "@/components/top-navigation";
 import { Button } from "@/components/ui/button";
+import { EntranceMotion } from "@/components/ui/site-motion";
 import { toast } from "@/hooks/use-toast";
 import {
   createSession,
@@ -24,6 +25,7 @@ import {
 } from "@/lib/api";
 import {
   buildOverviewMutation,
+  buildCatalogPois,
   buildItinerary,
   buildItineraryPoiIds,
   buildMapData,
@@ -56,6 +58,7 @@ export default function ChatPage() {
   const [draftInput, setDraftInput] = useState("");
   const [optimisticTrip, setOptimisticTrip] = useState<TripContext | null>(null);
   const [searchStatus, setSearchStatus] = useState<string | null>(null);
+  const [pendingAddPoiIds, setPendingAddPoiIds] = useState<Set<string>>(new Set());
   const handledQueryRef = useRef<string | null>(null);
   const searchParamsRef = useRef(searchParams);
   searchParamsRef.current = searchParams;
@@ -69,8 +72,7 @@ export default function ChatPage() {
     reset,
     hydrate,
     applyEvent,
-    setSavedPoiIds,
-    activeTurnId
+    setSavedPoiIds
   } = useSessionStore();
 
   const sessionQuery = useQuery({
@@ -242,8 +244,15 @@ export default function ChatPage() {
   const displayedTrip = optimisticTrip || trip;
   const itinerary = useMemo(() => buildItinerary(snapshot), [snapshot]);
   const searchResults = useMemo(() => buildSearchResults(snapshot), [snapshot]);
+  const catalogPois = useMemo(() => buildCatalogPois(snapshot), [snapshot]);
   const mapData = useMemo(() => buildMapData(snapshot), [snapshot]);
   const itineraryPoiIds = useMemo(() => buildItineraryPoiIds(snapshot), [snapshot]);
+  const planVersionKey = useMemo(() => {
+    if (!snapshot?.plan) {
+      return "no-plan";
+    }
+    return `${snapshot.plan.version}:${snapshot.plan.generatedAt}:${snapshot.plan.lastUserIntent}`;
+  }, [snapshot?.plan]);
   const savedIds = useMemo(
     () => new Set<string>(snapshot?.savedPoiIds ?? []),
     [snapshot?.savedPoiIds]
@@ -445,7 +454,16 @@ export default function ChatPage() {
           };
 
     try {
+      if (action === "add" && poi) {
+        setPendingAddPoiIds((current) => new Set(current).add(poi.id));
+      }
       await applyStructuredMutation(mutation);
+      if (action === "add" && poi) {
+        toast({
+          title: "Added to trip",
+          description: `${poi.name} was added to your itinerary.`
+        });
+      }
     } catch (mutationError) {
       toast({
         title: "Could not update itinerary",
@@ -455,6 +473,14 @@ export default function ChatPage() {
             : "Please try again.",
         variant: "destructive"
       });
+    } finally {
+      if (action === "add" && poi) {
+        setPendingAddPoiIds((current) => {
+          const next = new Set(current);
+          next.delete(poi.id);
+          return next;
+        });
+      }
     }
   };
 
@@ -505,7 +531,7 @@ export default function ChatPage() {
     return (
       <div className="flex h-[100dvh] items-center justify-center overflow-hidden bg-white relative">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-slate-50/50 rounded-full blur-3xl -z-10"></div>
-        <div className="rounded-[32px] border border-slate-100/60 bg-white/60 backdrop-blur-2xl px-10 py-8 shadow-[0_20px_80px_rgba(15,23,42,0.06),_0_6px_20px_rgba(15,23,42,0.04)] text-center transition-all flex flex-col items-center">
+        <EntranceMotion className="rounded-[32px] border border-slate-100/60 bg-white/60 backdrop-blur-2xl px-10 py-8 shadow-[0_20px_80px_rgba(15,23,42,0.06),_0_6px_20px_rgba(15,23,42,0.04)] text-center transition-all flex flex-col items-center">
           <p className="font-semibold text-[11px] uppercase tracking-[0.2em] text-slate-400 mb-3">
             Loading workspace
           </p>
@@ -517,61 +543,63 @@ export default function ChatPage() {
             <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
             <div className="w-2 h-2 bg-slate-800 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
           </div>
-        </div>
+        </EntranceMotion>
       </div>
     );
   }
 
   return (
     <div className="relative flex h-[100dvh] flex-col overflow-hidden bg-[white] text-[#1f1b16]">
-      <TopNavigation
-        trip={{
-          id: displayedTrip.id,
-          title: displayedTrip.title,
-          origin: displayedTrip.origin,
-          destination: displayedTrip.destination,
-          destinations: displayedTrip.destinations,
-          startDate: displayedTrip.startDate,
-          endDate: displayedTrip.endDate,
-          dateFlexibility: displayedTrip.dateFlexibility,
-          duration: displayedTrip.days ? `${displayedTrip.days} days` : "",
-          travelers: displayedTrip.travelers,
-          budget: displayedTrip.budget
-        }}
-        onTripUpdate={(nextTrip) => {
-          void handleTripUpdate({
-            ...displayedTrip,
-            ...nextTrip,
-            days:
-              Number.parseInt(nextTrip.duration || String(displayedTrip.days), 10) ||
-              displayedTrip.days
-          });
-        }}
-        isRightPanelVisible={isRightPanelVisible}
-        onToggleRightPanel={() => setIsRightPanelVisible((value) => !value)}
-        onSaveTrip={() =>
-          toast({
-            title: "Saved automatically",
-            description: "Roameo keeps session state, itinerary, and map data in sync."
-          })
-        }
-        onInvite={() => {
-          void handleInvite();
-        }}
-        inviteLink={
-          snapshot?.id && typeof window !== "undefined"
-            ? `${window.location.origin}/chat?sessionId=${encodeURIComponent(snapshot.id)}`
-            : undefined
-        }
-        onDeleteTrip={() => {
-          void handleDelete();
-        }}
-        isDeleting={isDeleting}
-        onReplan={() => {
-          void handlePlanMutation(undefined, "replan");
-        }}
-        onPopulateInput={setDraftInput}
-      />
+      <EntranceMotion delay={0.04}>
+        <TopNavigation
+          trip={{
+            id: displayedTrip.id,
+            title: displayedTrip.title,
+            origin: displayedTrip.origin,
+            destination: displayedTrip.destination,
+            destinations: displayedTrip.destinations,
+            startDate: displayedTrip.startDate,
+            endDate: displayedTrip.endDate,
+            dateFlexibility: displayedTrip.dateFlexibility,
+            duration: displayedTrip.days ? `${displayedTrip.days} days` : "",
+            travelers: displayedTrip.travelers,
+            budget: displayedTrip.budget
+          }}
+          onTripUpdate={(nextTrip) => {
+            void handleTripUpdate({
+              ...displayedTrip,
+              ...nextTrip,
+              days:
+                Number.parseInt(nextTrip.duration || String(displayedTrip.days), 10) ||
+                displayedTrip.days
+            });
+          }}
+          isRightPanelVisible={isRightPanelVisible}
+          onToggleRightPanel={() => setIsRightPanelVisible((value) => !value)}
+          onSaveTrip={() =>
+            toast({
+              title: "Saved automatically",
+              description: "Roameo keeps session state, itinerary, and map data in sync."
+            })
+          }
+          onInvite={() => {
+            void handleInvite();
+          }}
+          inviteLink={
+            snapshot?.id && typeof window !== "undefined"
+              ? `${window.location.origin}/chat?sessionId=${encodeURIComponent(snapshot.id)}`
+              : undefined
+          }
+          onDeleteTrip={() => {
+            void handleDelete();
+          }}
+          isDeleting={isDeleting}
+          onReplan={() => {
+            void handlePlanMutation(undefined, "replan");
+          }}
+          onPopulateInput={setDraftInput}
+        />
+      </EntranceMotion>
 
       {planningUnavailable && (
         <div className="z-40 w-full border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-sm font-medium text-amber-900 shadow-sm">
@@ -580,7 +608,10 @@ export default function ChatPage() {
       )}
 
       <div className="flex min-h-0 flex-1 overflow-hidden bg-transparent lg:flex-row">
-        <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent">
+        <EntranceMotion
+          className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent"
+          delay={0.08}
+        >
           <LeftPanelTabs
             activeView={activeLeftView}
             onViewChange={setActiveLeftView}
@@ -606,7 +637,7 @@ export default function ChatPage() {
                 activeRightView={activeRightView}
                 setActiveRightView={setActiveRightView}
                 setIsRightPanelVisible={setIsRightPanelVisible}
-                pois={mapData.pois}
+                pois={catalogPois}
                 isTyping={isStreaming}
                 detectedIntent={null}
                 planningActive={planningState?.status === "running"}
@@ -620,12 +651,11 @@ export default function ChatPage() {
                   void handlePlanMutation(poi, "add");
                 }}
                 onReplan={(poi) => handlePlanMutation(poi, "replan")}
+                pendingAddPoiIds={pendingAddPoiIds}
                 onPopulateInput={(text) => setDraftInput(text)}
                 onSlotAction={handleSlotAction}
                 inputValue={draftInput}
                 onInputChange={setDraftInput}
-                traces={snapshot?.traces}
-                activeTurnId={activeTurnId}
               />
             )}
 
@@ -645,6 +675,7 @@ export default function ChatPage() {
                 onToggleSave={(poi, nextSaved) => {
                   void handleToggleSave(poi, nextSaved);
                 }}
+                pendingAddPoiIds={pendingAddPoiIds}
                 onReplan={(poi) => {
                   void handlePlanMutation(poi, "replan");
                 }}
@@ -657,20 +688,22 @@ export default function ChatPage() {
               />
             )}
           </div>
-        </section>
+        </EntranceMotion>
 
-        <aside
+        <EntranceMotion
           className={`min-h-0 w-full flex-col overflow-hidden bg-transparent transition-[width,opacity,transform] duration-300 ease-out ${
             isRightPanelVisible
               ? "flex lg:flex lg:w-1/2 lg:translate-x-0 lg:opacity-100 lg:rounded-l-[24px]"
               : "hidden lg:flex lg:w-0 lg:translate-x-4 lg:opacity-0 lg:pointer-events-none"
           }`}
+          delay={0.14}
         >
           <RightPanel
             activeView={activeRightView}
             onViewChange={setActiveRightView}
             trip={trip}
             itinerary={itinerary}
+            planVersionKey={planVersionKey}
             mapData={mapData}
             onClose={() => setIsRightPanelVisible(false)}
             planningState={planningState}
@@ -686,7 +719,7 @@ export default function ChatPage() {
               void handlePlanMutation(poi, "replan");
             }}
           />
-        </aside>
+        </EntranceMotion>
       </div>
 
     </div>

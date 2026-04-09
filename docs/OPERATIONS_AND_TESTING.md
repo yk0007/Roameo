@@ -60,7 +60,6 @@ Frontend:
 ```bash
 npm run build -w roameo-frontend
 npm run typecheck -w roameo-frontend
-npm run test -w roameo-frontend
 ```
 
 ## What to validate after runtime changes
@@ -76,21 +75,22 @@ For backend, contracts, or shared-schema changes, verify:
 Recommended manual scenarios:
 
 1. Create a session and send an initial planning message.
-2. Watch the stream-driven planning states and traces update live.
-3. Refine the itinerary with a follow-up message.
-4. Edit destination, dates, travelers, and budget from the header.
-5. Save and unsave POIs.
-6. Confirm chat, itinerary, saved POIs, and map stay synchronized.
-7. Trigger a failure case and confirm the accepted plan remains intact.
+2. Watch planning state and traces update live.
+3. Ask for stays, restaurants, attractions, and generic places after a plan already exists.
+4. Change destination completely and confirm the active trip context resets.
+5. Try a multi-city trip and confirm the full destination set survives later turns.
+6. Refresh after discovery turns and confirm POI cards still resolve from the canonical catalog.
+7. Confirm itinerary tab changes only when the actual plan changes.
+8. Confirm map routes come only from itinerary-linked POIs while non-itinerary POIs still appear as plain markers.
 
-## Persistence modes
+## Persistence and state checks
 
-Persistent mode requires:
+Current state invariants worth validating:
 
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
-
-Without those values, the backend falls back to in-memory session storage.
+- POI catalogs merge across discovery turns
+- stale follow-up context is cleared or overridden when the user changes topic
+- accepted decision entries are replaced by key, not appended forever
+- new-trip requests replace stale active destination context
 
 ## Provider and integration requirements
 
@@ -99,32 +99,40 @@ Meaningful planning requires:
 - `GOOGLE_MAPS_API_KEY`
 - at least one of `GEMINI_API_KEY` or `OPENAI_API_KEY`
 
-Optional but important enrichments:
+Optional enrichments:
 
-- `TAVILY_API_KEY` for destination facts, deep research, and event research
+- `TAVILY_API_KEY`
 
-## Frontend production notes
+## Current Gemini model defaults
 
-The current frontend stack includes:
+Verified working IDs in the current environment:
 
-- Next.js 16
-- React 19
-- TanStack Query
-- Zustand
-- Radix primitives
-- shared contract types from `@roameo/contracts`
+- `gemini-flash-latest`
+- `gemini-2.5-flash`
+- `gemini-2.5-flash-lite`
+- `gemma-3-27b-it`
+- `gemma-4-31b-it`
+- `gemini-embedding-001`
 
-Operationally important notes:
+Current backend defaults:
 
-- live updates arrive over SSE, even though the client helper is named `connectWs()`
-- route rendering still uses Google Maps DirectionsService/DirectionsRenderer in the current code
-- image surfaces rely on the backend photo proxy
+- router: `gemma-4-31b-it`
+- router fallback: `gemini-2.5-flash`
+- narrative: `gemini-flash-latest`
+- narrative fallback: `gemini-2.5-flash`
+
+## Current frontend notes
+
+- live updates arrive over SSE
+- chat cards use the full canonical POI catalog
+- right-panel itinerary/map remount on canonical plan changes
+- map hover cards depend on Google Maps info-window lifecycle and marker refresh behavior
 
 ## Documentation policy
 
 When the canonical implementation changes:
 
 - update the root README
-- update the canonical docs pack in `docs/`
-- keep compatibility notes short and clearly secondary
-- do not document retired WebSocket/LangGraph-first flows as current architecture
+- update the docs pack in `docs/`
+- document current verified model IDs if model routing changed
+- keep frontend notes lighter than backend/runtime details

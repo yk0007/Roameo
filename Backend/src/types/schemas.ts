@@ -1,5 +1,4 @@
 export {
-  agentTraceEventSchema,
   budgetBreakdownSchema,
   chatMessageRoleSchema,
   conversationMessageSchema,
@@ -28,7 +27,6 @@ export {
 } from "@roameo/contracts";
 
 export type {
-  AgentTraceEvent,
   BudgetBreakdown,
   ChatMessageRole,
   ConversationMessage as ChatMessage,
@@ -69,4 +67,3 @@ export type TripContext = {
   budget?: string;
   destinationImageUrl?: string;
 };
-

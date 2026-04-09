@@ -1,12 +1,20 @@
 # Roameo
 
-Roameo is a text-first AI travel planning workspace with a canonical split view:
+Roameo is a text-first AI travel planning workspace with one canonical session snapshot driving:
+
+- chat
+- itinerary
+- map routes and markers
+- saved POIs
+- agent traces
+- planning state
+- session memory and preferences
+
+The primary product surface is the split workspace:
 
 - chat on the left
-- itinerary or map on the right
-- one persisted session snapshot driving chat, itinerary, map, saved POIs, traces, and planning state
-
-The authoritative implementation is the session API, SSE stream, shared contracts package, and snapshot-based runtime. Legacy LangGraph and WebSocket-era code remains in the tree, but it is not the primary extension path.
+- map or itinerary on the right
+- header controls for destination, dates, travelers, budget, and trip metadata
 
 ## Workspace layout
 
@@ -17,83 +25,67 @@ The authoritative implementation is the session API, SSE stream, shared contract
 
 ## Canonical architecture
 
-The single source of truth is `SessionSnapshot` in [packages/contracts/src/index.ts](/Users/yk0007/MyRepos/Roameo/packages/contracts/src/index.ts). It contains:
+The source of truth is `SessionSnapshot` in [packages/contracts/src/index.ts](/Users/yk0007/MyRepos/Roameo/packages/contracts/src/index.ts).
+
+It contains:
 
 - session metadata and provider settings
 - session memory and planning state
-- the active trip plan
+- the active plan snapshot
 - the canonical POI catalog
 - conversation messages
 - saved POI ids
 - agent trace events
 
-The canonical runtime path is:
-
-1. Frontend creates or loads a session.
-2. Frontend opens `GET /api/sessions/:sessionId/stream`.
-3. User sends a message to `POST /api/sessions/:sessionId/messages`.
-4. `TurnRunner` persists the user message, resolves provider settings, runs the deterministic planning pipeline, and emits trace, message, plan, and snapshot events.
-5. Backend persists messages, plan, POI catalog, traces, and updated memory.
-6. Frontend rebuilds chat, map, itinerary, and header state from the updated snapshot.
-
-Primary codepaths:
+Canonical codepaths:
 
 - [Backend/src/api/router.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/api/router.ts)
 - [Backend/src/runtime/turn-runner.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/runtime/turn-runner.ts)
 - [Backend/src/runtime/subagents.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/runtime/subagents.ts)
 - [Backend/src/services/plan-mutation-service.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/services/plan-mutation-service.ts)
+- [Backend/src/services/agent-tool-service.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/services/agent-tool-service.ts)
 - [Backend/src/services/travel-tools.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/services/travel-tools.ts)
 - [Backend/src/services/session-repository.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/services/session-repository.ts)
 - [roameo-frontend/app/chat/chat-page-client.tsx](/Users/yk0007/MyRepos/Roameo/roameo-frontend/app/chat/chat-page-client.tsx)
 - [roameo-frontend/lib/session-store.ts](/Users/yk0007/MyRepos/Roameo/roameo-frontend/lib/session-store.ts)
 - [roameo-frontend/lib/session-view.ts](/Users/yk0007/MyRepos/Roameo/roameo-frontend/lib/session-view.ts)
 
-## Runtime behavior
+## Current runtime direction
 
-Each turn runs a deterministic 10-step pipeline:
+Roameo is moving toward a router-first agentic runtime:
 
-1. intent resolution
-2. research gate
-3. destination discovery
-4. date context enrichment
-5. itinerary synthesis for planning/refinement turns
-6. logistics enrichment
-7. feasibility critic
-8. transit advisor
-9. conversational narration plus structured response block assembly
-10. session commit
+1. lightweight conversational fast path for trivial turns
+2. semantic router for normal travel understanding
+3. deterministic tool execution and validation
+4. narrative/planning generation from canonical state
 
-The LLM call pattern is:
+Important current runtime behavior:
 
-- all turns: intent resolution + narration
-- planning/refinement turns: an additional structured planning call for itinerary synthesis
+- explicit new asks like `show me some restaurants` or `show me some stays` override stale follow-up context
+- explicit new trip requests replace stale active-trip destination context
+- multi-city trips preserve the active destination set instead of collapsing to one city
+- itinerary and map route state update only when the canonical itinerary changes
+- the map can still display discovered non-itinerary POIs without turning them into itinerary routes
 
-Current product behavior in the canonical path includes:
+## Agent and tool model
 
-- greeting and capability turns
-- destination discovery and category search
-- date-aware planning and refinement
-- stay recommendations
-- weather, event, and holiday advisories
-- structured itinerary replies
-- live agent trace feedback during planning
+Roameo uses deterministic orchestration plus LLM understanding. The goal is not “freeform autonomous code everywhere”; it is:
 
-## Shared contracts
+- semantic understanding by model
+- explicit tool selection
+- deterministic canonical state writes
+- fail-fast validation
 
-The contracts package defines the canonical schemas for:
+Current first-class internal agent tools live in [Backend/src/services/agent-tool-service.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/services/agent-tool-service.ts):
 
-- providers and run modes
-- session settings and preferences
-- planning state and date context
-- POIs and POI catalogs
-- plans, itinerary days, and destination segments
-- assistant response blocks
-- conversation messages
-- agent traces
-- stream events
-- message, mutation, and settings payloads
+- `getSessionSnapshot`
+- `updateTripHeader`
+- `editItinerary`
+- `updateSessionMemory`
+- `resetActiveTripContext`
+- `saveFollowUpContext`
 
-Do not introduce mirrored frontend/backend business schemas for these concepts.
+Those tools let the runtime and future autonomous agents read and modify the active session without bypassing the canonical repository and plan mutation paths.
 
 ## Providers and integrations
 
@@ -102,15 +94,39 @@ AI providers:
 - Gemini
 - OpenAI
 
-Tooling and data providers:
+Direct product integrations:
 
-- Google Places, Geocoding, Directions, and photo proxying
-- Open-Meteo for forecast summaries
-- Tavily for destination facts, deep research, and event research
-- Nager.Date for public holiday context
-- Supabase for auth and persistent storage
+- Google Places
+- Google Geocoding
+- Google Directions / Maps
+- Open-Meteo
+- Tavily
+- Nager.Date
+- Supabase
 
-Provider resolution and BYOK handling live in [Backend/src/services/provider-service.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/services/provider-service.ts).
+The current product direction is:
+
+- direct Google Places/Maps remain the canonical POI and route truth
+- Tavily remains editorial enrichment, not the primary POI source
+- Gemini Maps grounding is useful as an optional semantic expansion/reranking layer, not as a replacement for canonical Places retrieval
+
+### Verified Gemini model IDs
+
+The current backend config is aligned to live-tested Gemini model IDs:
+
+- working text models:
+  - `gemini-flash-latest`
+  - `gemini-2.5-flash`
+  - `gemini-2.5-flash-lite`
+  - `gemma-3-27b-it`
+  - `gemma-4-31b-it`
+- working embedding model:
+  - `gemini-embedding-001`
+
+Current defaults in the backend:
+
+- router / understanding: `gemma-4-31b-it` with `gemini-2.5-flash` fallback
+- narrative / synthesis: `gemini-flash-latest` with `gemini-2.5-flash` fallback
 
 ## Development
 
@@ -118,7 +134,6 @@ Requirements:
 
 - Node.js `>=22`
 - npm workspaces
-- Supabase credentials for persistent mode
 - `GOOGLE_MAPS_API_KEY`
 - at least one of `GEMINI_API_KEY` or `OPENAI_API_KEY`
 
@@ -140,7 +155,7 @@ Run frontend:
 npm run dev:frontend
 ```
 
-Build:
+Build all workspaces:
 
 ```bash
 npm run build
@@ -160,14 +175,22 @@ npm run test
 
 ## Environment
 
-Core backend environment variables include:
+Core backend environment variables:
 
 - `PORT`
 - `APP_BASE_URL`
+- `WS_BASE_URL`
 - `GEMINI_API_KEY`
 - `GEMINI_MODEL_FAST`
 - `GEMINI_MODEL_BALANCED`
 - `GEMINI_MODEL_DEEP`
+- `GEMINI_MODEL_ROUTER`
+- `GEMINI_MODEL_ROUTER_FALLBACK`
+- `GEMINI_MODEL_NARRATIVE`
+- `GEMINI_MODEL_NARRATIVE_FALLBACK`
+- `GEMINI_MODEL_GROUNDING`
+- `GEMINI_MODEL_GROUNDING_FALLBACK`
+- `GEMINI_MODEL_EMBEDDING`
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL_FAST`
 - `OPENAI_MODEL_BALANCED`
@@ -179,13 +202,15 @@ Core backend environment variables include:
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `ROAMEO_ENCRYPTION_SECRET`
 
-Frontend runtime points at the backend via `NEXT_PUBLIC_BACKEND_URL`.
+Frontend runtime:
 
-## Docs map
+- `NEXT_PUBLIC_BACKEND_URL`
+
+## Documentation map
 
 Start with [docs/README.md](/Users/yk0007/MyRepos/Roameo/docs/README.md).
 
-Canonical docs:
+Core docs:
 
 - [docs/AUTONOMOUS_AGENTS.md](/Users/yk0007/MyRepos/Roameo/docs/AUTONOMOUS_AGENTS.md)
 - [docs/CANONICAL_ARCHITECTURE.md](/Users/yk0007/MyRepos/Roameo/docs/CANONICAL_ARCHITECTURE.md)
@@ -193,8 +218,7 @@ Canonical docs:
 - [docs/PLANNING_RUNTIME.md](/Users/yk0007/MyRepos/Roameo/docs/PLANNING_RUNTIME.md)
 - [docs/FRONTEND_SURFACE.md](/Users/yk0007/MyRepos/Roameo/docs/FRONTEND_SURFACE.md)
 - [docs/OPERATIONS_AND_TESTING.md](/Users/yk0007/MyRepos/Roameo/docs/OPERATIONS_AND_TESTING.md)
-- [docs/AGENTS.md](/Users/yk0007/MyRepos/Roameo/docs/AGENTS.md)
 
-Supporting notes:
+Supporting note:
 
 - [PERFORMANCE_OPTIMIZATIONS.md](/Users/yk0007/MyRepos/Roameo/PERFORMANCE_OPTIMIZATIONS.md)

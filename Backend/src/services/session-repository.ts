@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type {
-  AgentTraceEvent,
   ConversationMessage,
   CreateSessionInput,
   KeySource,
@@ -61,10 +60,19 @@ function buildSessionSnapshot(
     poiCatalog: { version: 1, items: {} },
     messages: [],
     savedPoiIds: [],
-    traces: [],
     createdAt: now(),
     updatedAt: now()
   });
+}
+
+function mergePoiCatalogs(base: PoiCatalog | undefined, next: PoiCatalog): PoiCatalog {
+  return {
+    version: Math.max(base?.version || 1, next.version || 1),
+    items: {
+      ...(base?.items || {}),
+      ...next.items
+    }
+  };
 }
 
 export class SessionRepository {
@@ -173,7 +181,7 @@ export class SessionRepository {
       return null;
     }
 
-    const [messageRows, planRows, poiRows, savedRows, traceRows] = await Promise.all([
+    const [messageRows, planRows, poiRows, savedRows] = await Promise.all([
       this.client
         .from("session_messages")
         .select("*")
@@ -193,12 +201,7 @@ export class SessionRepository {
       this.client
         .from("session_saved_pois")
         .select("poi_id")
-        .eq("session_id", sessionId),
-      this.client
-        .from("session_agent_traces")
-        .select("*")
         .eq("session_id", sessionId)
-        .order("created_at", { ascending: true })
     ]);
 
     const snapshot = sessionSnapshotSchema.parse({
@@ -219,16 +222,6 @@ export class SessionRepository {
         meta: row.meta || {}
       })),
       savedPoiIds: (savedRows.data || []).map((row: any) => row.poi_id),
-      traces: (traceRows.data || []).map((row: any) => ({
-        id: row.id,
-        sessionId: row.session_id,
-        turnId: row.turn_id,
-        agent: row.agent,
-        status: row.status,
-        label: row.label,
-        detail: row.detail || undefined,
-        createdAt: row.created_at
-      })),
       createdAt: sessionRow.created_at,
       updatedAt: sessionRow.updated_at
     });
@@ -261,40 +254,16 @@ export class SessionRepository {
     await this.touchSession(message.sessionId);
   }
 
-  async saveTrace(trace: AgentTraceEvent): Promise<void> {
-    const snapshot = this.memorySessions.get(trace.sessionId);
-    if (snapshot) {
-      snapshot.traces = [...snapshot.traces, trace];
-      snapshot.updatedAt = now();
-    }
-
-    if (!this.client) {
-      return;
-    }
-
-    await this.client.from("session_agent_traces").insert({
-      id: trace.id,
-      session_id: trace.sessionId,
-      turn_id: trace.turnId,
-      agent: trace.agent,
-      status: trace.status,
-      label: trace.label,
-      detail: trace.detail || null,
-      created_at: trace.createdAt
-    });
-
-    await this.touchSession(trace.sessionId);
-  }
-
   async savePlan(
     sessionId: string,
     plan: PlanSnapshot,
     poiCatalog: PoiCatalog
   ): Promise<void> {
     const snapshot = this.memorySessions.get(sessionId);
+    const mergedCatalog = mergePoiCatalogs(snapshot?.poiCatalog, poiCatalog);
     if (snapshot) {
       snapshot.plan = plan;
-      snapshot.poiCatalog = poiCatalog;
+      snapshot.poiCatalog = mergedCatalog;
       snapshot.title = plan.title;
       snapshot.updatedAt = now();
     }
@@ -314,7 +283,7 @@ export class SessionRepository {
     await this.client.from("session_poi_catalogs").upsert(
       {
         session_id: sessionId,
-        catalog: poiCatalog,
+        catalog: mergedCatalog,
         updated_at: now()
       },
       { onConflict: "session_id" }
@@ -334,8 +303,9 @@ export class SessionRepository {
 
   async savePoiCatalog(sessionId: string, poiCatalog: PoiCatalog): Promise<void> {
     const snapshot = this.memorySessions.get(sessionId);
+    const mergedCatalog = mergePoiCatalogs(snapshot?.poiCatalog, poiCatalog);
     if (snapshot) {
-      snapshot.poiCatalog = poiCatalog;
+      snapshot.poiCatalog = mergedCatalog;
       snapshot.updatedAt = now();
     }
 
@@ -346,7 +316,7 @@ export class SessionRepository {
     await this.client.from("session_poi_catalogs").upsert(
       {
         session_id: sessionId,
-        catalog: poiCatalog,
+        catalog: mergedCatalog,
         updated_at: now()
       },
       { onConflict: "session_id" }
@@ -450,7 +420,6 @@ export class SessionRepository {
       this.client.from("session_plan_snapshots").delete().eq("session_id", sessionId),
       this.client.from("session_poi_catalogs").delete().eq("session_id", sessionId),
       this.client.from("session_saved_pois").delete().eq("session_id", sessionId),
-      this.client.from("session_agent_traces").delete().eq("session_id", sessionId),
       this.client.from("travel_sessions").delete().eq("id", sessionId)
     ]);
   }

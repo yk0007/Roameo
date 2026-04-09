@@ -18,6 +18,7 @@ interface SearchInterfaceProps {
   savedIds?: Set<string>
   itineraryPoiIds?: Set<string>
   onAddPoi?: (poi: POI) => void
+  pendingAddPoiIds?: Set<string>
   onToggleSave?: (poi: POI, nextSaved: boolean) => void
   onReplan?: (poi?: POI) => void
   onDiscoverCategory?: (category: "stay" | "restaurant" | "attraction") => void
@@ -28,7 +29,7 @@ interface SearchInterfaceProps {
   isSplitView?: boolean
 }
 
-export const SearchInterface = memo(function SearchInterface({ activeView, onViewChange, sessionId, destination, results, savedIds, itineraryPoiIds, onAddPoi, onToggleSave, onReplan, onDiscoverCategory, isLoading = false, planningState, searchStatus, hasBillingError = false, isSplitView = false }: SearchInterfaceProps) {
+export const SearchInterface = memo(function SearchInterface({ activeView, onViewChange, sessionId, destination, results, savedIds, itineraryPoiIds, onAddPoi, pendingAddPoiIds, onToggleSave, onReplan, onDiscoverCategory, isLoading = false, planningState, searchStatus, hasBillingError = false, isSplitView = false }: SearchInterfaceProps) {
   const [activeTab, setActiveTab] = useState("Stays")
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedQuery, setDebouncedQuery] = useState("")
@@ -221,6 +222,7 @@ export const SearchInterface = memo(function SearchInterface({ activeView, onVie
                   poi={poi}
                   isSaved={savedIds?.has(poi.id) || false}
                   isItineraryItem={!!itineraryPoiIds?.has(poi.id)}
+                  isAddPending={!!pendingAddPoiIds?.has(poi.id)}
                   onToggleSave={onToggleSave ? (p: POI, n: boolean) => onToggleSave(p, n) : () => {}}
                   onAddPoi={onAddPoi ? (p: POI) => onAddPoi(p) : () => {}}
                   onReplan={onReplan ? (p: POI) => onReplan(p) : () => {}}

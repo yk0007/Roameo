@@ -82,6 +82,10 @@ function getCanonicalPois(session?: CanonicalSession): POI[] {
   );
 }
 
+export function buildCatalogPois(session?: CanonicalSession): POI[] {
+  return getCanonicalPois(session);
+}
+
 function roundDistanceKm(
   from?: { lat: number; lng: number },
   to?: { lat: number; lng: number }
@@ -195,9 +199,10 @@ export function buildMapData(session?: CanonicalSession): MapData {
   const plan = session?.plan;
   const poiMap = new Map<string, POI>();
   const routes: MapData["routes"] = [];
+  const allCanonicalPois = getCanonicalPois(session);
 
   if (!plan) {
-    for (const poi of getCanonicalPois(session)) {
+    for (const poi of allCanonicalPois) {
       poiMap.set(poi.id, poi);
     }
 
@@ -234,6 +239,12 @@ export function buildMapData(session?: CanonicalSession): MapData {
         durationMinutes:
           day.activities[index].travelTimeMinutesFromPrevious || undefined
       });
+    }
+  }
+
+  for (const poi of allCanonicalPois) {
+    if (!poiMap.has(poi.id)) {
+      poiMap.set(poi.id, poi);
     }
   }
 

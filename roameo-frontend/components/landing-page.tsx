@@ -21,6 +21,7 @@ import { FeaturesSectionWithHoverEffects } from "@/components/blocks/feature-sec
 import { LandingTripMoods } from "@/components/blocks/landing-trip-moods"
 import { RotatingFeatureDial } from "@/components/blocks/rotating-feature-dial"
 import HeroScrollAnimation from "@/components/ui/hero-scroll-animation"
+import { EntranceMotion, SectionReveal } from "@/components/ui/site-motion"
 
 const featureHighlights = [
   {
@@ -166,115 +167,125 @@ export function LandingPage() {
 
       {/* Main content - Hidden on mobile */}
       <div className="hidden md:block">
-        <header className="fixed left-1/2 top-5 z-50 w-full max-w-7xl -translate-x-1/2 px-4">
-          <div
-            className={`flex items-center justify-between rounded-[28px] px-6 py-4 backdrop-blur-xl backdrop-saturate-150 transition-all duration-300 ${
-              navOnDark
-                ? "bg-[#09143a]/24 shadow-[0_24px_70px_rgba(8,18,58,0.22)]"
-                : "bg-white/72 shadow-[0_24px_60px_rgba(15,23,42,0.08)]"
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-black shadow-[0_10px_24px_rgba(0,0,0,0.18)]">
-                <div className="h-2.5 w-2.5 rounded-full bg-white" />
-              </div>
-              <span className={`text-[1.75rem] font-semibold tracking-[-0.045em] transition-colors duration-300 ${navOnDark ? "text-white" : "text-slate-950"}`}>
-                roameo
-              </span>
-            </div>
-
-            <nav
-              className={`hidden items-center rounded-full p-1 transition-all duration-300 md:flex ${
+        <EntranceMotion delay={0.06}>
+          <header className="fixed left-1/2 top-5 z-50 w-full max-w-7xl -translate-x-1/2 px-4">
+            <div
+              className={`flex items-center justify-between rounded-[28px] px-6 py-4 backdrop-blur-xl backdrop-saturate-150 transition-all duration-300 ${
                 navOnDark
-                  ? "bg-white/8 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]"
-                  : "bg-white/55 shadow-[inset_0_0_0_1px_rgba(226,232,240,0.9)]"
+                  ? "bg-[#09143a]/24 shadow-[0_24px_70px_rgba(8,18,58,0.22)]"
+                  : "bg-white/72 shadow-[0_24px_60px_rgba(15,23,42,0.08)]"
               }`}
             >
-              {navLinks.map((link) => (
-                <a
-                  key={link.label}
-                  href={link.href}
-                  className={`rounded-full px-5 py-2 text-sm font-medium transition-colors ${
-                    navOnDark
-                      ? "text-white/78 hover:bg-white/10 hover:text-white"
-                      : "text-slate-600 hover:bg-white hover:text-slate-950"
-                  }`}
-                >
-                  {link.label}
-                </a>
-              ))}
-            </nav>
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-black shadow-[0_10px_24px_rgba(0,0,0,0.18)]">
+                  <div className="h-2.5 w-2.5 rounded-full bg-white" />
+                </div>
+                <span className={`text-[1.75rem] font-semibold tracking-[-0.045em] transition-colors duration-300 ${navOnDark ? "text-white" : "text-slate-950"}`}>
+                  roameo
+                </span>
+              </div>
 
-            <div className="flex items-center gap-3">
-              {user ? (
-                <Button
-                  onClick={handleSignOut}
-                  variant="ghost"
-                  className={`rounded-full px-5 transition-colors ${
-                    navOnDark ? "text-white/78 hover:text-white hover:bg-white/10" : "text-slate-600 hover:text-slate-950"
-                  }`}
-                >
-                  Sign out
-                </Button>
-              ) : (
-                <Link href="/auth/login">
+              <nav
+                className={`hidden items-center rounded-full p-1 transition-all duration-300 md:flex ${
+                  navOnDark
+                    ? "bg-white/8 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]"
+                    : "bg-white/55 shadow-[inset_0_0_0_1px_rgba(226,232,240,0.9)]"
+                }`}
+              >
+                {navLinks.map((link) => (
+                  <a
+                    key={link.label}
+                    href={link.href}
+                    className={`rounded-full px-5 py-2 text-sm font-medium transition-colors ${
+                      navOnDark
+                        ? "text-white/78 hover:bg-white/10 hover:text-white"
+                        : "text-slate-600 hover:bg-white hover:text-slate-950"
+                    }`}
+                  >
+                    {link.label}
+                  </a>
+                ))}
+              </nav>
+
+              <div className="flex items-center gap-3">
+                {user ? (
                   <Button
+                    onClick={handleSignOut}
                     variant="ghost"
                     className={`rounded-full px-5 transition-colors ${
                       navOnDark ? "text-white/78 hover:text-white hover:bg-white/10" : "text-slate-600 hover:text-slate-950"
                     }`}
                   >
-                    Log in
+                    Sign out
                   </Button>
-                </Link>
-              )}
-              <Button
-                onClick={() => handleProtectedAction("get started")}
-                className="rounded-full bg-black px-6 text-white shadow-[0_14px_28px_rgba(0,0,0,0.16)] hover:bg-gray-800"
-              >
-                Get started
-              </Button>
+                ) : (
+                  <Link href="/auth/login">
+                    <Button
+                      variant="ghost"
+                      className={`rounded-full px-5 transition-colors ${
+                        navOnDark ? "text-white/78 hover:text-white hover:bg-white/10" : "text-slate-600 hover:text-slate-950"
+                      }`}
+                    >
+                      Log in
+                    </Button>
+                  </Link>
+                )}
+                <Button
+                  onClick={() => handleProtectedAction("get started")}
+                  className="rounded-full bg-black px-6 text-white shadow-[0_14px_28px_rgba(0,0,0,0.16)] hover:bg-gray-800"
+                >
+                  Get started
+                </Button>
+              </div>
             </div>
-          </div>
-        </header>
+          </header>
+        </EntranceMotion>
 
-      {/* Hero Section with Scroll Animation */}
-      <HeroScrollAnimation user={user} handleProtectedAction={handleProtectedAction} />
+      <EntranceMotion delay={0.14}>
+        <HeroScrollAnimation user={user} handleProtectedAction={handleProtectedAction} />
+      </EntranceMotion>
 
       {/* How it Works Section */}
-      <section id="how-it-works" className="px-6 min-h-screen flex items-center bg-white">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-5xl font-bold text-gray-900 mb-4 font-sans">How it Works</h2>
-            <p className="text-xl text-gray-600">Discover the power of AI-driven travel planning</p>
+      <SectionReveal delay={0.04}>
+        <section id="how-it-works" className="px-6 min-h-screen flex items-center bg-white">
+          <div className="max-w-7xl mx-auto">
+            <div className="text-center mb-16">
+              <h2 className="text-5xl font-bold text-gray-900 mb-4 font-sans">How it Works</h2>
+              <p className="text-xl text-gray-600">Discover the power of AI-driven travel planning</p>
+            </div>
+            <FeaturesSectionWithHoverEffects />
           </div>
-          <FeaturesSectionWithHoverEffects />
-        </div>
-      </section>
+        </section>
+      </SectionReveal>
 
       {/* Features Section */}
-      <section id="features" className="relative min-h-screen bg-white px-6 py-24">
-        <div className="mx-auto max-w-7xl">
-          <div className="max-w-2xl">
-            <h2 className="text-5xl font-bold tracking-[-0.05em] text-gray-900 font-sans">Features</h2>
-            <p className="mt-4 text-xl leading-8 text-gray-600 font-sans">
-              Discover what makes Roameo your perfect travel companion
-            </p>
-          </div>
+      <SectionReveal>
+        <section id="features" className="relative min-h-screen bg-white px-6 py-24">
+          <div className="mx-auto max-w-7xl">
+            <div className="max-w-2xl">
+              <h2 className="text-5xl font-bold tracking-[-0.05em] text-gray-900 font-sans">Features</h2>
+              <p className="mt-4 text-xl leading-8 text-gray-600 font-sans">
+                Discover what makes Roameo your perfect travel companion
+              </p>
+            </div>
 
-          <div className="mt-20">
-            <RotatingFeatureDial features={featureHighlights} />
+            <div className="mt-20">
+              <RotatingFeatureDial features={featureHighlights} />
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </SectionReveal>
 
-      <LandingTripMoods />
+      <SectionReveal delay={0.02}>
+        <LandingTripMoods />
+      </SectionReveal>
 
       {/* Personalized Recommendations */}
-      <section className="min-h-screen bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_26%,#edf6ff_62%,#dceeff_100%)] px-6 py-24 text-white">
-        <div className="max-w-7xl mx-auto flex min-h-[70vh] items-center gap-16">
-          <div className="flex-1">
-            <div className="overflow-hidden rounded-[30px] border border-slate-100 bg-white p-5 shadow-[0_30px_80px_rgba(15,23,42,0.12)]">
+      <SectionReveal>
+        <section className="min-h-screen bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_26%,#edf6ff_62%,#dceeff_100%)] px-6 py-24 text-white">
+          <div className="max-w-7xl mx-auto flex min-h-[70vh] items-center gap-16">
+            <div className="flex-1">
+              <div className="overflow-hidden rounded-[30px] border border-slate-100 bg-white p-5 shadow-[0_30px_80px_rgba(15,23,42,0.12)]">
               <div className="relative overflow-hidden rounded-[24px]">
                 <img
                   src="/kerala-backwaters-houseboat.png"
@@ -350,115 +361,118 @@ export function LandingPage() {
                   Add to trip
                 </Button>
               </div>
+              </div>
+            </div>
+
+            <div className="flex-1">
+              <h2 className="text-4xl font-bold text-gray-900 mb-6 font-sans">Get personalized recommendations.</h2>
+              <p className="text-xl text-gray-600 mb-8 leading-relaxed font-sans">
+                Roameo turns a rough travel brief into well-matched stays, scenic routes, and pacing decisions that
+                already feel considered before you start editing the trip.
+              </p>
+
+              <div className="mb-6 flex items-start gap-3">
+                <div className="flex h-10 w-14 items-center justify-center rounded-full bg-[rgba(53,115,255,1)]">
+                  <Compass className="w-5 h-5 text-white" />
+                </div>
+                <p className="pt-1 text-gray-700 font-sans">
+                  Save the options that fit, then keep route, timing, and places synced while you refine the plan.
+                </p>
+              </div>
+
+              <Button
+                onClick={() => handleProtectedAction("save to trip")}
+                className="text-white hover:bg-sky-500 rounded-full px-8 bg-black"
+              >
+                Save to Trip
+              </Button>
             </div>
           </div>
+        </section>
+      </SectionReveal>
 
-          <div className="flex-1">
-            <h2 className="text-4xl font-bold text-gray-900 mb-6 font-sans">Get personalized recommendations.</h2>
-            <p className="text-xl text-gray-600 mb-8 leading-relaxed font-sans">
-              Roameo turns a rough travel brief into well-matched stays, scenic routes, and pacing decisions that
-              already feel considered before you start editing the trip.
+      <SectionReveal>
+        <footer className="relative overflow-hidden bg-[linear-gradient(180deg,#dceeff_0%,#cde5ff_100%)] px-6 pb-10 pt-12">
+          <div className="absolute left-[-8%] top-14 h-56 w-56 rounded-full bg-white/65 blur-[70px]" />
+          <div className="absolute right-[-6%] top-20 h-64 w-64 rounded-full bg-white/58 blur-[80px]" />
+
+          <div className="mx-auto max-w-4xl text-center">
+            <h2 className="mt-7 text-6xl font-semibold tracking-[-0.065em] text-[#101726]">
+              Ready for the next trip?
+            </h2>
+            <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-[#4b5f88]">
+              Start in chat, refine on the map, and let every day, place, and timing decision stay connected while you plan.
             </p>
 
-            <div className="mb-6 flex items-start gap-3">
-              <div className="flex h-10 w-14 items-center justify-center rounded-full bg-[rgba(53,115,255,1)]">
-                <Compass className="w-5 h-5 text-white" />
-              </div>
-              <p className="pt-1 text-gray-700 font-sans">
-                Save the options that fit, then keep route, timing, and places synced while you refine the plan.
-              </p>
+            <div className="mt-9 flex items-center justify-center gap-4">
+              <Button
+                onClick={() => handleProtectedAction("plan my trip now")}
+                size="lg"
+                className="rounded-full bg-black px-7 text-base text-white shadow-[0_14px_28px_rgba(0,0,0,0.16)] hover:bg-gray-800"
+              >
+                Start planning
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+              <a
+                href="#features"
+                className="inline-flex items-center rounded-full border border-[#b6cffd] bg-white/40 px-6 py-3 text-sm font-medium text-[#365dcb] transition-colors hover:bg-white/65"
+              >
+                Explore features
+              </a>
             </div>
-
-            <Button
-              onClick={() => handleProtectedAction("save to trip")}
-              className="text-white hover:bg-sky-500 rounded-full px-8 bg-black"
-            >
-              Save to Trip
-            </Button>
           </div>
-        </div>
-      </section>
 
-      <footer className="relative overflow-hidden bg-[linear-gradient(180deg,#dceeff_0%,#cde5ff_100%)] px-6 pb-10 pt-12">
-        <div className="absolute left-[-8%] top-14 h-56 w-56 rounded-full bg-white/65 blur-[70px]" />
-        <div className="absolute right-[-6%] top-20 h-64 w-64 rounded-full bg-white/58 blur-[80px]" />
-
-        <div className="mx-auto max-w-4xl text-center">
-          <h2 className="mt-7 text-6xl font-semibold tracking-[-0.065em] text-[#101726]">
-            Ready for the next trip?
-          </h2>
-          <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-[#4b5f88]">
-            Start in chat, refine on the map, and let every day, place, and timing decision stay connected while you plan.
-          </p>
-
-          <div className="mt-9 flex items-center justify-center gap-4">
-            <Button
-              onClick={() => handleProtectedAction("plan my trip now")}
-              size="lg"
-              className="rounded-full bg-black px-7 text-base text-white shadow-[0_14px_28px_rgba(0,0,0,0.16)] hover:bg-gray-800"
-            >
-              Start planning
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-            <a
-              href="#features"
-              className="inline-flex items-center rounded-full border border-[#b6cffd] bg-white/40 px-6 py-3 text-sm font-medium text-[#365dcb] transition-colors hover:bg-white/65"
-            >
-              Explore features
-            </a>
-          </div>
-        </div>
-
-        <div className="mx-auto mt-20 max-w-5xl rounded-[34px] border border-white/45 bg-white/38 px-8 py-10 shadow-[0_24px_60px_rgba(86,125,214,0.08)] backdrop-blur-md">
-          <div className="grid gap-10 md:grid-cols-[1.3fr_0.85fr_0.85fr]">
-            <div>
-              <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-black">
-                  <div className="h-2 w-2 rounded-full bg-white" />
+          <div className="mx-auto mt-20 max-w-5xl rounded-[34px] border border-white/45 bg-white/38 px-8 py-10 shadow-[0_24px_60px_rgba(86,125,214,0.08)] backdrop-blur-md">
+            <div className="grid gap-10 md:grid-cols-[1.3fr_0.85fr_0.85fr]">
+              <div>
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-black">
+                    <div className="h-2 w-2 rounded-full bg-white" />
+                  </div>
+                  <span className="text-2xl font-semibold tracking-[-0.05em] text-[#101726]">roameo</span>
                 </div>
-                <span className="text-2xl font-semibold tracking-[-0.05em] text-[#101726]">roameo</span>
+                <p className="mt-5 max-w-xs text-base leading-8 text-[#586b92]">
+                  Travel planning that keeps conversation, route, and day-by-day structure aligned from start to finish.
+                </p>
               </div>
-              <p className="mt-5 max-w-xs text-base leading-8 text-[#586b92]">
-                Travel planning that keeps conversation, route, and day-by-day structure aligned from start to finish.
-              </p>
+
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#6a82bb]">Pages</p>
+                <div className="mt-5 space-y-4 text-sm text-[#25375f]">
+                  <a href="#how-it-works" className="block transition-colors hover:text-[#365dcb]">
+                    How it works
+                  </a>
+                  <a href="#features" className="block transition-colors hover:text-[#365dcb]">
+                    Features
+                  </a>
+                  <a href="/auth/login" className="block transition-colors hover:text-[#365dcb]">
+                    Log in
+                  </a>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#6a82bb]">Information</p>
+                <div className="mt-5 space-y-4 text-sm text-[#25375f]">
+                  <a href="#" className="block transition-colors hover:text-[#365dcb]">
+                    Privacy
+                  </a>
+                  <a href="#" className="block transition-colors hover:text-[#365dcb]">
+                    Terms
+                  </a>
+                  <a href="#" className="block transition-colors hover:text-[#365dcb]">
+                    Support
+                  </a>
+                </div>
+              </div>
             </div>
 
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#6a82bb]">Pages</p>
-              <div className="mt-5 space-y-4 text-sm text-[#25375f]">
-                <a href="#how-it-works" className="block transition-colors hover:text-[#365dcb]">
-                  How it works
-                </a>
-                <a href="#features" className="block transition-colors hover:text-[#365dcb]">
-                  Features
-                </a>
-                <a href="/auth/login" className="block transition-colors hover:text-[#365dcb]">
-                  Log in
-                </a>
-              </div>
-            </div>
-
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#6a82bb]">Information</p>
-              <div className="mt-5 space-y-4 text-sm text-[#25375f]">
-                <a href="#" className="block transition-colors hover:text-[#365dcb]">
-                  Privacy
-                </a>
-                <a href="#" className="block transition-colors hover:text-[#365dcb]">
-                  Terms
-                </a>
-                <a href="#" className="block transition-colors hover:text-[#365dcb]">
-                  Support
-                </a>
-              </div>
+            <div className="mt-10 border-t border-white/45 pt-6 text-sm text-[#66789f]">
+              © 2026 Roameo. Thoughtful travel planning from first message to final day.
             </div>
           </div>
-
-          <div className="mt-10 border-t border-white/45 pt-6 text-sm text-[#66789f]">
-            © 2026 Roameo. Thoughtful travel planning from first message to final day.
-          </div>
-        </div>
-      </footer>
+        </footer>
+      </SectionReveal>
       </div>
     </div>
   )

@@ -2,7 +2,7 @@
 
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import type { AgentTraceEvent } from "@/lib/types";
+import type { SessionPlanningState } from "@/lib/types";
 
 /* ─────────────────────────────────────────────
    Minimal shimmer text
@@ -31,8 +31,6 @@ function ShimmerText({
 
 /* ─────────────────────────────────────────────
    Stage → display config
-   Maps planning state stages and trace agent names
-   to human-readable labels + icon animations.
 ───────────────────────────────────────────── */
 
 type AnimKind =
@@ -53,133 +51,100 @@ interface StageConfig {
   color: string; // tailwind text color class
 }
 
-function classifyTrace(trace: AgentTraceEvent | null): StageConfig {
-  if (!trace) {
-    return {
-      label: "Thinking",
-      sub: "Working through your request…",
-      anim: "pulse_dot",
-      color: "text-slate-500",
-    };
+function configForMode(mode: "general" | "planning" | "worker"): StageConfig {
+  switch (mode) {
+    case "planning":
+      return {
+        label: "Building your plan",
+        sub: "Coordinating the itinerary…",
+        anim: "orbit",
+        color: "text-emerald-500",
+      };
+    case "worker":
+      return {
+        label: "Working through your trip",
+        sub: "Finishing the next useful step…",
+        anim: "wave_bars",
+        color: "text-violet-500",
+      };
+    default:
+      return {
+        label: "Thinking",
+        sub: "Working through your request…",
+        anim: "pulse_dot",
+        color: "text-slate-500",
+      };
+  }
+}
+
+function configForPlanningState(
+  planningState?: SessionPlanningState,
+): StageConfig | null {
+  if (!planningState || planningState.status !== "running") {
+    return null;
   }
 
-  const agent = trace.agent.toLowerCase();
-  const label = trace.label.toLowerCase();
-
-  // Tool / extraction calls
-  if (agent.includes("tool") || label.includes("tool") || label.includes("fetch") || label.includes("lookup")) {
-    return {
-      label: trace.label || "Fetching data",
-      sub: trace.detail || "Calling live data source…",
-      anim: "spin_ring",
-      color: "text-blue-500",
-    };
+  switch (planningState.stage) {
+    case "understanding":
+      return {
+        label: "Understanding your request",
+        sub: "Reading the message and checking active trip context…",
+        anim: "scan_lines",
+        color: "text-slate-500",
+      };
+    case "researching":
+      return {
+        label: "Exploring live places",
+        sub:
+          planningState.source === "places"
+            ? "Looking up the strongest places for this trip…"
+            : "Exploring grounded options for this trip…",
+        anim: "magnify",
+        color: "text-violet-500",
+      };
+    case "researching_stays":
+      return {
+        label: "Scouting local stays",
+        sub: "Comparing stays that fit the route and trip style…",
+        anim: "orbit",
+        color: "text-indigo-500",
+      };
+    case "checking_dates":
+      return {
+        label: "Checking dates and timing",
+        sub: "Reviewing weather and timing context…",
+        anim: "scan_lines",
+        color: "text-cyan-500",
+      };
+    case "researching_events":
+      return {
+        label: "Scanning events and culture",
+        sub: "Checking holidays, events, and seasonal timing…",
+        anim: "wave_bars",
+        color: "text-amber-500",
+      };
+    case "building_plan":
+      return {
+        label: "Building your itinerary",
+        sub: "Coordinating the day-by-day flow…",
+        anim: "orbit",
+        color: "text-emerald-500",
+      };
+    case "refining":
+      return {
+        label: "Refining the itinerary",
+        sub: "Adjusting the existing plan and rebalancing the flow…",
+        anim: "writing_pen",
+        color: "text-rose-500",
+      };
+    default:
+      return {
+        label: "Working through your trip",
+        sub: "Finishing the next useful step…",
+        anim: "wave_bars",
+        color: "text-violet-500",
+      };
   }
-
-  // Search / discovery
-  if (
-    agent.includes("search") ||
-    agent.includes("discovery") ||
-    agent.includes("research") ||
-    label.includes("search") ||
-    label.includes("discover") ||
-    label.includes("research") ||
-    label.includes("finding")
-  ) {
-    return {
-      label: trace.label || "Searching",
-      sub: trace.detail || "Scanning destinations and places…",
-      anim: "magnify",
-      color: "text-violet-500",
-    };
-  }
-
-  // Reading / extraction
-  if (
-    label.includes("read") ||
-    label.includes("extract") ||
-    label.includes("parse") ||
-    label.includes("context") ||
-    label.includes("pulling")
-  ) {
-    return {
-      label: trace.label || "Reading context",
-      sub: trace.detail || "Extracting relevant information…",
-      anim: "scan_lines",
-      color: "text-amber-500",
-    };
-  }
-
-  // Planning / building
-  if (
-    agent.includes("planner") ||
-    agent.includes("planning") ||
-    label.includes("plan") ||
-    label.includes("build") ||
-    label.includes("itinerary") ||
-    label.includes("schedul") ||
-    label.includes("coordinat") ||
-    label.includes("layout")
-  ) {
-    return {
-      label: trace.label || "Building your plan",
-      sub: trace.detail || "Coordinating the itinerary…",
-      anim: "orbit",
-      color: "text-emerald-500",
-    };
-  }
-
-  // Writing / drafting output
-  if (
-    label.includes("writ") ||
-    label.includes("draft") ||
-    label.includes("craft") ||
-    label.includes("generat") ||
-    label.includes("compil") ||
-    agent.includes("writer") ||
-    agent.includes("narrator")
-  ) {
-    return {
-      label: trace.label || "Crafting response",
-      sub: trace.detail || "Writing a personalised answer…",
-      anim: "writing_pen",
-      color: "text-rose-500",
-    };
-  }
-
-  // Analysis / evaluation
-  if (
-    label.includes("analys") ||
-    label.includes("evaluat") ||
-    label.includes("calculat") ||
-    label.includes("scor") ||
-    label.includes("rank")
-  ) {
-    return {
-      label: trace.label || "Analysing options",
-      sub: trace.detail || "Comparing and ranking results…",
-      anim: "wave_bars",
-      color: "text-cyan-500",
-    };
-  }
-
-  // Subagent / worker
-  if (agent.includes("worker") || agent.includes("subagent") || agent.includes("sub_agent")) {
-    return {
-      label: trace.label || "Running subagent",
-      sub: trace.detail || "Delegating to a specialised agent…",
-      anim: "orbit",
-      color: "text-indigo-500",
-    };
-  }
-
-  // Default: resolver / thinking
-  return {
-    label: trace.label || "Reasoning",
-    sub: trace.detail || "Thinking through the next step…",
-    anim: "pulse_dot",
-    color: "text-slate-500",
-  };
 }
 
 /* ─────────────────────────────────────────────
@@ -365,49 +330,25 @@ function AnimIcon({ kind, color }: { kind: AnimKind; color: string }) {
 ───────────────────────────────────────────── */
 
 export interface AgenticStatusProps {
-  /** legacy mode prop — kept for backwards compat */
   mode?: "general" | "planning" | "worker";
   title?: string;
   detail?: string;
+  planningState?: SessionPlanningState;
   steps?: Array<{
     label: string;
     detail?: string;
     state?: "queued" | "running" | "done" | "completed";
   }>;
-  /** live trace events from the current turn */
-  traces?: AgentTraceEvent[];
-  /** current turn id — used to filter traces */
-  turnId?: string;
 }
 
 export function AgenticStatus({
   mode = "general",
   title,
   detail,
+  planningState,
   steps,
-  traces = [],
-  turnId,
 }: AgenticStatusProps) {
-  const uniqueTraces = traces.reduce<AgentTraceEvent[]>((acc, trace) => {
-    if (acc.some((item) => item.id === trace.id)) {
-      return acc.map((item) => (item.id === trace.id ? trace : item));
-    }
-    return [...acc, trace];
-  }, []);
-
-  // Filter to traces for this turn if we have a turnId,
-  // otherwise show all currently-running ones
-  const turnTraces = turnId
-    ? uniqueTraces.filter((t) => t.turnId === turnId)
-    : uniqueTraces;
-
-  // Pick the most recent running trace
-  const runningTrace =
-    [...turnTraces]
-      .reverse()
-      .find((t) => t.status === "running") ?? turnTraces.at(-1) ?? null;
-
-  const config = classifyTrace(runningTrace);
+  const config = configForPlanningState(planningState) || configForMode(mode);
 
   // If caller provides explicit title/detail, use those
   const resolvedLabel = title || config.label;
@@ -449,59 +390,8 @@ export function AgenticStatus({
         </motion.div>
       </AnimatePresence>
 
-      {/* ── Live trace timeline ── */}
-      {turnTraces.length > 0 && (
-        <div className="mt-2 space-y-1.5 pl-7">
-          {turnTraces.slice(-5).map((trace) => {
-            const isRunning = trace.status === "running";
-            const isDone =
-              trace.status === "completed" || trace.status === "failed";
-            return (
-              <motion.div
-                key={`${trace.id}-${trace.status}-${trace.label}`}
-                initial={{ opacity: 0, x: -6 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.2 }}
-                className="flex items-center gap-2"
-              >
-                <motion.div
-                  className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${
-                    isRunning
-                      ? "bg-slate-700"
-                      : isDone
-                        ? "bg-slate-300"
-                        : "bg-slate-200"
-                  }`}
-                  animate={
-                    isRunning
-                      ? { scale: [1, 1.6, 1], opacity: [0.7, 1, 0.7] }
-                      : undefined
-                  }
-                  transition={
-                    isRunning
-                      ? { duration: 1, repeat: Infinity, ease: "easeInOut" }
-                      : undefined
-                  }
-                />
-                <span
-                  className={`text-[12px] leading-4 ${
-                    isRunning
-                      ? "font-medium text-slate-700"
-                      : isDone
-                        ? "text-slate-400 line-through decoration-slate-300"
-                        : "text-slate-500"
-                  }`}
-                >
-                  {trace.label}
-                </span>
-              </motion.div>
-            );
-          })}
-        </div>
-      )}
-
       {/* ── Legacy steps (backwards compat) ── */}
-      {activeSteps.length > 0 && turnTraces.length === 0 && (
+      {activeSteps.length > 0 && (
         <div className="space-y-2 pl-7">
           {activeSteps.map((step, i) => {
             const isRunning = step.state === "running";

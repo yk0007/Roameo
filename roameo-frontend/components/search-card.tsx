@@ -12,6 +12,7 @@ interface SearchCardProps {
   poi: POI;
   isSaved: boolean;
   isItineraryItem?: boolean;
+  isAddPending?: boolean;
   onToggleSave: (poi: POI, next: boolean) => void;
   onAddPoi: (poi: POI) => void;
   onReplan: (poi: POI) => void;
@@ -52,6 +53,7 @@ export function SearchCard({
   poi,
   isSaved,
   isItineraryItem,
+  isAddPending = false,
   onToggleSave,
   onAddPoi,
   onReplan,
@@ -66,6 +68,7 @@ export function SearchCard({
   }, [poi.photoUrl]);
   const hasImage = images.length > 0 && !imageError;
   const priceLabel = formatPriceLevel(poi.priceLevel);
+  const addLabel = isItineraryItem ? "Added" : isAddPending ? "Adding..." : "Add to trip";
 
   const showPrevious = () => {
     if (images.length > 1) {
@@ -108,19 +111,22 @@ export function SearchCard({
             size="sm"
             onClick={() => onAddPoi(poi)}
             disabled={isItineraryItem}
+            aria-busy={isAddPending}
             className={`${compact ? "h-8 px-3 text-[12px]" : "h-11 px-5 text-[14px]"} rounded-full font-medium shadow-[0_6px_18px_rgba(15,23,42,0.16)] ${
               isItineraryItem
                 ? "bg-white text-slate-600 hover:bg-white"
-                : "bg-[#2d2d2d] text-white hover:bg-black"
+                : isAddPending
+                  ? "bg-[#4b5563] text-white hover:bg-[#4b5563]"
+                  : "bg-[#2d2d2d] text-white hover:bg-black"
             }`}
           >
             {isItineraryItem ? (
               <>
                 <Check className={`${compact ? "mr-1 h-3 w-3" : "mr-2 h-4 w-4"}`} />
-                Added
+                {addLabel}
               </>
             ) : (
-              "Add to trip"
+              addLabel
             )}
           </Button>
 

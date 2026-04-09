@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { EntranceMotion, SectionReveal } from "@/components/ui/site-motion";
 import { toast } from "@/hooks/use-toast";
 import type { SessionSettingsPayload } from "@/lib/types";
 
@@ -196,14 +197,14 @@ export default function ProfilePage() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f2f3f4]">
-        <div className="rounded-[32px] border border-white/80 bg-white px-8 py-6 shadow-[0_24px_60px_rgba(34,74,187,0.12)]">
+        <EntranceMotion className="rounded-[32px] border border-white/80 bg-white px-8 py-6 shadow-[0_24px_60px_rgba(34,74,187,0.12)]">
           <p className="font-roboto-mono text-sm uppercase tracking-[0.18em] text-[#5f74c8]">
             Loading profile
           </p>
           <h1 className="mt-2 text-xl font-semibold tracking-[-0.04em] text-gray-950">
             Restoring your travel preferences
           </h1>
-        </div>
+        </EntranceMotion>
       </div>
     );
   }
@@ -221,7 +222,7 @@ export default function ProfilePage() {
         }}
       />
       <div className="mx-auto max-w-6xl">
-        <div className="mb-8 flex items-center justify-between">
+        <EntranceMotion className="mb-8 flex items-center justify-between" delay={0.04}>
           <div className="flex items-center gap-3">
             <div className="relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-black">
               <div className="h-2 w-2 rounded-full bg-white" />
@@ -248,35 +249,38 @@ export default function ProfilePage() {
               Sign out
             </Button>
           </div>
-        </div>
+        </EntranceMotion>
 
-        <div className="relative mb-8 overflow-hidden rounded-[40px] border border-white/70 bg-[linear-gradient(135deg,#eef4ff_0%,#d8e7ff_28%,#cddcff_54%,#e7f0ff_100%)] px-6 py-8 shadow-[0_24px_70px_rgba(76,107,184,0.12)] sm:px-8 lg:px-10 lg:py-10">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_24%_18%,rgba(255,255,255,0.92),rgba(255,255,255,0)_34%),radial-gradient(circle_at_82%_30%,rgba(122,145,255,0.16),rgba(122,145,255,0)_28%),radial-gradient(circle_at_54%_100%,rgba(255,255,255,0.8),rgba(255,255,255,0)_40%)]" />
-          <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.1)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.1)_1px,transparent_1px)] bg-[size:42px_42px] opacity-20" />
-          <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-3xl">
-              <p className="font-roboto-mono text-sm uppercase tracking-[0.24em] text-[#5f74c8]">
-                Profile and settings
-              </p>
-              <h1 className="mt-3 text-4xl font-semibold tracking-[-0.06em] text-[#101828] sm:text-5xl">
-                Keep Roameo aligned with how you actually travel
-              </h1>
-              <p className="mt-4 max-w-2xl text-base leading-7 text-[#475467]">
-                Tune your provider defaults, profile details, and travel preferences in the same dashboard visual language.
-              </p>
-            </div>
-            <div className="w-full max-w-sm rounded-[28px] border border-white/80 bg-white/58 px-5 py-4 text-sm text-[#101828] shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur-md">
-              <div className="font-roboto-mono text-[11px] uppercase tracking-[0.22em] text-[#6b7ed6]">
-                Workspace sync
+        <SectionReveal delay={0.08}>
+          <div className="relative mb-8 overflow-hidden rounded-[40px] border border-white/70 bg-[linear-gradient(135deg,#eef4ff_0%,#d8e7ff_28%,#cddcff_54%,#e7f0ff_100%)] px-6 py-8 shadow-[0_24px_70px_rgba(76,107,184,0.12)] sm:px-8 lg:px-10 lg:py-10">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_24%_18%,rgba(255,255,255,0.92),rgba(255,255,255,0)_34%),radial-gradient(circle_at_82%_30%,rgba(122,145,255,0.16),rgba(122,145,255,0)_28%),radial-gradient(circle_at_54%_100%,rgba(255,255,255,0.8),rgba(255,255,255,0)_40%)]" />
+            <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.1)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.1)_1px,transparent_1px)] bg-[size:42px_42px] opacity-20" />
+            <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+              <div className="max-w-3xl">
+                <p className="font-roboto-mono text-sm uppercase tracking-[0.24em] text-[#5f74c8]">
+                  Profile and settings
+                </p>
+                <h1 className="mt-3 text-4xl font-semibold tracking-[-0.06em] text-[#101828] sm:text-5xl">
+                  Keep Roameo aligned with how you actually travel
+                </h1>
+                <p className="mt-4 max-w-2xl text-base leading-7 text-[#475467]">
+                  Tune your provider defaults, profile details, and travel preferences in the same dashboard visual language.
+                </p>
               </div>
-              <div className="mt-2 text-xl font-semibold tracking-[-0.04em] text-[#101828]">{tripCount} synced sessions</div>
-              <div className="mt-2 break-all text-[#475467]">{user?.email}</div>
+              <div className="w-full max-w-sm rounded-[28px] border border-white/80 bg-white/58 px-5 py-4 text-sm text-[#101828] shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur-md">
+                <div className="font-roboto-mono text-[11px] uppercase tracking-[0.22em] text-[#6b7ed6]">
+                  Workspace sync
+                </div>
+                <div className="mt-2 text-xl font-semibold tracking-[-0.04em] text-[#101828]">{tripCount} synced sessions</div>
+                <div className="mt-2 break-all text-[#475467]">{user?.email}</div>
+              </div>
             </div>
           </div>
-        </div>
+        </SectionReveal>
 
         <div className="grid gap-6 lg:grid-cols-[1.05fr_1.35fr]">
-          <Card className={CARD_SHELL_CLASSNAME}>
+          <SectionReveal delay={0.04}>
+            <Card className={CARD_SHELL_CLASSNAME}>
             <CardTopography />
             <CardHeader className="relative">
               <CardTitle className="flex items-center gap-2 text-gray-950">
@@ -389,9 +393,11 @@ export default function ProfilePage() {
                 </div>
               </div>
             </CardContent>
-          </Card>
+            </Card>
+          </SectionReveal>
 
-          <Card className={CARD_SHELL_CLASSNAME}>
+          <SectionReveal delay={0.1}>
+            <Card className={CARD_SHELL_CLASSNAME}>
             <CardTopography />
             <CardHeader className="relative">
               <CardTitle className="flex items-center gap-2 text-gray-950">
@@ -562,7 +568,8 @@ export default function ProfilePage() {
                 </Button>
               </div>
             </CardContent>
-          </Card>
+            </Card>
+          </SectionReveal>
         </div>
       </div>
     </div>

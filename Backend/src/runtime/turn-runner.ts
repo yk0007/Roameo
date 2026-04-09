@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import type {
-  AgentTraceEvent,
   PlanningState,
   ConversationMessage,
   SendMessageInput,
@@ -34,26 +33,6 @@ import {
   transitAdvisor,
   updateSessionMemory
 } from "./subagents.js";
-
-function createTrace(
-  sessionId: string,
-  turnId: string,
-  agent: string,
-  status: AgentTraceEvent["status"],
-  label: string,
-  detail?: string
-): AgentTraceEvent {
-  return {
-    id: randomUUID(),
-    sessionId,
-    turnId,
-    agent,
-    status,
-    label,
-    detail,
-    createdAt: new Date().toISOString()
-  };
-}
 
 function chunkText(value: string): string[] {
   const sentences = value
@@ -196,17 +175,6 @@ export class TurnRunner {
     const currentProvider = () =>
       resolvedProvider ? resolvedProvider.provider : undefined;
 
-    const emitTrace = async (
-      agent: string,
-      status: AgentTraceEvent["status"],
-      label: string,
-      detail?: string
-    ) => {
-      const trace = createTrace(session.id, turnId, agent, status, label, detail);
-      await this.repository.saveTrace(trace);
-      this.streamHub.emit(session.id, { type: "trace.updated", data: trace });
-    };
-
     const persistPlanningState = async (
       baseSession: SessionSnapshot,
       next: Partial<PlanningState>
@@ -240,32 +208,17 @@ export class TurnRunner {
       });
 
       let resolution = resolveDeterministicTurnIntent(nextSession, input.content);
-      if (resolution) {
-        await emitTrace(
-          "intent-slot-resolver",
-          "completed",
-          resolution.intent,
-          "Resolved locally without the intent model."
-        );
-      } else {
-        await emitTrace("lead", "running", "Resolving intent");
+      if (!resolution) {
         resolution = await resolveTurnIntent(
           this.providerService,
           await getResolvedProvider(),
           nextSession,
           input.content
         );
-        await emitTrace("intent-slot-resolver", "completed", resolution.intent);
       }
 
       const oversizedPlanResponse = resolveOversizedPlanResponse(resolution);
       if (oversizedPlanResponse) {
-        await emitTrace(
-          "itinerary-planner",
-          "completed",
-          "Suggested a phased plan instead",
-          "Trip length is too large for a useful day-by-day itinerary."
-        );
         const nextMemory = updateSessionMemory(
           nextSession,
           resolution,
@@ -335,11 +288,6 @@ export class TurnRunner {
             default: return resolution.stayMode ? "Scouting stays" : "Discovering places";
           }
         })();
-        await emitTrace(
-          resolution.stayMode ? "stay-search-agent" : "discovery-search-agent",
-          "running",
-          `${focusLabel} in ${resolution.destinations.join(", ")}`
-        );
         research =
           resolution.intent === "plan_trip" || resolution.intent === "refine_trip"
             ? await researchPlanningDestinations(
@@ -355,12 +303,6 @@ export class TurnRunner {
                 false
               );
         const poiCount = Object.keys(research.catalog.items).length;
-        await emitTrace(
-          resolution.stayMode ? "stay-search-agent" : "discovery-search-agent",
-          "completed",
-          `Found ${poiCount} places`,
-          `Pulled ${poiCount} real places into the catalog.`
-        );
         pushProgress(
           resolution.stayMode ? "Scouting local stays" : `Discovering places in ${resolution.destinations.join(", ")}`,
           `Pulled ${poiCount} real places into the catalog.`
@@ -388,12 +330,10 @@ export class TurnRunner {
           reason: undefined,
           retryable: true
         });
-        await emitTrace("date-context-agent", "running", "Checking weather and timing");
         planningContext.weather = await this.tools.getWeatherSummary(
           resolution.destination || resolution.destinations[0] || nextSession.plan?.destination || "",
           resolution.dateContext
         );
-        await emitTrace("date-context-agent", "completed", "Date and weather notes ready");
         pushProgress(
           "Checking your dates",
           planningContext.weather.summary || "Dates normalized and weather notes prepared."
@@ -406,7 +346,6 @@ export class TurnRunner {
           reason: undefined,
           retryable: true
         });
-        await emitTrace("events-culture-agent", "running", "Searching festivals and local events");
         const destinationForEvents =
           resolution.destination || resolution.destinations[0] || nextSession.plan?.destination || "";
         planningContext.events = await this.tools.getEventSummary(
@@ -417,7 +356,6 @@ export class TurnRunner {
           destinationForEvents,
           resolution.dateContext
         );
-        await emitTrace("events-culture-agent", "completed", "Festival and holiday notes ready");
         pushProgress(
           "Checking festivals and local timing",
           planningContext.events.summary ||
@@ -435,7 +373,6 @@ export class TurnRunner {
           reason: undefined,
           retryable: true
         });
-        await emitTrace("itinerary-planner", "running", "Building your itinerary");
         let plan = await synthesizePlan(
           this.providerService,
           await getResolvedProvider(),
@@ -443,35 +380,23 @@ export class TurnRunner {
           resolution,
           research
         );
-        await emitTrace("feasibility-validator", "running", "Evaluating logistics and routing");
         plan = await enrichPlanLogistics(this.tools, plan, research.catalog);
 
         // ── Feasibility Critic pass ────────────────────────────────────────────
         // Non-blocking: the critic mutates the plan in-memory (trim over-scheduled
         // days, flag long transfers, fill missing accommodation).  Each critique
         // is emitted as an agent trace visible in the agentic status panel.
-        await emitTrace("feasibility-critic", "running", "Running feasibility check");
         const { plan: critiquedPlan, critiques } = criticizeAndRefinePlan(plan, research.catalog);
         plan = critiquedPlan;
-        for (const critique of critiques) {
-          await emitTrace("feasibility-critic", "completed", critique);
-        }
-        await emitTrace("feasibility-validator", "completed", "Logistics validated");
 
         // ── Transit Advisor pass ───────────────────────────────────────────────
         // Only meaningful for multi-destination trips.
         if (plan.destinationSegments.length > 1) {
-          await emitTrace("transit-advisor", "running", "Planning inter-city transit");
           const { segments } = transitAdvisor(plan, research);
-          for (const seg of segments) {
-            await emitTrace(
-              "transit-advisor",
-              "completed",
-              `${seg.from} → ${seg.to}: ${seg.durationLabel}`,
-              seg.bookingNote
-            );
-          }
+          void segments;
         }
+
+        void critiques;
 
         latestPlan = plan;
         pushProgress(
@@ -492,11 +417,6 @@ export class TurnRunner {
         nextSession = (await this.repository.getSession(session.id, userId)) || nextSession;
       }
 
-      const narrativeTraceLabel =
-        resolution.intent === "plan_trip" || resolution.intent === "refine_trip"
-          ? "Crafting your travel narrative"
-          : "Drafting response";
-      await emitTrace("narrator", "running", narrativeTraceLabel);
       const narrative = await answerConversationally(
         this.providerService,
         await getResolvedProvider(),
@@ -505,7 +425,6 @@ export class TurnRunner {
         research,
         planningContext
       );
-      await emitTrace("narrator", "completed", "Response ready");
       reply = [narrative.introBody, narrative.leadText].filter(Boolean).join(" ");
       const responseBlocks = buildResponseBlocks({
         session: nextSession,
@@ -681,7 +600,6 @@ export class TurnRunner {
         type: "message.committed",
         data: assistantMessage
       });
-      await emitTrace("lead", "failed", "Turn failed", message);
       this.streamHub.emit(session.id, {
         type: "turn.failed",
         data: {

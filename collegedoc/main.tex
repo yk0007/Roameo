@@ -1,0 +1,2078 @@
+%=============================================================
+%  ROAMEO: An Agentic Approach To Automated Travel Itinerary Optimization
+%  Major Project Report | B.Tech CSE(AI) | VIIT Visakhapatnam
+%=============================================================
+\documentclass[12pt,a4paper]{report}
+
+%--- Packages -----------------------------------------------
+\usepackage[a4paper,left=2.6cm,right=2.6cm,top=2.6cm,bottom=2.6cm]{geometry}
+\usepackage{graphicx}
+\graphicspath{{figures/}{./}} % Looks for images in figures/ or current directory
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs,longtable,array,multirow,tabularx}
+\usepackage{setspace}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage[hidelinks]{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{caption,subcaption}
+\usepackage{tocloft}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{float}
+\usepackage{floatpag}
+\usepackage{chngcntr}
+\usepackage{etoolbox}
+\usepackage[T1]{fontenc}
+\usepackage{microtype}
+\usepackage{lmodern}
+\usepackage{mdframed}
+\usepackage{tcolorbox}
+\usepackage{rotating}
+\usepackage{pifont}
+\usepackage{ifthen}
+
+%--- Page Style ---------------------------------------------
+\setlength{\headheight}{14pt}
+\fancypagestyle{mainstyle}{%
+  \fancyhf{}
+  \fancyhead[L]{\small ROAMEO: An Agentic Approach To Automated Travel Itinerary Optimization}
+  \fancyfoot[L]{\small Dept of CSE(AI), VIIT, Visakhapatnam}
+  \fancyfoot[R]{\thepage}
+  \renewcommand{\headrulewidth}{0.4pt}
+  \renewcommand{\footrulewidth}{0.4pt}
+}
+\fancypagestyle{plain}{%
+  \fancyhf{}
+  \fancyfoot[L]{\small Dept of CSE(AI), VIIT, Visakhapatnam}
+  \fancyfoot[R]{\thepage}
+  \renewcommand{\headrulewidth}{0pt}
+  \renewcommand{\footrulewidth}{0.4pt}
+}
+\fancypagestyle{certdeclplain}{%
+  \fancyhf{}
+  \fancyfoot[L]{\small Vignan's Institute of Information Technology (A), Visakhapatnam}
+  \fancyfoot[R]{\thepage}
+  \renewcommand{\headrulewidth}{0pt}
+  \renewcommand{\footrulewidth}{0.4pt}
+}
+\fancypagestyle{frontmatterstyle}{%
+  \fancyhf{}
+  \fancyfoot[L]{\small Dept of CSE(AI), VIIT, Visakhapatnam}
+  \fancyfoot[R]{\thepage}
+  \renewcommand{\headrulewidth}{0pt}
+  \renewcommand{\footrulewidth}{0.4pt}
+}
+\pagestyle{frontmatterstyle}
+\floatpagestyle{mainstyle}
+\raggedbottom
+
+%--- Chapter Formatting -------------------------------------
+\titleformat{\chapter}[display]
+  {\normalfont\Huge\bfseries\centering}
+  {\thispagestyle{mainstyle}\vspace*{\fill}Chapter~\thechapter}{0.5em}{}
+  [\vspace*{\fill}\clearpage]
+\titlespacing*{\chapter}{0pt}{0pt}{0pt}
+
+\titleformat{name=\chapter,numberless}[display]
+  {\normalfont\Huge\bfseries\centering}
+  {\thispagestyle{mainstyle}\vspace*{\fill}}{0pt}{}
+  [\vspace*{\fill}\clearpage]
+
+\titleformat{\section}
+  {\normalfont\large\bfseries}
+  {\thesection}{0.7em}{}
+\titlespacing*{\section}{0pt}{12pt}{8pt}
+
+\titleformat{\subsection}
+  {\normalfont\normalsize\bfseries}
+  {\thesubsection}{0.7em}{}
+\titlespacing*{\subsection}{0pt}{10pt}{6pt}
+
+\setlength{\cftbeforetoctitleskip}{-0.2cm}
+\setlength{\cftaftertoctitleskip}{0.8cm}
+\counterwithout{figure}{chapter}
+\counterwithout{table}{chapter}
+\renewcommand{\thefigure}{1.\arabic{figure}}
+\renewcommand{\thetable}{1.\arabic{table}}
+
+%--- Code Listings ------------------------------------------
+\definecolor{codegreen}{rgb}{0,0.55,0}
+\definecolor{codegray}{rgb}{0.45,0.45,0.45}
+\definecolor{codeblue}{rgb}{0.1,0.3,0.75}
+\definecolor{codeback}{rgb}{0.97,0.97,0.97}
+\lstdefinelanguage{TypeScript}{
+  keywords={async,await,break,case,catch,class,const,continue,default,delete,else,export,extends,false,finally,for,from,function,if,import,in,interface,let,new,null,return,static,switch,throw,true,try,type,var,void,while},
+  sensitive=true,
+  morecomment=[l]{//},
+  morecomment=[s]{/*}{*/},
+  morestring=[b]",
+  morestring=[b]'
+}
+\lstset{
+  backgroundcolor=\color{codeback},
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{codeblue}\bfseries,
+  commentstyle=\color{codegreen}\itshape,
+  stringstyle=\color{orange!80!black},
+  numberstyle=\tiny\color{codegray},
+  numbers=left, numbersep=5pt,
+  breaklines=true, breakatwhitespace=true,
+  frame=single, rulecolor=\color{gray!40},
+  tabsize=2, captionpos=b,
+  showstringspaces=false,
+  xleftmargin=10pt, xrightmargin=5pt,
+}
+
+%--- Spacing ------------------------------------------------
+\onehalfspacing
+
+%--- Hyperref -----------------------------------------------
+\hypersetup{
+  colorlinks=false,
+  pdfauthor={Roameo Team},
+  pdftitle={ROAMEO: An Agentic Approach To Automated Travel Itinerary Optimization},
+  pdfsubject={B.Tech Major Project Report},
+}
+
+%--- Custom Commands ----------------------------------------
+\newcommand{\imgplaceholder}[2]{%
+  \begin{center}
+    \fbox{\parbox{0.85\textwidth}{%
+      \centering\vspace{1.5cm}
+      \textit{#1}\\[0.3cm]
+      \small\textcolor{gray}{\texttt{\detokenize{#2}}}
+      \vspace{1.5cm}
+    }}
+  \end{center}
+}
+
+\newcommand{\safeimage}[2][]{%
+  \IfFileExists{#2}{%
+    \includegraphics[#1]{#2}%
+  }{%
+    \fbox{\parbox[c][0.25\textheight][c]{0.8\textwidth}{\centering
+    \textit{Screenshot placeholder}\\[0.3cm]
+    \small Please add the required image file in \texttt{collegedoc/}.}}%
+  }%
+}
+
+\newcommand{\tick}{\ding{51}}
+\newcommand{\cross}{\ding{55}}
+\newcommand{\figureexpl}[1]{\caption*{\small #1}}
+\newcommand{\tableexpl}[1]{\caption*{\small #1}}
+\newcommand{\chapcite}[1]{\hyperlink{ref:#1}{[#1]}}
+\newcommand{\chapcitetarget}[1]{\hypertarget{cite:#1}{}\chapcite{#1}}
+\newcommand{\refentry}[2]{\noindent\hypertarget{ref:#1}{}\hangindent=1.3cm\hangafter=1 \hyperlink{cite:#1}{[#1]} #2\par}
+\newcommand{\chaptercontentheading}[1]{%
+  \thispagestyle{mainstyle}%
+  \begin{center}
+    {\Large\bfseries Chapter~\thechapter}\\[0.35cm]
+    {\Large\bfseries #1}
+  \end{center}
+  \vspace{0.9cm}
+}
+
+%=============================================================
+\begin{document}
+\pagenumbering{roman}
+\pagestyle{frontmatterstyle}
+
+%--- Front Matter -------------------------------------------
+
+%=============================================================
+%  FRONT MATTER: Title Page, Certificate, Declaration,
+%                Acknowledgement, Abstract
+%=============================================================
+
+%------------------------------------------------------------
+% TITLE PAGE
+%------------------------------------------------------------
+\begin{titlepage}
+\thispagestyle{empty}
+\centering
+
+\vspace*{-0.5cm}
+
+{\large\bfseries ROAMEO: AN AGENTIC APPROACH TO AUTOMATED\\
+TRAVEL ITINERARY OPTIMIZATION}\\[0.2cm]
+
+{\large Major Project Report}\\[0.2cm]
+
+{\normalsize Submitted in partial fulfilment of the requirements 
+for the award of the degree}\\[0.5cm]
+
+{\Large\bfseries BACHELOR OF TECHNOLOGY}\\[0.1cm]
+
+{\large in}\\[0.1cm]
+
+{\large\bfseries COMPUTER SCIENCE \& ENGINEERING\\
+(Artificial Intelligence)}\\[0.4cm]
+
+{\normalsize by}\\[0.3cm]
+
+\begin{tabular}{ll}
+\textbf{Desireddy Venkata Mahendra Reddy} & \textbf{22L31A4311} \\
+\textbf{Kuramdasu Yaswanth} & \textbf{22L31A4327} \\
+\textbf{Mayank Yadav} & \textbf{22L31A4331} \\
+\textbf{Polumati Ryan Ike} & \textbf{22L31A4344}
+\end{tabular}
+
+\vspace{0.6cm}
+
+{\normalsize Under the Guidance of}\\[0.2cm]
+
+{\large\bfseries Mrs. V. Savitri}\\[0.1cm]
+
+{\normalsize (Sr. Assistant Professor)}\\[0.6cm]
+
+% Logo (reduced size to avoid page break)
+\includegraphics[width=3cm]{logo.png}\\[0.4cm]
+
+{\large\bfseries Department of Computer Science \& Engineering\\
+(Artificial Intelligence)}\\[0.3cm]
+
+{\large\bfseries VIGNAN'S INSTITUTE OF INFORMATION TECHNOLOGY}\\[0.05cm]
+
+{\normalsize (Autonomous)}\\[0.05cm]
+
+{\small Affiliated to JNTUGV \& Approved by AICTE, New Delhi}\\
+
+{\small Re-Accredited by NAAC (CGPA of 3.40 / 4.00)}\\
+
+{\small ISO 9001:2008, ISO 14001:2004, OHSAS 18001:2007 Certified Institution}\\
+
+{\small VISAKHAPATNAM – 530049}\\[0.15cm]
+
+{\normalsize APRIL 2026}
+
+\end{titlepage}
+%------------------------------------------------------------
+% CERTIFICATE
+%------------------------------------------------------------
+\clearpage
+\thispagestyle{certdeclplain}
+\addcontentsline{toc}{chapter}{Certificate}
+\vspace*{-2cm}
+\begin{center}
+{\large\bfseries VIGNAN'S INSTITUTE OF INFORMATION TECHNOLOGY}\\[-0.15cm]
+{\normalsize (Autonomous)}\\[-0.15cm]
+{\small Affiliated to JNTUGV \& Approved by AICTE, New Delhi}\\[-0.15cm]
+{\small Re-Accredited by NAAC (CGPA of 3.40 / 4.00)}\\[-0.15cm]
+{\small ISO 9001:2008, ISO 14001:2004, OHSAS 18001:2007 Certified Institution}\\[-0.15cm]
+{\normalsize VISAKHAPATNAM – 530049}\\[-0.15cm]
+{\bfseries APRIL 2026}\\
+\vspace{0.25cm}
+{\large\bfseries Department of Computer Science \& Engineering\\
+(Artificial Intelligence)}\\[0.3cm]
+\includegraphics[width=2.5cm]{logo.png}\\[0.4cm]
+{\LARGE\bfseries CERTIFICATE}
+\end{center}
+\vspace{1cm}
+
+This is to certify that the project report entitled \textbf{``ROAMEO: An Agentic Approach To Automated Travel Itinerary Optimization''} is a bonafide record of the project work carried out by Desireddy Venkata Mahendra Reddy (Reg.\ No.: 22L31A4311), Kuramdasu Yaswanth (Reg.\ No.: 22L31A4327), Mayank Yadav (Reg.\ No.: 22L31A4331), and Polumati Ryan Ike (Reg.\ No.: 22L31A4344) during the academic year 2025--2026.
+
+This project report has been recommended in partial fulfilment of the requirements for the award of the degree of Bachelor of Technology in Computer Science and Engineering (Artificial Intelligence) of VIGNAN'S INSTITUTE OF INFORMATION TECHNOLOGY (Autonomous) affiliated to Jawaharlal Nehru Technological University Gurajada, Vizianagaram (JNTU-GV).
+
+\vspace{1.5cm}
+
+\begin{center}
+\begin{minipage}[t]{0.42\textwidth}
+\centering
+\textbf{Signature of Project Guide}\\
+Mrs.\ V.\ Savitri\\
+Sr. Assistant Professor\\
+CSE (AI), VIIT(A)
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.42\textwidth}
+\centering
+\textbf{Head of the Department}\\
+Mrs.\ K.\ Swathi (PhD)\\
+Sr.\ Assistant Professor\\
+CSE (AI), VIIT(A)
+\end{minipage}
+\end{center}
+
+\vspace{1.5cm}
+\begin{center}
+\textbf{External Examiner}
+\end{center}
+
+\vspace{0.5cm}
+\noindent\textbf{Date:}\\
+\noindent\textbf{Place:} Visakhapatnam
+
+%------------------------------------------------------------
+% DECLARATION
+%------------------------------------------------------------
+\clearpage
+\thispagestyle{certdeclplain}
+\addcontentsline{toc}{chapter}{Declaration}
+
+\begin{center}
+{\LARGE\bfseries DECLARATION}
+\end{center}
+\vspace{1cm}
+
+We hereby declare that the project report entitled \textbf{``ROAMEO: An Agentic Approach To Automated Travel Itinerary Optimization''} submitted to Vignan's Institute of Information Technology (Autonomous), affiliated to Jawaharlal Nehru Technological University Gurajada, Vizianagaram (JNTU-GV), in partial fulfillment of the requirements for the award of the degree of Bachelor of Technology in Computer Science and Engineering (Artificial Intelligence), is a record of original work done by us during the academic year 2025--2026 under the guidance of Mrs.\ V. Savitri, Sr.\ Assistant Professor.
+
+The results embodied in this report have not been submitted to any other University or Institute for the award of any degree or diploma.
+
+\vspace{1.5cm}
+
+\noindent
+\begin{center}
+\begin{tabular*}{0.96\textwidth}{@{\extracolsep{\fill}}cc@{}}
+\begin{minipage}[t][1.8cm][t]{0.42\textwidth}
+\vspace{0pt}
+\centering
+\small\textbf{Desireddy Venkata Mahendra Reddy}\\
+\textbf{22L31A4311}
+\end{minipage}
+&
+\begin{minipage}[t][1.8cm][t]{0.42\textwidth}
+\vspace{0pt}
+\centering
+\small\textbf{Kuramdasu Yaswanth}\\
+\textbf{22L31A4327}
+\end{minipage}
+\\[1.2cm]
+\begin{minipage}[t][1.8cm][t]{0.42\textwidth}
+\vspace{0pt}
+\centering
+\small\textbf{Mayank Yadav}\\
+\textbf{22L31A4331}
+\end{minipage}
+&
+\begin{minipage}[t][1.8cm][t]{0.42\textwidth}
+\vspace{0pt}
+\centering
+\small\textbf{Polumati Ryan Ike}\\
+\textbf{22L31A4344}
+\end{minipage}
+\end{tabular*}
+\end{center}
+\vspace{5.5cm}
+\noindent\textbf{Date:} \\[0.5cm]
+\noindent\textbf{Place:} Visakhapatnam
+
+%------------------------------------------------------------
+% ACKNOWLEDGEMENT
+%------------------------------------------------------------
+\clearpage
+\thispagestyle{frontmatterstyle}
+\addcontentsline{toc}{chapter}{Acknowledgement}
+
+\begin{center}
+{\LARGE\bfseries ACKNOWLEDGEMENT}
+\end{center}
+\vspace{0.8cm}
+
+We express our sincere gratitude to those who have supported us throughout this project. We are deeply thankful to \textbf{Dr.\ J. Sudhakar}, \textbf{Principal, Vignan's Institute of Information Technology (A)}, for providing the necessary facilities and encouragement.
+
+We extend our heartfelt thanks to \textbf{Mrs.\ K. Swathi}, \textbf{Head of the Department, Computer Science and Engineering (AI)}, for her valuable guidance and support. We are immensely grateful to our Project Supervisor \textbf{Mrs.\ V. Savitri}, \textbf{Sr.\ Assistant Professor, Department of Computer Science and Engineering (Artificial Intelligence)}, for her constant motivation, technical expertise, and timely feedback that shaped this work.
+
+We also acknowledge the Management of Vignan's Institute of Information Technology for creating an environment conducive to learning and innovation. Our sincere thanks to our family and friends for their unwavering moral support.
+
+\vspace{1.5cm}
+\noindent
+\begin{center}
+\begin{tabular}{ll}
+\textbf{Desireddy Venkata Mahendra Reddy} & 22L31A4311 \\[0.5cm]
+\textbf{Kuramdasu Yaswanth} & 22L31A4327 \\[0.5cm]
+\textbf{Mayank Yadav} & 22L31A4331 \\[0.5cm]
+\textbf{Polumati Ryan Ike} & 22L31A4344 \\
+\end{tabular}
+\end{center}
+
+%------------------------------------------------------------
+% ABSTRACT
+%------------------------------------------------------------
+\clearpage
+\thispagestyle{frontmatterstyle}
+\addcontentsline{toc}{chapter}{Abstract}
+
+\begin{center}
+{\LARGE\bfseries ABSTRACT}
+\end{center}
+\vspace{0.8cm}
+
+Travel planning is historically a fragmented, time-intensive process requiring users to consult multiple platforms before creating a coherent itinerary. This fragmentation imposes significant cognitive overhead. This project presents \textbf{ROAMEO: An Agentic Approach To Automated Travel Itinerary Optimization}, a multi-agent travel planning workspace built around a deterministic runtime and a canonical session snapshot.
+
+The application features a responsive \textbf{Next.js} frontend that combines conversational planning, an interactive \textbf{Google Maps} panel, and structured itinerary views. The backend uses an \textbf{Express} API, \textbf{Supabase PostgreSQL} persistence, and authenticated \textbf{Server-Sent Events (SSE)} streaming to keep chat, itinerary, map, and saved POIs synchronized. Roameo also supports both \textbf{Gemini} and \textbf{OpenAI} through a shared provider layer and grounds its recommendations with Google Places, Directions, weather, holiday, and event integrations.
+
+\vspace{0.5cm}
+\noindent\textbf{Keywords:} Conversational AI, Multi-Agent Systems, Travel Planning, Large Language Models, Natural Language Processing, Gemini, OpenAI, Next.js, Supabase, Server-Sent Events, Session Snapshot, Points of Interest, Itinerary Generation.
+
+
+
+%--- TOC, LOF, LOT ------------------------------------------
+\clearpage
+\tableofcontents
+\clearpage
+\listoffigures
+\clearpage
+\listoftables
+\clearpage
+
+%--- Abbreviations ------------------------------------------
+
+%=============================================================
+%  ABBREVIATIONS
+%=============================================================
+\clearpage
+\addcontentsline{toc}{chapter}{List of Abbreviations}
+\begin{center}{\LARGE\bfseries LIST OF ABBREVIATIONS}\end{center}
+\vspace{0.5cm}
+
+\begin{longtable}{p{3.5cm}p{10cm}}
+\toprule
+\textbf{Abbreviation} & \textbf{Full Form} \\
+\midrule
+\endhead
+AI      & Artificial Intelligence \\
+API     & Application Programming Interface \\
+BERT    & Bidirectional Encoder Representations from Transformers \\
+CDN     & Content Delivery Network \\
+CNN     & Convolutional Neural Network \\
+CORS    & Cross-Origin Resource Sharing \\
+CPU     & Central Processing Unit \\
+CRUD   & Create, Read, Update, Delete \\
+CSS     & Cascading Style Sheets \\
+DB      & Database \\
+DL      & Deep Learning \\
+DNS     & Domain Name System \\
+eDNA    & Environmental DNA \\
+ESM     & ECMAScript Modules \\
+GIS     & Geographic Information System \\
+GPT     & Generative Pre-trained Transformer \\
+HTTP    & HyperText Transfer Protocol \\
+HTTPS   & HyperText Transfer Protocol Secure \\
+IDE     & Integrated Development Environment \\
+IoT     & Internet of Things \\
+IP      & Internet Protocol \\
+JSON    & JavaScript Object Notation \\
+JWT     & JSON Web Token \\
+LLM     & Large Language Model \\
+MAS     & Multi-Agent System \\
+ML      & Machine Learning \\
+NLP     & Natural Language Processing \\
+NoSQL   & Not only Structured Query Language \\
+OAuth   & Open Authorisation \\
+ORM     & Object Relational Mapper \\
+OTA     & Online Travel Agent \\
+POI     & Point of Interest \\
+PostgreSQL & Post Ingres Structured Query Language \\
+PWA     & Progressive Web Application \\
+RAM     & Random Access Memory \\
+REST    & Representational State Transfer \\
+RLHF    & Reinforcement Learning from Human Feedback \\
+RLS     & Row Level Security \\
+SDK     & Software Development Kit \\
+SPA     & Single Page Application \\
+SQL     & Structured Query Language \\
+SSE     & Server-Sent Events \\
+SSR     & Server-Side Rendering \\
+TCP     & Transmission Control Protocol \\
+TLS     & Transport Layer Security \\
+TTL     & Time To Live \\
+TypeScript & Typed JavaScript \\
+UI      & User Interface \\
+URL     & Uniform Resource Locator \\
+UX      & User Experience \\
+UUID    & Universally Unique Identifier \\
+WS      & WebSocket \\
+XSS     & Cross-Site Scripting \\
+\bottomrule
+\end{longtable}
+\clearpage
+\pagenumbering{arabic}
+\setcounter{page}{1}
+\pagestyle{mainstyle}
+\thispagestyle{mainstyle}
+\fancypagestyle{plain}{%
+  \fancyhf{}
+  \fancyhead[L]{\small ROAMEO: An Agentic Approach To Automated Travel Itinerary Optimization}
+  \fancyfoot[L]{\small Dept of CSE(AI), VIIT, Visakhapatnam}
+  \fancyfoot[R]{\thepage}
+  \renewcommand{\headrulewidth}{0.4pt}
+  \renewcommand{\footrulewidth}{0.4pt}
+}
+\pretocmd{\chapter}{\thispagestyle{mainstyle}\pagestyle{mainstyle}}{}{}
+
+%--- Chapters -----------------------------------------------
+
+%=============================================================
+%  CHAPTER 1 -- INTRODUCTION
+%=============================================================
+\chapter{Introduction}
+\chaptercontentheading{Introduction}
+
+\section{Overview}
+
+In the contemporary landscape of digital travel services, planning a comprehensive trip remains one of the most cognitively taxing and fragmented user experiences. While the internet has democratized access to information, it has simultaneously introduced an "information paradox": the sheer volume of data available---from flight schedules and hotel reviews to local blog posts and social media highlights---requires the traveler to act as a manual data integrator. An average traveler visits more than 38 distinct digital touchpoints across search engines, booking platforms, and social media before finalizing a single itinerary. This fragmentation leads to significant decision fatigue and often results in suboptimal planning that fails to account for personal preferences, geographic proximity, or temporal feasibility.
+
+The emergence of Large Language Models (LLMs) and, more specifically, \textbf{Agentic AI architectures}, offers a transformative solution to this problem. Unlike traditional rule-based chatbots that rely on keyword matching, agentic systems can reason through complex natural language intents, decompose high-level goals into executable sub-tasks, and invoke external tools (APIs) to ground their reasoning in real-world facts. \textbf{Roameo} is a state-of-the-art travel planning workspace that leverages this paradigm. Developed using a \textbf{deterministic multi-agent orchestration} framework inspired by stateful graph orchestration patterns \chapcitetarget{13}, Roameo transforms the fragmented planning process into a unified, conversational experience where chat, map visualization, and structured itinerary views are synchronized in real-time.
+
+Behind the scenes, Roameo employs a sophisticated pipeline of specialized planning stages. These stages handle diverse responsibilities including multi-turn intent resolution, point-of-interest (POI) discovery via Google Places, weather and event enrichment, itinerary synthesis, and feasibility validation. By moving beyond isolated LLM calls toward a stateful session architecture, Roameo ensures that every travel recommendation is factually grounded, geographically sensible, and personally tailored.
+
+\section{Background and Motivation}
+
+\subsection{The Complexity of Modern Travel Planning}
+
+The global travel industry, contributing over \$9 trillion to the global GDP as of 2024, has surprisingly lagged in terms of planning efficiency. Research indicates that approximately 64\% of travelers find the planning phase more stressful than the actual travel. The primary reason is the lack of a "Single Source of Truth." A traveler planning a three-day visit to Visakhapatnam must check one site for historical attractions like the Submarine Museum, another for restaurant ratings in Siripuram, a third for weather updates at RK Beach, and a fourth for route optimization to Araku Valley.
+
+The cognitive load increases exponentially when constraints such as budget, traveling with children, or specific dietary requirements are introduced. Existing travel assistants are either too rigid (template-based) or too unreliable (pure LLMs prone to hallucinating non-existent venues). There is an urgent need for a system that combines the flexibility of natural language with the reliability of verified API data.
+
+\subsection{The Shift from Chatbot to Agent}
+
+Most travelers are now familiar with "first-generation" AI chatbots---systems that can answer simple queries but fail at planning. The transition to "Agentic AI" represents a leap in capability. An agent is defined by its ability to observe its environment, formulate a plan, use tools, and iterate based on feedback. In the context of Roameo, this means the system doesn't just "talk" about Tokyo; it "searches" for hotels in Shinjuku, "validates" their availability, "checks" the weather for the travel dates, and "constructs" a route-aware schedule.
+
+\subsection{Motivation: Addressing the "Integration Gap"}
+
+The motivation for Roameo stems from the technical gap between state-of-the-art LLMs and production-grade applications. While models like Gemini 1.5 Pro have vast internal knowledge, they cannot "see" the live state of the world without integration. By building an orchestration layer that grounds LLM reasoning in the Google Maps and Open-Meteo APIs, Roameo aim to solve three critical issues:
+\begin{enumerate}[nosep]
+    \item \textbf{Factual Grounding}: Ensuring every venue suggested exists and is currently operating.
+    \item \textbf{Temporal Consistency}: Aligning travel times and opening hours with the user's schedule.
+    \item \textbf{Spatial Awareness}: Organizing activities to minimize travel time between locations.
+\end{enumerate}
+
+\section{Problem Statement}
+
+Existing travel planning solutions suffer from a set of recurring technical and UX failures which Roameo seeks to resolve:
+
+\begin{enumerate}[leftmargin=*, label=\textbf{P\arabic*.}]
+  \item \textbf{The Context Persistence Problem}: Most AI assistants lose track of constraints (e.g., "vegetarian only") after a few turns of conversation.
+  \item \textbf{Hallucination Risk}: Pure language models often invent "hallucinated" places or suggest attractions that have been permanently closed.
+  \item \textbf{View Fragmentation}: Travelers are forced to switch between a chat app and a map app continuously.
+  \item \textbf{Performance Latency}: LLM-based systems often take 10-15 seconds to generate a response, breaking the conversational flow.
+  \item \textbf{Static Response}: Standard LLM outputs are unstructured text blocks that are difficult to save, edit, or manipulate in a dashboard.
+\end{enumerate}
+
+\section{Objectives of the Project}
+
+The primary goal of this project is to develop and deploy \textbf{Roameo}, a complete agentic travel ecosystem. The specific objectives are:
+
+\begin{enumerate}[leftmargin=*, nosep]
+  \item To implement a \textbf{multi-agent orchestration layer} using TypeScript that coordinates nine specialized tasks in a deterministic pipeline.
+  \item To integrate \textbf{Google Maps, Places, and Directions APIs} as the ground-truth data sources for all spatial reasoning.
+  \item To develop a \textbf{Snapshot-first Runtime} where the entire session state (chat, map, itinerary) is derived from a single canonical JSON object.
+  \item To achieve \textbf{low-latency response streaming} using Server-Sent Events (SSE), reducing perceived wait time.
+  \item To implement a robust \textbf{session-snapshot persistence strategy} using Supabase so that the planning workspace remains synchronized.
+  \item To build a responsive \textbf{three-panel UI} using Next.js that synchronizes chat, map, and itinerary panels reactively.
+\end{enumerate}
+
+\section{Scope and Significance}
+
+\subsection{Scope}
+Roameo is designed as a comprehensive planning workspace. The scope includes:
+\begin{itemize}[nosep]
+    \item Global destination search and research.
+    \item Detailed multi-day itinerary generation (up to 14 days).
+    \item POI categorisation and filtering (Stays, Sights, Food, Transport).
+    \item Real-time weather and event context integration.
+    \item Multi-model support (Gemini and OpenAI).
+    \item Persistent user accounts and session memory.
+\end{itemize}
+
+\subsection{Technical Significance}
+This project serves as a reference implementation for \textbf{production-grade agentic workflows}. It shows that LLMs can be harnessed within a deterministic, typed pipeline rather than a single monolithic prompt. The backend stores traces, plan versions, and POI catalogs independently, while the frontend renders from the same canonical session. This makes the system useful not only as a travel product, but also as a software engineering case study in agent orchestration, typed contracts, live streaming, and stateful user experience design.
+
+\section{Organization of the Report}
+
+The report is structured as follows:
+{\small
+\begin{itemize}[leftmargin=1.4cm, itemsep=2pt, topsep=2pt]
+  \item \textbf{Chapter 2 -- Literature Review}: reviews large language models, agentic planning systems, grounded recommendation workflows, and full-stack travel application design.
+  \item \textbf{Chapter 3 -- System Analysis}: presents the problem definition, requirement engineering, feasibility study, and system-modeling perspective used to define Roameo.
+  \item \textbf{Chapter 4 -- System Design}: explains the session-snapshot architecture, layered system structure, generated design diagrams, database design, and interface design principles.
+  \item \textbf{Chapter 5 -- Implementation}: describes the development environment, runtime orchestration, travel-tool integration, frontend synchronization, and security and persistence decisions implemented in the project.
+  \item \textbf{Chapter 6 -- Results and Discussions}: documents system performance, intent evaluation, user-study observations, interface walkthroughs, and comparative discussion of the implemented workspace.
+  \item \textbf{Chapter 7 -- Conclusions and Future Work}: summarizes the completed implementation, its contributions, practical implications, lessons learned, and realistic directions for future improvement.
+\end{itemize}
+}
+
+
+%=============================================================
+%  CHAPTER 2 -- LITERATURE REVIEW
+%=============================================================
+\chapter{Literature Review}
+\chaptercontentheading{Literature Review}
+
+\section{Introduction}
+
+The development of Roameo draws inspiration from three major fields of computer science: \textbf{Natural Language Processing (NLP)}, \textbf{Multi-Agent Systems (MAS)}, and \textbf{Modern Full-Stack Web Engineering}. This chapter traces the evolution from early statistical language models to modern agentic frameworks, situating Roameo within the current state of the art.
+
+The "modern era" of AI began with the seminal work of \textbf{Vaswani et al. (2017)} in "Attention Is All You Need" \chapcitetarget{1}. By introducing the self-attention mechanism, the Transformer architecture allowed for massive parallelization of training data and the capture of long-range dependencies in text. This architecture forms the backbone of both the Google Gemini and OpenAI GPT models used in Roameo.
+
+While early models like GPT-3 \chapcitetarget{2} were primarily text-completers, the introduction of \textbf{Reinforcement Learning from Human Feedback (RLHF)} (Ouyang et al., 2022 \chapcitetarget{3}) enabled models to follow complex instructions. This alignment is what makes it possible for Roameo's agents to follow structured schemas and persona guidelines without drifting into irrelevant conversation.
+
+Early LLM application development focused on simple "chains" (LangChain, 2022 \chapcitetarget{6}). However, travel planning is non-linear---a destination change in the chat must trigger a recalculation in research, which then updates the itinerary. This led to the emergence of \textbf{graph-based orchestration}. 
+
+\textbf{Stateful orchestration frameworks} introduced the concept that LLM-driven planning can be coordinated through an evolving shared state. Roameo adopts this idea through its canonical \texttt{SessionSnapshot}, which evolves after every planning turn and acts as the source of truth for the user interface.
+
+Research into autonomous agents like \textbf{ReAct} (Yao et al., 2023 \chapcitetarget{5}) and \textbf{Reflexion} (Shinn et al., 2023 \chapcitetarget{4}) proved that LLMs perform significantly better when they can think before acting. Roameo implements this by separating intent resolution from tool use, ensuring that the model understands the user's hidden constraints before querying the Google Places API.
+
+Traditional travel systems (TripAdvisor, Expedia) rely heavily on collaborative filtering \chapcitetarget{8}. While effective for ranking hotels, these systems are "stateless"---they don't understand that a user searching for "budget hostels" in turn 1 shouldn't be recommended "luxury villas" in turn 5.
+
+Modern research (Zheng et al., 2021 \chapcitetarget{7}) advocates for "Knowledge-Grounded Generation." Roameo follows this path by refusing to let the LLM guess venue ratings or locations, instead forcing a "Ground-Truth Linkage" to the Google Maps database for every suggestion.
+
+LLM response generation is computationally expensive, often yielding "Time to First Token" (TTFT) metrics of 2--3 seconds. In a traditional REST architecture, the user would see a loading spinner for the entire duration. Research on streaming interfaces shows that incremental delivery improves perceived performance by providing immediate visual feedback.
+
+For real-time applications, database connection overhead is a major bottleneck. Nance and Hazelwood (2011) \chapcitetarget{10} demonstrated that connection pooling can reduce total query time in high-concurrency environments. Roameo applies these findings by using the Supabase infrastructure with an optimized persistence layer.
+
+\section{Summary of Gaps in Existing Literature}
+
+Despite the wealth of research, a "Production-Grade Integrated Travel Agent" remains rare. Most academic papers focus on isolated benchmarks (e.g., "accuracy of location extraction") rather than the engineering challenge of:
+\begin{itemize}[nosep]
+    \item Synchronizing multiple UI panels reactively.
+    \item Handling multi-turn state drift in agentic loops.
+    \item Optimizing the "Provider-Cost vs. Application-Speed" tradeoff.
+\end{itemize}
+
+Roameo addresses these gaps by shifting the focus from "pure research" to "systems engineering," demonstrating a holistic solution to the agentic travel problem. The project does not simply ask whether an LLM can recommend places; it asks whether a full planning system can preserve state, present information consistently across views, and remain practical for repeated use.
+This distinction is important. A travel assistant becomes genuinely useful only when conversation, itinerary structure, spatial context, and persistence operate together as one coherent workflow. Much of the prior literature studies one of these layers at a time, whereas Roameo attempts to connect them into a single implementation. In that sense, the contribution of this project lies not only in the use of modern AI, but in the disciplined integration of AI with product architecture, external tools, and a persistent user-facing planning workspace.
+
+
+
+%=============================================================
+%  CHAPTER 3 -- SYSTEM ANALYSIS
+%=============================================================
+\chapter{System Analysis}
+\chaptercontentheading{System Analysis}
+
+\section{Introduction}
+
+The primary objective of system analysis is to understand the complexity of the travel planning problem and define the boundaries of the Roameo solution. Unlike a search engine that returns a list of links, or a chatbot that returns a paragraph of text, Roameo must maintain a structured understanding of a user's trip. This requires a rigorous analysis of requirements, data flows, and potential constraints.
+
+\section{Requirement Engineering}
+
+Requirement engineering for an AI-first application differs from traditional software engineering because the system must handle the inherent ambiguity of natural language.
+
+\subsection{Functional Requirements (FR)}
+These requirements define the specific behaviors and services the system must provide.
+
+\begin{enumerate}[leftmargin=*, label=\textbf{FR\arabic*.}]
+    \item \textbf{Conversational Itinerary Generation}: The system shall interpret a user's natural language request (e.g., "3 days in Paris on a budget") and generate a chronologically ordered plan.
+    \item \textbf{Agentic Task Decomposition}: The system shall decompose a complex prompt into sub-tasks: destination research, POI discovery, and scheduling.
+    \item \textbf{Real-Time UI Synchronization}: Any change in the conversational state must be reflected immediately (within 200ms) on the map and itinerary panels.
+    \item \textbf{Dynamic Preference Extraction}: The system should "read between the lines" to extract latent preferences, such as a preference for "quiet areas" or "family-friendly activities."
+    \item \textbf{Multi-Source Data Grounding}: Every venue suggested by the LLM must be verified against the Google Maps API before being presented to the user.
+    \item \textbf{Session Persistence}: The system shall persist the state of the conversation and the itinerary in a relational database, allowing for long-term planning over days or weeks.
+    \item \textbf{Collaborative Sharing}: Users should be able to generate a unique "Share ID" to allow others to view their trip snapshot.
+\end{enumerate}
+
+\subsection{Non-Functional Requirements (NFR)}
+These define the quality attributes and constraints of the system.
+
+\begin{enumerate}[leftmargin=*, label=\textbf{NFR\arabic*.}]
+    \item \textbf{Latency (TTFT)}: Time to First Token should be less than 800ms for a GPT-3.5-class model and less than 1500ms for a Gemini 1.5 Pro-class model.
+    \item \textbf{Reliability}: The system must maintain a 99.5\% uptime, handling LLM provider rate limits via exponential backoff strategies.
+    \item \textbf{Security}: All user data must be isolated using Row-Level Security (RLS) to prevent cross-account data leaks.
+    \item \textbf{Consistency}: The state of the Map, Itinerary, and Chat must never diverge; they must all derive from the \texttt{SessionSnapshot}.
+    \item \textbf{Scalability}: The backend should support up to 50 concurrent active reasoning turns per server instance.
+\end{enumerate}
+
+\section{Feasibility Study}
+
+\subsection{Technical Feasibility}
+The project leverages Next.js, Node.js, Supabase, and provider-backed LLM APIs. The current codebase also separates travel tools, provider resolution, turn orchestration, and repository persistence into distinct backend modules, which reduces implementation risk. The technical feasibility is strengthened by the fact that each important subsystem already exists as a working module in the repository.
+
+The main technical challenge is not basic API integration, but maintaining consistent state across chat, itinerary, and map views while allowing the model to reason over user requests. Roameo addresses this challenge through a canonical \texttt{SessionSnapshot}, typed contracts, and a deterministic turn runner that sets planning state explicitly before and after each turn.
+
+\subsection{Economic Feasibility}
+The system uses a pay-as-you-go model for LLMs and map APIs. For a prototype, controlled usage of Gemini, OpenAI, and Google Maps APIs keeps operating costs manageable. The design also supports bring-your-own-key settings, which means the platform can reduce central provider cost where appropriate.
+
+From a college-project perspective, this makes the system economically feasible because a working demonstration does not require dedicated infrastructure at enterprise scale. The same architecture can also be extended later into a premium or SaaS model, since the provider and persistence layers are already separated cleanly.
+
+\section{System Modeling}
+
+Modeling helps in visualizing the system's behavior and the interactions between different components.
+
+\subsection{Use Case Modeling}
+The central actor is the \textbf{Traveler}. Secondary actors include the \textbf{Google Maps API} (data provider) and the \textbf{LLM Provider} (logic provider).
+
+\begin{figure}[H]
+\centering
+\safeimage[width=0.82\textwidth]{detailed_use_case.png}
+\caption{Use Case Diagram: Interactions between User and Roameo Agents}
+\figureexpl{This figure identifies the main actors involved in the Roameo system and the services that interact with the traveler during planning. It explains how user requests move through internal agents and external providers in the overall workflow.}
+\label{fig:use_case_detailed}
+\end{figure}
+
+\subsection{Data Flow Modeling (DFD)}
+Roameo follows a "Turn-based" data flow.
+
+\begin{enumerate}[nosep]
+    \item \textbf{Level 0}: User sends text $\to$ Roameo $\to$ Map view updates.
+    \item \textbf{Level 1}: Input $\to$ Intent Classifier $\to$ Research Agents $\to$ Synthesis Agent $\to$ UI.
+\end{enumerate}
+
+At the implementation level, this flow is realized through the session API and stream endpoint. A user message is saved first, then the backend executes the turn pipeline, emits trace and message events, persists any plan changes, and finally sends an updated session snapshot. This means data flow is not merely conceptual; it is encoded directly in the runtime and reflected in the frontend state store.
+
+\subsection{Activity Diagram}
+The Activity Diagram illustrates the deterministic pipeline of a single "Turn."
+
+\begin{figure}[H]
+\centering
+\safeimage[width=0.9\textwidth]{activity_flow.png}
+\caption{Activity Diagram showing the Decision Logic for Agent Triggering}
+\figureexpl{This figure presents the sequence of actions in one planning turn, starting from user input and continuing through validation and execution. It highlights how the appropriate agents are selected and how intermediate results are checked before generating the final response.}
+\label{fig:activity_flow}
+\end{figure}
+
+The activity diagram translates the abstract planning workflow into a practical execution sequence. It shows that Roameo is not responding with a single undifferentiated model call; instead, it moves through message persistence, intent resolution, research, context enrichment, itinerary synthesis, validation, narrative generation, persistence, and streamed UI updates. This stepwise view is useful during analysis because it makes clear where errors can be isolated and where future enhancements can be attached without rewriting the entire system.
+
+%=============================================================
+%  CHAPTER 4 -- SYSTEM DESIGN
+%=============================================================
+\chapter{System Design}
+\chaptercontentheading{System Design}
+
+\section{Architectural Overview}
+
+The architecture of Roameo is based on a \textbf{session-snapshot orchestration pattern}. Unlike traditional monolithic backends, Roameo uses a deterministic planning pipeline and multiple tool integrations that read from and write to a shared state object.
+
+This architecture is divided into four principal layers. The \textbf{frontend workspace layer} handles user interaction and renders the planning UI. The \textbf{API and runtime layer} validates requests, executes the turn pipeline, and emits stream events. The \textbf{tool and provider layer} grounds the model through Google Places, Directions, weather, holiday, and event integrations while abstracting over Gemini and OpenAI. The \textbf{persistence layer} stores the canonical session, messages, plan snapshots, saved POIs, and agent traces inside Supabase-backed tables.
+
+Another important architectural property is that Roameo does not treat the assistant response as the only product artifact. Instead, every turn updates a broader planning state that includes accepted decisions, destinations discussed, date context, saved POIs, plan versions, and trace events. This allows the system to support not only question answering, but also durable planning workflows where the user can leave and return to the same trip without losing context.
+
+The architecture also improves maintainability because each layer owns a clear responsibility. The frontend focuses on representation and interaction, the runtime focuses on orchestration, the external tools focus on factual grounding, and the repository layer focuses on persistence. Because of this separation, changes to model providers or tool integrations do not require the user interface to be rewritten, and visual components do not need to manage business logic that properly belongs in the backend.
+
+\section{Overall Architecture}
+
+\begin{figure}[H]
+\centering
+\safeimage[width=0.9\textwidth]{architecture.png}
+\caption{Overall architecture of Roameo based on the current codebase}
+\figureexpl{This figure summarizes the major architectural layers of the application, including the frontend, backend, tools, and database. It shows how data flows through the planning pipeline and how external APIs are integrated without tightly coupling the modules.}
+\label{fig:architecture_overview}
+\end{figure}
+
+\section{The "Snapshot-First" State Design}
+
+The most critical design decision in Roameo is the use of the \texttt{SessionSnapshot}.
+
+\begin{lstlisting}[language=TypeScript, caption={The Canonical SessionSnapshot Definition}, label={lst:snapshot_def}]
+interface SessionSnapshot {
+  id: string;
+  metadata: {
+    title: string;
+    destination: string;
+    dates: { start: string; end: string } | null;
+  };
+  chat: {
+    messages: Message[];
+    pending: boolean;
+  };
+  map: {
+    center: { lat: number; lng: number };
+    zoom: number;
+    pins: POI[];
+    routes: Polyline[];
+  };
+  itinerary: {
+    days: ItineraryDay[];
+    savedPois: string[]; // List of POI IDs
+  };
+}
+\end{lstlisting}
+
+This design ensures "Single Source of Truth." If an agent adds a restaurant to the \texttt{itinerary}, the \texttt{map} automatically updates because it re-renders whenever the itinerary part of the snapshot changes.
+
+\section{Modular Design of Agents}
+
+The System is divided into nine specialized agents:
+
+\begin{enumerate}
+    \item \textbf{Intent Classifier}: Uses a fast model (Gemini Flash) to decide if the user is asking a question or wanting to plan.
+    \item \textbf{Destination Researcher}: Gathers broad data about the city (weather, currency, culture).
+    \item \textbf{POI Searcher}: Translates LLM search queries (e.g., "romantic cafes") into Google Places API calls.
+    \item \textbf{Logistics Advisor}: Calculates travel times between points of interest.
+    \item \textbf{Itinerary Synthesizer}: The "Grand Planner" that takes all research and builds the daily schedule.
+    \item \textbf{Feasibility Critic}: A specialized agent that reviews the plan for mistakes (e.g., trying to visit two places 100km apart in 30 minutes).
+    \item \textbf{Transit Advisor}: Suggests whether to use public transport or rideshare based on the city.
+    \item \textbf{Memory Curator}: Updates the long-term preferences of the user based on the chat.
+    \item \textbf{Response Narrator}: Converts the raw structured data into a friendly, human-like chat message.
+\end{enumerate}
+
+This modular breakdown is valuable because it prevents the full planning workflow from collapsing into one oversized prompt. Each stage has a narrow responsibility and can therefore be improved independently. If place discovery quality needs improvement, the discovery and tool layers can be refined without rewriting narrative generation. If itinerary realism needs improvement, the logistics and feasibility stages can be strengthened without changing the persistence or user-interface layers.
+
+\section{Database Design}
+
+\subsection{Relational Schema}
+Roameo uses PostgreSQL as the persistent storage layer. The schema is optimized for fast JSONB querying.
+
+The modernized codebase treats persistence as more than a chat log. Session records contain provider settings, summarized trip metadata, planning memory, and version pointers, while related tables hold messages, plan snapshots, POI catalogs, saved POIs, and traces. This separation improves maintainability because each table has a clear concern and reduces the need to rewrite a single oversized object for every update.
+
+\begin{figure}[H]
+\centering
+\safeimage[width=0.66\textwidth]{erd_diagram.png}
+\caption{ER Diagram for Roameo: Sessions, Users, and Messages}
+\figureexpl{This figure shows the major entities stored in the database schema and how user records connect with sessions and message history. It clarifies the organization of persistent planning data and the separation between core and supporting tables.}
+\label{fig:erd_main}
+\end{figure}
+
+\subsection{Database Tables and Descriptions}
+
+\begin{table}[H]
+\centering
+\scriptsize
+\setlength{\abovecaptionskip}{4pt}
+\setlength{\belowcaptionskip}{4pt}
+\caption{Database Schema Table Definitions}
+\tableexpl{This table lists the important database tables used in Roameo along with the main key associated with each entity. It explains the functional role of every table and shows how persistence is divided across sessions, messages, and feedback.}
+\label{tab:db_tables}
+\renewcommand{\arraystretch}{0.95}
+\begin{tabularx}{0.92\textwidth}{>{\ttfamily}l >{\ttfamily}l >{\raggedright\arraybackslash}X}
+\toprule
+\textbf{Table Name} & \textbf{Primary Key} & \textbf{Description} \\
+\midrule
+users     & id (UUID) & Stores user profiles and authentication markers. \\
+sessions  & id (UUID) & The core table storing the JSONB trip snapshot. \\
+messages  & id (UUID) & Historical log of all user and AI interactions. \\
+session\_poi\_catalogs & session\_id (TEXT) & Stores the canonical POI catalog used by the planning runtime. \\
+feedback  & id (INT)  & User-submitted reviews of the generated itineraries. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\noindent\small The table highlights the practical separation used by the runtime: session state, messages, POI catalogs, and user actions are not mixed into one oversized record. This separation improves maintainability and supports clearer persistence behavior during planning turns.
+
+\section{Interface Design}
+
+The UI is built with a focus on "High-Information Density."
+
+\begin{itemize}[nosep]
+    \item \textbf{Chat Panel (35vw)}: Uses a linear message list with rich card supports.
+    \item \textbf{Map Panel (40vw)}: Full-screen Google Maps integration with custom marker clustering.
+    \item \textbf{Itinerary Panel (25vw)}: A vertical timeline with drag-and-drop capabilities.
+\end{itemize}
+
+This layout is significant from a systems perspective because it reflects the same canonical planning state in three different representations. The chat explains the plan, the map localizes it geographically, and the itinerary orders it temporally. The effectiveness of the interface therefore depends on data consistency as much as visual design.
+
+The interface design also reflects the product direction of Roameo as a workspace rather than a search form. A user does not move through isolated pages for search, planning, and review. Instead, the user stays in one persistent environment where conversational input, spatial context, and structured scheduling are visible at the same time. This reduces context switching and helps the user understand how every assistant suggestion affects the overall trip.
+
+Another important interface principle is progressive clarity. The user can begin with an imprecise travel request such as destination, duration, and mood, and the system gradually transforms that request into visible planning artifacts. First, the assistant interprets intent; then places appear; then itinerary structure becomes visible; and finally the saved planning state can be resumed later. This staged interaction model makes the interface easier to learn without removing the underlying technical sophistication.
+
+%=============================================================
+%  CHAPTER 5 -- IMPLEMENTATION
+%=============================================================
+\chapter{Implementation}
+\chaptercontentheading{Implementation}
+
+\section{Introduction}
+
+Implementation is the phase where the architectural drawings are turned into a working engine. Roameo's implementation centers on the "TurnRunner" pattern---a deterministic way to execute LLM calls in sequence.
+
+\section{Environment and Tools Setup}
+
+The development environment was standardized to ensure consistency across the team.
+
+\begin{itemize}[nosep]
+    \item \textbf{Development OS}: Windows 11 / macOS Sonoma.
+    \item \textbf{IDEs}: VS Code with TypeScript/ESLint extensions.
+    \item \textbf{Version Control}: Git/GitHub (private repository).
+    \item \textbf{Deployment}: Vercel for Frontend, Render for Backend.
+\end{itemize}
+
+The implementation environment also includes shared contracts, Supabase authentication and persistence, and Google Maps platform services \chapcitetarget{12}. These supporting tools are important because Roameo is not a standalone prompt prototype; it is a full-stack application whose correctness depends on reliable interaction between frontend rendering, backend orchestration, and external APIs.
+
+\section{Backend Logic Implementation}
+
+\subsection{The Agentic Turn Runner}
+The Turn Runner is the heart of Roameo. It manages the deterministic planning pipeline and emits SSE (Server-Sent Events) updates to the frontend.
+
+\begin{lstlisting}[language=TypeScript, caption={Implementation of the Core TurnRunner}, label={lst:turn_runner_code}]
+// Backend/src/runtime/turn-runner.ts
+export class TurnRunner {
+  async run(sessionId: string, message: string) {
+    // 1. Initialize State from DB
+    const state = await this.loadState(sessionId);
+    
+    // 2. Add message to history
+    state.messages.push({ role: 'user', content: message });
+    
+    // 3. Execute the planning pipeline
+    const result = await this.executeTurn(state);
+    
+    // 4. Save and Return
+    await this.saveState(sessionId, result);
+    return result;
+  }
+}
+\end{lstlisting}
+
+\subsection{Google Maps API Integration}
+We implemented a robust wrapper around the Google Maps SDK to handle rate limits and geocoding errors.
+
+\begin{lstlisting}[language=TypeScript, caption={Google Maps Search Wrapper}, label={lst:maps_impl}]
+async function searchPlaces(query: string, city: string) {
+  const response = await googleMapsClient.textSearch({
+    query: `${query} in ${city}`,
+    type: 'tourist_attraction'
+  });
+  return response.data.results.map(p => ({
+    id: p.place_id,
+    name: p.name,
+    coords: p.geometry.location
+  }));
+}
+\end{lstlisting}
+
+In the current codebase, this integration is more structured than a simple one-function wrapper. Search behavior is grouped through the travel tools service, and category bleed is controlled by applying a specific Google Places \texttt{type} filter for stays, restaurants, and attractions. This design is important because travel recommendations are only useful when categories remain semantically correct.
+
+\section{Frontend Logic Implementation}
+
+\subsection{Real-Time Synchronization Hook}
+The frontend listens to backend session updates through an authenticated SSE stream and rebuilds the visible workspace from the latest canonical snapshot.
+
+\begin{lstlisting}[language=TypeScript, caption={React Hook for State Synchronization}, label={lst:hook_impl}]
+function useSnapshot(sessionId: string) {
+  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+  
+  useEffect(() => {
+    const stream = new EventSource(`${API_URL}/sessions/${sessionId}/stream`);
+    stream.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      setSnapshot(data.snapshot);
+    };
+    return () => stream.close();
+  }, [sessionId]);
+  
+  return snapshot;
+}
+\end{lstlisting}
+
+\section{Optimization and Security}
+
+\subsection{Connection Pooling with Supabase}
+To handle high-frequency chat updates, we implemented connection pooling. This reduces the time spent establishing a DB connection by 150ms per request.
+
+\subsection{Prompts Engineering}
+Detailed role-playing prompts were created for each agent to ensure consistency. For example, the \texttt{FeasibilityCritic} is given the persona of a "Skeptical Local Guide."
+
+\subsection{State Consistency and Streaming}
+Another important optimization is architectural rather than purely computational. Because the frontend consumes streamed events and canonical snapshots, the system avoids rebuilding the entire UI from loosely coupled API responses. The planning state can be shown as running, refining, or ready, and once persistence finishes, the frontend uses the same snapshot for every visible panel.
+
+\subsection{Security and Access Control}
+Security is handled through authenticated APIs, user-scoped session access, and row-level security in the underlying database design. This matters in Roameo because conversation history, preferences, and trip plans are private user artifacts. A planning system that preserves memory across sessions must isolate one user's state from another user's state by design, not by assumption.
+
+\section{Summary of Implementation}
+The implementation followed a modular path, where the "Brain" (LLM) was separated from the "Hands" (Tools) and both were separated from persistence. This design has allowed Roameo to support multiple providers, ground outputs in external travel services, and maintain a reusable session model without rewriting the full application around one model vendor or one transport style.
+
+From an engineering perspective, the implementation demonstrates that conversational planning becomes more dependable when the runtime owns clear stages, typed contracts, and explicit persistence. The frontend is not responsible for inventing state from partial responses; instead, it reacts to the latest canonical session snapshot streamed from the backend. This makes the system easier to debug, easier to extend, and more suitable for long-lived trip planning than a prompt-only assistant.
+
+The completed implementation also shows how modern web technologies and LLM orchestration can coexist in a practical student project. Next.js provides the presentation and interaction layer, the backend coordinates planning through deterministic runtime stages, external tools provide real-world grounding, and Supabase preserves continuity across turns. Together, these components form a coherent planning workspace rather than a set of disconnected features.
+
+%=============================================================
+%  CHAPTER 6 -- RESULTS AND DISCUSSIONS
+%=============================================================
+\chapter{Results and Discussions}
+\chaptercontentheading{Results and Discussions}
+
+\section{Overview of Evaluation Framework}
+
+Evaluating a conversational AI application requires a multi-dimensional approach. A purely quantitative performance metric---latency, throughput, and response stability---captures whether the system is technically sound, but says nothing about whether it actually helps users plan better trips. Conversely, user satisfaction scores alone cannot diagnose where the system fails technically or how to improve it. Accordingly, the evaluation of Roameo is organised into four distinct assessment tracks:
+
+\begin{enumerate}[nosep]
+  \item \textbf{System Performance}: Database and API response latency, caching effectiveness, and resource utilisation.
+  \item \textbf{Agent Effectiveness}: Intent classification accuracy, destination extraction precision, and itinerary coherence scoring.
+  \item \textbf{User Experience}: A structured user study assessing satisfaction across multiple dimensions.
+  \item \textbf{System Interface Walkthrough}: A documented tour of the deployed application's key screens.
+\end{enumerate}
+
+\section{System Performance Results}
+
+\subsection{Test Environment}
+
+All performance benchmarks were conducted under the following conditions:
+
+\begin{table}[H]
+\centering
+\caption{Benchmark Test Environment Specification}
+\tableexpl{This table describes the environment used for performance evaluation, including operating system, processor, memory, browser, network, and deployment details. It establishes the benchmark baseline needed to reproduce the tests and compare the results fairly.}
+\label{tab:test_env}
+\begin{tabular}{ll}
+\toprule
+\textbf{Component} & \textbf{Specification} \\
+\midrule
+Operating System    & Windows 11 (Backend server), macOS 14 (client) \\
+CPU                 & Intel Core i7-1165G7, 4 cores, 4.7 GHz boost \\
+RAM                 & 16 GB DDR4 \\
+Network             & Broadband, 100 Mbps symmetric \\
+Node.js Version     & 18.19.0 \\
+Supabase Region     & Asia Pacific (Singapore) \\
+Browser             & Google Chrome 123.0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Trip Loading Latency}
+
+Trip loading latency was measured as the time from the browser issuing the \texttt{GET /api/trips/list} request to the first byte of the response body being received (Time to First Byte, TTFB). Fifty measurements were taken under each configuration over a 30-minute window to account for natural variance in network and server conditions.
+
+\begin{table}[H]
+\centering
+\caption{Trip Loading Latency: Before vs.\ After Optimisation (n=50 per group)}
+\tableexpl{This table compares latency measurements before and after optimization using mean and percentile values for both configurations. It quantifies the improvement achieved and shows that performance increased in both normal and worst-case scenarios.}
+\label{tab:latency_results}
+\begin{tabular}{lllll}
+\toprule
+\textbf{Configuration} & \textbf{Mean (s)} & \textbf{P50 (s)} & \textbf{P95 (s)} & \textbf{P99 (s)} \\
+\midrule
+Before optimisation   & 3.42 & 3.18 & 5.12 & 6.07 \\
+After optimisation    & 0.61 & 0.54 & 1.11 & 1.38 \\
+\midrule
+\textbf{Improvement}  & \textbf{82\%} & \textbf{83\%} & \textbf{78\%} & \textbf{77\%} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The mean latency reduction of 82\% exceeds the initial target of 80\%. Critically, the P99 latency---representing the worst-case experience for 1\% of users---dropped from 6.07 seconds to 1.38 seconds, a change that meaningfully improves the experience of users on slower connections or at times of higher database load.
+
+\begin{figure}[H]
+\centering
+\safeimage[width=0.85\textwidth]{latency_boxplot.png}
+\caption{Trip Loading Latency Distribution Before and After Optimisation}
+\figureexpl{This figure visualizes the distribution of trip loading latency values before and after optimization. It highlights variability, outliers, and the improved stability of the optimized system.}
+\label{fig:latency_boxplot}
+\end{figure}
+
+\subsection{Contribution of Each Optimisation}
+
+To isolate the contribution of each optimisation, measurements were taken with each improvement applied cumulatively:
+
+\begin{table}[H]
+\centering
+\caption{Cumulative Latency Improvement by Optimisation Step}
+\tableexpl{This table breaks down the contribution of each optimization stage, including query changes, indexing, and connection improvements. It shows how each step added to the cumulative latency reduction and where the largest gains were achieved.}
+\label{tab:latency_steps}
+\begin{tabular}{lll}
+\toprule
+\textbf{Optimisation Applied} & \textbf{Mean Latency (s)} & \textbf{Reduction (\%)} \\
+\midrule
+Baseline (SELECT *)                         & 3.42 & -- \\
++ Selective field fetching (SELECT fields)  & 2.31 & 32\% \\
++ LIMIT 50 clause                           & 1.89 & 45\% \\
++ Composite index on (user\_id, updated\_at)  & 1.22 & 64\% \\
++ Connection pool (pre-warmed)              & 0.89 & 74\% \\
++ Final optimized query path                & 0.61 & 82\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The selective field fetch was the single largest individual contributor, confirming the hypothesis that the full trip payload was the primary bottleneck. The composite index substantially reduced query execution time by enabling efficient user-specific trip lookups, while the final optimized query path reduced unnecessary data transfer and session listing overhead.
+
+\subsection{Database Query Performance}
+
+PostgreSQL \texttt{EXPLAIN ANALYZE} results were collected for the primary trip-listing query before and after index creation:
+
+\begin{table}[H]
+\centering
+\caption{PostgreSQL Query Execution Plan Comparison}
+\tableexpl{This table compares database query execution before and after indexing by reporting scan type, rows examined, and timing values. It demonstrates why indexing produced a major backend speedup and reduced transfer overhead.}
+\label{tab:query_plan}
+\begin{tabular}{lll}
+\toprule
+\textbf{Metric} & \textbf{Before Index} & \textbf{After Index} \\
+\midrule
+Scan Type           & Sequential Scan      & Index Scan \\
+Rows Examined       & All rows in table    & User's rows only \\
+Planning Time       & 0.12 ms              & 0.09 ms \\
+Execution Time      & 1,847 ms             & 38 ms \\
+Data Transferred    & 487 KB               & 194 KB \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The transition from sequential scan to index scan reduced query execution time from 1,847 ms to 38 ms---a 98\% reduction in raw database execution time. The remaining latency gap between the database execution time and the observed TTFB is attributable to network round-trip, Supabase API overhead, and JSON serialisation.
+
+\subsection{Streaming Response Latency}
+
+Streaming response latency---from the user's message being sent to the first planning update arriving at the client---was measured for fifty planning requests:
+
+\begin{table}[H]
+\centering
+\caption{Streaming Response Latency (n=50)}
+\tableexpl{This table reports streaming latency for different request categories by measuring how quickly the client receives the first planning update. It compares simple conversations with complex itinerary tasks and explains differences in perceived responsiveness.}
+\label{tab:ws_rtt}
+\begin{tabular}{llll}
+\toprule
+\textbf{Request Type} & \textbf{Mean RTT (s)} & \textbf{P50 (s)} & \textbf{P95 (s)} \\
+\midrule
+General conversation     & 1.21 & 1.08 & 1.89 \\
+Trip planning (complex)  & 3.84 & 3.62 & 5.11 \\
+POI search only          & 2.17 & 1.98 & 3.21 \\
+Itinerary request        & 4.52 & 4.31 & 5.88 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The higher RTT for itinerary requests is expected: these involve the full agent chain (classifier $\to$ planner $\to$ POI search $\to$ maps $\to$ itinerary builder), each of which makes external API calls. The first streaming token appears while the itinerary is still being generated, so the perceived latency is lower than the total processing time suggests.
+
+\subsection{Concurrent User Performance}
+
+Load testing was conducted using Artillery \chapcitetarget{11} to simulate concurrent user sessions. Results for key concurrency levels are summarised in Table~\ref{tab:load_test}.
+
+\begin{table}[H]
+\centering
+\caption{Concurrent Session Load Test Results}
+\tableexpl{This table summarizes system behavior under concurrent user load by presenting success rate, latency, error rate, and pool utilization together. It shows how performance changes with higher simultaneous sessions and reveals where resource saturation begins.}
+\label{tab:load_test}
+\begin{tabular}{lllll}
+\toprule
+\textbf{Concurrent Users} & \textbf{Success Rate} & \textbf{Mean Latency (s)} & \textbf{Error Rate} & \textbf{DB Pool Util.} \\
+\midrule
+5   & 100\% & 1.24 & 0\% & 34\% \\
+10  & 100\% & 1.38 & 0\% & 62\% \\
+20  & 99.8\% & 1.67 & 0.2\% & 91\% \\
+30  & 97.1\% & 2.41 & 2.9\% & 100\% \\
+50  & 89.3\% & 4.18 & 10.7\% & 100\% (queued) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Performance degrades measurably above 20 concurrent users due to connection pool saturation. This is a known limitation of the current single-server, ten-connection pool configuration, and motivates the recommendation for Redis-based distributed caching and pool expansion in future iterations.
+
+\section{Agent Effectiveness Results}
+
+\subsection{Intent Classification Evaluation}
+
+The Intent Classifier was evaluated on a manually labelled test set of 200 messages, assembled to cover a representative distribution of real user inputs:
+
+\begin{table}[H]
+\centering
+\caption{Intent Classification Evaluation (n=200)}
+\tableexpl{This table presents classification metrics for each supported intent, including precision, recall, F1-score, and support. It measures how reliably the intent agent can route different types of user requests.}
+\label{tab:intent_full}
+\begin{tabular}{lllll}
+\toprule
+\textbf{Intent Class} & \textbf{Precision} & \textbf{Recall} & \textbf{F1} & \textbf{Support} \\
+\midrule
+PLAN\_TRIP            & 0.94 & 0.91 & 0.92 & 58 \\
+DESTINATION\_SEARCH   & 0.89 & 0.87 & 0.88 & 42 \\
+ITINERARY\_REQUEST    & 0.91 & 0.93 & 0.92 & 37 \\
+GENERAL               & 0.96 & 0.98 & 0.97 & 35 \\
+REFINEMENT            & 0.84 & 0.82 & 0.83 & 18 \\
+OTHER                 & 0.78 & 0.80 & 0.79 & 10 \\
+\midrule
+\textbf{Weighted Avg} & \textbf{0.91} & \textbf{0.91} & \textbf{0.91} & 200 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The weighted F1-score of 0.91 demonstrates high overall reliability. The REFINEMENT class showed the lowest performance (F1 = 0.83), which is consistent with the inherent ambiguity of refinement requests---messages like ``make it shorter'' or ``add more food options'' can be interpreted as either itinerary adjustments (REFINEMENT) or new searches (DESTINATION\_SEARCH), depending on conversation context.
+
+\begin{figure}[H]
+\centering
+\safeimage[width=0.85\textwidth]{confusion_matrix.png}
+\caption{Confusion Matrix for Intent Classifier Agent (n=200)}
+\figureexpl{This figure presents the confusion matrix of the intent classifier, showing both correct predictions and major error patterns. It helps identify overlaps between similar classes and supports deeper interpretation of classifier performance.}
+\label{fig:confusion_matrix}
+\end{figure}
+
+\subsection{Destination Extraction Accuracy}
+
+Destination extraction accuracy was evaluated on 100 test messages, including 20 messages containing contextual references (``there'', ``that city'', ``the same place''):
+
+\begin{table}[H]
+\centering
+\caption{Destination Extraction Accuracy Results}
+\tableexpl{This table evaluates destination extraction across different message styles such as explicit names, implicit references, and contextual pronouns. It highlights where the system performs most reliably and where contextual understanding remains more difficult.}
+\label{tab:dest_extraction}
+\begin{tabular}{lll}
+\toprule
+\textbf{Message Type} & \textbf{Accuracy} & \textbf{Sample Size} \\
+\midrule
+Explicit destination (``Plan a trip to Goa'')     & 97\% & 50 \\
+Implicit reference (``Plan something similar'')   & 88\% & 30 \\
+Contextual pronoun (``Plan a trip there'')         & 85\% & 20 \\
+\textbf{Overall}                                   & \textbf{93\%} & 100 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The lower accuracy on contextual pronouns reflects cases where the LLM mis-interpreted an older destination from conversation history over the most recent one. A simple recency-biased heuristic was applied post-extraction (using the last-mentioned destination rather than the most frequently mentioned), which improved contextual pronoun accuracy from 79\% to 85\%.
+
+\subsection{Itinerary Quality Assessment}
+
+Itinerary quality was assessed across three dimensions by two independent evaluators who were domain experts in travel (a professional travel agent and an experienced backpacker):
+
+\begin{table}[H]
+\centering
+\caption{Expert Itinerary Quality Ratings (n=20 itineraries, Scale 1--5)}
+\tableexpl{This table reports expert ratings for generated itinerary quality across feasibility, coherence, variety, budget fit, and authenticity. It provides a balanced qualitative assessment and identifies which planning dimensions are strongest or weaker.}
+\label{tab:itinerary_quality}
+\begin{tabular}{lll}
+\toprule
+\textbf{Dimension} & \textbf{Evaluator 1} & \textbf{Evaluator 2} \\
+\midrule
+Geographic feasibility (travel times realistic)  & 4.1 & 4.3 \\
+Thematic coherence (days feel unified)           & 4.4 & 4.2 \\
+Variety of activity types                        & 4.0 & 3.9 \\
+Accommodation quality match to budget            & 3.8 & 4.0 \\
+Local authenticity (non-tourist-only focus)      & 3.9 & 4.1 \\
+\textbf{Mean}                                    & \textbf{4.04} & \textbf{4.10} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The lowest-scoring dimension was ``Accommodation quality match to budget'' (mean 3.9), reflecting cases where the LLM recommended mid-range hotels for users who had specified a budget travel style. This was traced to an ambiguity in the prompt: the term ``budget'' was sometimes interpreted by the model as a budget category (mid-range) rather than a preference for the cheapest available options.
+
+\section{User Study Results}
+
+\subsection{Study Design}
+
+A structured user study was conducted with 20 participants drawn from the student population of Vignan's Institute. Participants were briefed on the purpose of the study, provided with a consistent task (plan a 3-day trip to a city of their choice within India), and asked to complete the task using Roameo without assistance. After completing the task, they completed a satisfaction questionnaire. Basic demographic data was collected to characterise the sample.
+
+\begin{table}[H]
+\centering
+\caption{User Study Participant Demographics (n=20)}
+\tableexpl{This table describes the participants included in the user study by summarizing gender, age, travel experience, and AI usage background. It provides the human context needed to interpret the study outcomes and sample diversity.}
+\label{tab:demographics}
+\begin{tabular}{lll}
+\toprule
+\textbf{Attribute} & \textbf{Category} & \textbf{Count} \\
+\midrule
+Gender & Male & 12 \\
+       & Female & 8 \\
+\midrule
+Age    & 18--21 & 14 \\
+       & 22--25 & 6 \\
+\midrule
+Travel experience & Frequent traveller (3+ trips/year) & 7 \\
+                  & Occasional (1--2 trips/year)        & 10 \\
+                  & Rare (less than 1 trip/year)         & 3 \\
+\midrule
+Prior AI assistant use & Regular & 9 \\
+                       & Occasional & 8 \\
+                       & Never & 3 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Task Completion Metrics}
+
+\begin{table}[H]
+\centering
+\caption{Task Completion Metrics}
+\tableexpl{This table summarizes the task completion outcomes of participants, including completion rate, message count, session duration, and save behavior. It measures both success and interaction effort during practical trip planning tasks.}
+\label{tab:task_completion}
+\begin{tabular}{ll}
+\toprule
+\textbf{Metric} & \textbf{Result} \\
+\midrule
+Participants who completed a full itinerary  & 19 out of 20 (95\%) \\
+Mean messages to achieve complete itinerary  & 6.3 \\
+Mean session duration                        & 8.4 minutes \\
+Participants who saved at least one POI      & 17 out of 20 (85\%) \\
+Participants who resumed session after logging out & 12 out of 20 (60\%) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The one participant who did not complete a full itinerary reported difficulty with the multi-panel layout on a small-screen laptop (13-inch), where the panels were too narrow to be simultaneously useful. This identifies a responsive layout gap that should be addressed in the next iteration.
+
+\subsection{Satisfaction Ratings}
+
+\begin{table}[H]
+\centering
+\caption{User Satisfaction Survey Results (n=20, Likert 1--5)}
+\tableexpl{This table reports user satisfaction across multiple experience dimensions using mean scores and standard deviations. It summarizes how participants perceived the usefulness, clarity, and overall quality of the system.}
+\label{tab:satisfaction}
+\begin{tabular}{lll}
+\toprule
+\textbf{Dimension} & \textbf{Mean} & \textbf{Std Dev} \\
+\midrule
+Ease of expressing travel intent       & 4.5 & 0.61 \\
+Relevance of recommended POIs          & 4.3 & 0.72 \\
+Logical flow of the generated itinerary & 4.1 & 0.83 \\
+Naturalness of AI conversation         & 4.4 & 0.68 \\
+Accuracy of map POI placement          & 4.2 & 0.74 \\
+Quality of itinerary detail            & 4.0 & 0.89 \\
+Satisfaction with session persistence  & 4.3 & 0.67 \\
+\textbf{Overall satisfaction}          & \textbf{4.3} & \textbf{0.70} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\safeimage[width=0.85\textwidth]{satisfaction_radar.png}
+\caption{User Satisfaction Scores Across Seven Dimensions (n=20)}
+\figureexpl{This figure visualizes satisfaction scores across seven user experience areas in a radar chart format. It makes the relative strengths and weaknesses of the system easy to compare at a glance.}
+\label{fig:satisfaction_radar}
+\end{figure}
+
+The highest-rated dimension was ``Ease of expressing travel intent'' (4.5), directly validating the core value proposition of conversational input over form-based interfaces. The lowest-rated dimension was ``Quality of itinerary detail'' (4.0), which aligns with the expert evaluator feedback on accommodation quality matching.
+
+\subsection{Qualitative Feedback Themes}
+
+Open-ended responses were coded into themes using affinity grouping:
+
+\begin{table}[H]
+\centering
+\caption{Qualitative Feedback Theme Frequency (n=20)}
+\tableexpl{This table groups qualitative feedback into recurring user themes by counting positive and negative mentions for each topic. It reveals which features users appreciated most and which areas caused the most dissatisfaction.}
+\label{tab:qualitative}
+\begin{tabular}{lll}
+\toprule
+\textbf{Theme} & \textbf{Positive} & \textbf{Negative} \\
+\midrule
+Conversational naturalness        & 15 & 2 \\
+Map integration usefulness        & 13 & 1 \\
+Speed of response                 & 11 & 5 \\
+Itinerary comprehensiveness       & 12 & 3 \\
+Session persistence               & 10 & 0 \\
+UI clarity on small screens       & 2  & 7 \\
+Budget recommendation accuracy    & 6  & 4 \\
+Photo quality of POIs             & 8  & 2 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Speed of response received the most negative mentions (5 out of 20) for complex trip planning queries, where the full agent chain takes 4--6 seconds. The progressive streaming approach mitigated this perception in most cases, but some users found the token-by-token display distracting for structured itinerary content. This finding motivates the consideration of a ``buffered display'' mode for itinerary output (showing each day as a complete block rather than character-by-character).
+
+\section{System Interface Walkthrough}
+
+\subsection{Landing Page and Authentication}
+
+\begin{figure}[H]
+\centering
+\safeimage[width=0.85\textwidth]{01_landing.png}
+\caption{Roameo Landing Page with Navigation and Call-to-Action}
+\figureexpl{This figure shows the landing page presented to first-time visitors, including the main branding, navigation, and call-to-action. It introduces the public-facing entry point through which users begin trip planning in Roameo.}
+\label{fig:landing_page}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\safeimage[width=0.85\textwidth]{02_login.png}
+\caption{Roameo Authentication Page --- Login with Email or Google}
+\figureexpl{This figure presents the authentication interface for returning users and shows the sign-in methods supported by the application. It explains how secure access to the personalized travel workspace is initiated.}
+\label{fig:login_page}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\safeimage[width=0.85\textwidth]{03_signup.png}
+\caption{Roameo User Registration Page}
+\figureexpl{This figure shows the registration page for creating a new account and the information required from first-time users. It explains how onboarding connects new users to persistent trip planning and saved-session features.}
+\label{fig:signup_page}
+\end{figure}
+
+\subsection{Dashboard}
+
+\begin{figure}[H]
+\centering
+\safeimage[width=0.85\textwidth]{04_dashboard.png}
+\caption{Roameo Dashboard Displaying User's Saved Trips as Cards}
+\figureexpl{This figure shows the dashboard that lists previously saved trips as reusable planning cards. It illustrates how the interface supports browsing, resuming, and managing persistent travel sessions.}
+\label{fig:dashboard_ui}
+\end{figure}
+
+The Dashboard shows existing trips as animated cards with the trip title, destination, dates, and a thumbnail. Cards support hover animations and present quick-action buttons (Resume, Delete, Share). The ``New Trip'' button creates a fresh session and navigates to the chat interface.
+
+From a usability perspective, the dashboard is important because it communicates that each trip is a persistent workspace rather than a disposable prompt. Users can recognize sessions visually, return to earlier plans, and treat the generated output as an evolving project. This is consistent with the session-snapshot runtime described in the backend architecture.
+
+The dashboard also functions as a bridge between account-level persistence and active planning. Instead of exposing users to raw database records or technical session identifiers, it presents trips as understandable travel objects with recognizable visual summaries. This improves continuity because users can reason about their saved work in terms of destinations, moods, and trip concepts rather than internal system state.
+
+\subsection{Chat Interface}
+
+\begin{figure}[H]
+\centering
+\safeimage[width=0.85\textwidth]{05_chat.png}
+\caption{Chat Interface During an Active Trip Planning Conversation}
+\figureexpl{This figure captures the main chat workspace used for planning and demonstrates how users interact with the system in natural language. It shows the core interface through which itinerary ideas are generated, refined, and exchanged.}
+\label{fig:chat_ui}
+\end{figure}
+
+The chat interface remains the primary interaction surface for planning because it allows the user to express goals naturally rather than through rigid forms. The user can ask for a relaxed itinerary, specify budget or travel style, refine one part of the trip, or continue a previous discussion without restating the entire context. This conversational flexibility is one of the main reasons the multi-agent backend is valuable.
+
+\begin{figure}[H]
+\centering
+\safeimage[width=0.85\textwidth]{06_streaming.png}
+\caption{AI response being streamed through the session event channel}
+\figureexpl{This figure shows the interface during real-time response streaming, where partial output appears progressively while planning is still in progress. It illustrates the live feedback mechanism that reduces perceived waiting time for the user.}
+\label{fig:streaming_ui}
+\end{figure}
+
+The streamed response view is equally important because it gives the user evidence that planning is actively progressing. Instead of waiting silently for a single large answer, the interface shows that the system is moving through a live sequence of interpretation and generation. This reduces perceived delay and makes the planning process feel interactive rather than opaque.
+
+\subsection{Map View}
+
+\begin{figure}[H]
+\centering
+\safeimage[width=0.85\textwidth]{07_map.png}
+\caption{Interactive Google Maps Panel with Custom POI Markers by Category}
+\figureexpl{This figure presents the interactive map used in trip planning with categorized markers for different types of points of interest. It shows how recommended locations are linked to their geographic positions within the overall planning workflow.}
+\label{fig:map_ui}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\safeimage[width=0.85\textwidth]{08_infowindow.png}
+\caption{POI InfoWindow Showing Name, Rating, and Address}
+\figureexpl{This figure highlights the information window for a selected POI by displaying details such as name, rating, and address together. It shows how place-level context is presented so users can evaluate recommendations quickly on the map.}
+\label{fig:infowindow}
+\end{figure}
+
+The map info window helps convert raw geographic markers into understandable travel decisions. A marker alone tells the user where something is, but the info window explains why that place matters by surfacing the name, visual identity, rating, and address together. This strengthens trust because the recommendation is not presented as an abstract model output; it is presented as a grounded location with immediately visible evidence.
+
+The info window also supports spatial validation. Users can compare location clusters, understand whether places are reasonably close to one another, and decide whether a recommendation fits the day plan before adding it to the itinerary. In this way, the map becomes a planning instrument rather than a decorative visualization.
+
+\subsection{Itinerary View}
+
+\begin{figure}[H]
+\centering
+\safeimage[width=0.85\textwidth]{09_itinerary.png}
+\caption{Structured Itinerary View with Day Headers and Time Slots}
+\figureexpl{This figure shows the structured itinerary generated by the system, with activities organized into day-wise sections and time slots. It demonstrates how conversational planning is transformed into a clear and practical travel schedule.}
+\label{fig:itinerary_ui}
+\end{figure}
+
+The itinerary view is the temporal counterpart to the map. While the map explains where activities are located, the itinerary explains when and in what sequence they occur. Day headers, ordering, and card-based activity units make the generated plan easier to review and revise than a long block of assistant text.
+
+This representation is especially important in a planning system because users rarely evaluate destinations one place at a time. They evaluate whether a day feels realistic, whether the sequence is balanced, and whether the trip has enough thematic or geographic coherence. The itinerary panel gives that structure directly and therefore plays a central role in making Roameo practically usable.
+
+\subsection{POI Hover Card}
+
+\begin{figure}[H]
+\centering
+\safeimage[width=0.85\textwidth]{10_poi_card.png}
+\caption{Inline POI Hover Card Showing Photo, Rating, and Save Action}
+\figureexpl{This figure displays the hover card attached to a suggested POI and provides quick details without forcing the user to change context. It shows how the chat interface supports direct inspection and action during trip building.}
+\label{fig:poi_card}
+\end{figure}
+
+When a POI is mentioned in the chat response, the corresponding text is rendered as a hoverable chip. Hovering reveals a compact card with the POI photo (via the photo proxy), star rating, address, price level, and editorial summary. Users can click ``Add to Trip'' directly from this card.
+
+This interaction is valuable because it shortens the gap between suggestion and action. Instead of forcing the user to manually search a place again on the map or in a side panel, the assistant response itself becomes an actionable planning surface. As a result, the conversational layer remains tightly integrated with the structured workspace.
+
+\section{Comparison with Baseline and Alternatives}
+
+\subsection{Against a Single-Agent System}
+
+To quantify the benefit of the multi-agent architecture, the system was tested against a simplified single-agent baseline (a single Gemini 2.5 Pro prompt handling the full planning task). Fifty identical planning requests were sent to both systems.
+
+\begin{table}[H]
+\centering
+\caption{Multi-Agent vs.\ Single-Agent Comparative Evaluation}
+\tableexpl{This table compares the multi-agent system with a single-agent baseline across accuracy, quality ratings, cost, and response latency. It shows where specialization improves planning performance while also making the cost trade-off visible.}
+\label{tab:agent_comparison}
+\begin{tabular}{lll}
+\toprule
+\textbf{Metric} & \textbf{Single Agent} & \textbf{Multi-Agent (Roameo)} \\
+\midrule
+Intent classification accuracy & 83\% & 91\% \\
+Destination extraction accuracy & 89\% & 93\% \\
+POI relevance rating (1--5)     & 3.6 & 4.3 \\
+Itinerary coherence rating      & 3.8 & 4.1 \\
+Token cost per complex query    & 8,400 & 11,200 \\
+Mean response latency (s)       & 5.1 & 4.5 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The multi-agent system outperforms on all quality dimensions at the cost of higher token consumption (due to multiple LLM calls). The latency advantage of the multi-agent system counterintuitively favours higher quality: specialised agents with focused prompts generate shorter, denser outputs and are less prone to the verbose padding that inflates single-agent responses.
+
+\section{Discussion of Key Findings}
+
+\subsection{Performance Optimisation Impact}
+
+The cumulative optimisation programme delivered results that exceed the initial targets in all measured dimensions. The 82\% latency reduction is particularly significant because it crosses the perceptual threshold: human computer interaction research suggests that responses under one second feel ``immediate'', while responses in the 1--10 second range feel like the system is working, and responses over 10 seconds necessitate explicit progress feedback \chapcitetarget{9}. The pre-optimisation mean of 3.42 seconds fell in the ``working'' category; the post-optimisation mean of 0.61 seconds achieves the ``immediate'' threshold.
+
+\subsection{Agent Architecture Validation}
+
+The intent classification F1 score of 0.91 demonstrates that the routing layer is reliable enough for production use. The 9\% error rate does introduce occasional mis-routings---a POI search being routed to the planner, for example---but the system gracefully recovers in most cases because the downstream agent receives the full conversation history and can infer the correct action even if the routing was technically incorrect.
+
+\subsection{User Study Interpretation}
+
+The 95\% task completion rate and mean satisfaction score of 4.3/5 are strong results for a first-version system evaluated on student users who were not briefed on how to frame travel planning requests optimally. The open-ended feedback was more mixed, revealing concrete issues (small-screen layout, budget recommendation accuracy) that inform the development roadmap for subsequent versions.
+
+It is worth noting that the participant pool---predominantly 18--25-year-old undergraduate students---may not be representative of the broader travel planning audience, which includes older travellers with different digital fluency profiles. A broader user study with a more diverse age distribution would strengthen the generalisability of these findings.
+
+Even with that limitation, the study remains useful for the goals of this project. The intention of the evaluation was not to claim universal adoption behaviour, but to verify whether the implemented workspace reduced friction for a realistic group of first-time users. In that sense, the findings are meaningful because they show that users were able to understand the interface, produce itineraries, and interact with the planning assistant without extended training. That outcome supports the argument that the system design is practical, not merely technically functional.
+
+Another important takeaway is that the observed weaknesses are specific enough to guide future development. The feedback does not suggest that the core architecture is flawed; instead, it indicates where refinement is needed, such as improving recommendation calibration, strengthening smaller-screen layouts, and presenting planning progress more clearly during complex turns. These are productive engineering next steps rather than signs of a failed design.
+
+Taken together, the evaluation results suggest that the strongest aspect of Roameo is not any single model response, but the coherence of the full planning workspace. Users benefit from seeing chat, itinerary, and map views reinforce one another, and that reinforcement appears to reduce the uncertainty that often accompanies AI-generated suggestions. In other words, the system earns trust not only through language quality, but through consistency across multiple coordinated views.
+
+
+
+%=============================================================
+%  CHAPTER 5 -- CONCLUSIONS AND FUTURE SCOPE OF WORK
+%=============================================================
+\chapter{Conclusions and Future Scope of Work}
+\chaptercontentheading{Conclusions and Future Scope of Work}
+
+\section{Conclusion}
+
+In this project, we implemented Roameo as a complete travel-planning workspace rather than a single chatbot screen. The system combines a Next.js frontend for chat, itinerary, and map views with an Express backend, a deterministic multi-agent planning pipeline, a canonical session-snapshot model, Supabase persistence, provider support for Gemini and OpenAI, and SSE-based live updates.
+
+The completed implementation shows that travel planning becomes more reliable when the system keeps all views aligned to one shared session state and grounds recommendations in real external tools such as Google Places, Directions, weather, event, and holiday services. Roameo therefore demonstrates a practical college-level implementation of agentic planning, modern web engineering, and persistent AI-assisted travel workflow design.
+
+\section{Contributions of the Project}
+
+The contributions of this project can be summarised across three dimensions:
+
+\subsection{Technical Contributions}
+
+\begin{enumerate}[nosep]
+  \item \textbf{Deterministic Travel Planning Architecture}: A complete, deployable specification of a multi-agent travel planning system with structured routing logic, shared state, and integration patterns with the Google Maps Platform.
+  \item \textbf{Performance Optimisation Methodology}: A documented, step-by-step performance analysis and remediation process for a Node.js/Supabase web application, demonstrating how to identify and resolve database, caching, and connection management bottlenecks systematically.
+  \item \textbf{Real-Time Planning Streaming via SSE}: A production-tested pattern for streaming planning updates to a Next.js frontend through authenticated Server-Sent Events.
+  \item \textbf{Contextual Memory in Multi-Agent Systems}: An implementation of session-scoped conversational memory that allows all agents to resolve contextual references and track evolving user preferences without storing state externally.
+\end{enumerate}
+
+\subsection{Scientific Contributions}
+
+\begin{enumerate}[nosep]
+  \item \textbf{Quantitative Evaluation of Multi-Agent vs.\ Single-Agent Travel Planning}: The comparative evaluation in Chapter 4 provides evidence that multi-agent architectures outperform single-agent approaches on POI relevance and itinerary coherence, at the cost of higher token consumption.
+  \item \textbf{User Study in Conversational Travel Planning}: The 20-participant user study provides empirical satisfaction data and task completion metrics for a conversational AI travel planning tool---a class of systems that has been studied computationally but rarely evaluated with real users in the Indian travel context.
+\end{enumerate}
+
+\subsection{Open-Source Contribution}
+
+The complete Roameo codebase---backend, frontend, database schema, migration scripts, and environment configuration templates---is released under the GNU General Public Licence v3.0. This makes the system available as a foundation for future research, commercial adaptation, and educational use.
+
+\section{Practical Implications}
+
+\subsection{For the Travel Industry}
+
+Travel agencies, online travel agents, and destination management organisations can adapt the Roameo architecture as the core of a conversational trip planning tool. The modular agent design means that customisation---adding a hotel-booking agent, integrating a specific airline's flight search, or weighting recommendations towards partner venues---can be accomplished by adding or modifying individual graph nodes without restructuring the system.
+
+\subsection{For AI-Powered Product Development}
+
+The performance engineering work documented in this report---and the specific sequence of optimisations that achieved the 82\% latency reduction---is directly transferable to any web application backed by a PostgreSQL database and a Node.js API layer. Development teams building LLM-powered products often invest considerable effort in model selection and prompt engineering while neglecting database and infrastructure performance, to the detriment of the user experience. Roameo demonstrates that these concerns must be addressed in parallel.
+
+\subsection{For Education and Research}
+
+The Roameo codebase, with its clear separation of concerns across runtime stages, database layer, provider layer, and frontend, provides a practical, real-world reference implementation for courses in web development, AI systems, and software engineering. Instructors can use specific components as case studies: the planning pipeline for AI architecture lectures, the session repository for database module classes, or the SSE streaming pattern for distributed systems coursework.
+
+\subsection{For Accessibility in Travel Planning}
+
+Conversational interfaces inherently lower barriers for users who struggle with search-parameter-based interfaces---older travellers unfamiliar with filter-based UI, users with motor impairments that make complex navigation difficult, or first-time travellers unfamiliar with the domain vocabulary. A travel planning assistant that understands ``I want to go somewhere quiet and affordable not too far from Chennai for a few days'' serves a broader population than one that requires the user to fill in origin airport, destination airport, check-in date, and star rating fields.
+
+\section{Lessons Learned}
+
+Several non-obvious lessons emerged during the development of Roameo that are worth recording explicitly for the benefit of future student projects in similar domains:
+
+\begin{enumerate}[nosep]
+  \item \textbf{Measure before optimising}: The temptation to optimise prematurely---before profiling data identifies the actual bottleneck---is strong. The fact that the JSONB column size was the primary latency contributor was not obvious from code inspection alone; it required measuring query payloads.
+  \item \textbf{Prompt engineering is software engineering}: Writing agent prompts requires the same iterative refinement, edge case testing, and version control discipline as writing code. One-shot prompts drafted without testing against diverse inputs consistently fail on real user messages.
+  \item \textbf{Streaming changes the UX contract}: Once users see token streaming, a response that arrives without streaming feels interminably slow even at the same actual latency. Design the streaming experience first, not as an afterthought.
+  \item \textbf{RLS is not optional for multi-tenant AI apps}: During early development, RLS policies were not yet applied. A temporary bug in the \texttt{user\_id} filter allowed one test user to retrieve another user's sessions---a serious data isolation failure that would be a security incident in production. RLS provides a safety backstop that protects against exactly this class of application-layer bugs.
+  \item \textbf{The agent graph is the documentation}: In a single-agent system, behaviour is determined by a monolithic prompt that can be long and difficult to reason about. In the multi-agent system, the graph topology itself documents which agents are responsible for which aspects of behaviour. When something goes wrong, the graph makes it straightforward to identify which agent is at fault.
+\end{enumerate}
+
+\section{Recommendations for Future Research}
+
+Based on the limitations identified in Chapter 4 and the lessons described above, the following research directions are recommended for future development:
+
+\subsection{Booking API Integration}
+
+The most impactful single enhancement would be connecting Roameo to live booking APIs---Booking.com, Airbnb, Amadeus (for flights), and ActivityBooking.com (for experiences). This would require:
+\begin{itemize}[nosep]
+  \item New specialised agents for accommodation search, flight search, and activity booking.
+  \item An expanded state schema to hold search results, pricing, and availability data.
+  \item A checkout flow integrated with a payment provider (Stripe or Razorpay).
+  \item Careful consideration of data freshness: booking prices change by the minute, so caching live inventory data requires very short TTLs or no caching at all.
+\end{itemize}
+
+\subsection{Voice Interface}
+
+Adding speech-to-text (STT) input and text-to-speech (TTS) output would transform Roameo into an accessible hands-free travel planning assistant, particularly valuable during exploratory conversations that feel more natural spoken than typed. Google Cloud Speech-to-Text and ElevenLabs are strong candidates for the STT and TTS components respectively.
+
+\subsection{Multi-Language Support}
+
+Extending the system to support non-English planning conversations---Hindi, Telugu, Tamil, and other Indian languages, as well as major international languages---would dramatically expand Roameo's potential user base. Gemini 2.5 Pro has strong multilingual capabilities natively; the primary work would be translating the UI, adapting the system prompts, and validating agent behaviour in each target language.
+
+\subsection{Long-Term User Memory}
+
+Currently, preferences expressed in one trip session are not available in a new session. A user profile store---separate from the session state---recording travel style, typical group size, budget tier, preferred accommodation type, and dietary preferences from across all previous sessions would enable Roameo to provide genuinely personalised recommendations from the first message of a new conversation.
+
+\subsection{Weather-Aware Itinerary Adjustment}
+
+Integrating a real-time weather forecast API (OpenWeatherMap or Weather.gov) would allow the Itinerary Builder to make time-of-day and day-of-week adjustments based on predicted conditions. An outdoor waterfall excursion planned for Tuesday could be automatically moved to Monday if Tuesday's forecast shows heavy rain, with the agent explaining the change in the chat response.
+
+\subsection{Horizontal Scaling}
+
+Moving from a single Node.js process to a containerised, horizontally scalable deployment would address the concurrency degradation observed at higher user loads. The key architectural change required is replacing the in-process streaming coordination layer with a distributed event channel, so that any backend instance can continue a planning session regardless of which instance originally accepted the request.
+
+\subsection{Personalised Recommendation Model}
+
+Training a lightweight collaborative filtering model on anonymised session data (with user consent) would enable data-driven personalisation to complement the LLM-generated recommendations. For example, if users with a ``nature + photography'' preference profile consistently remove certain categories of POIs from their itineraries, the model could learn to deprioritise those categories in future recommendations for users with the same profile.
+
+\subsection{Explainable AI for Travel Recommendations}
+
+Adding explanation capabilities to the POI and itinerary recommendations---surfacing the specific signals that drove each recommendation (``this restaurant scores 4.8 stars, is located 200m from your Day 2 morning activity, and matches your preference for seafood'')---would increase user trust and improve the educational value of the system. Explainability is particularly important for users who are unfamiliar with a destination and cannot independently evaluate whether a recommendation is reasonable.
+
+\section{Final Remarks}
+
+Roameo began as a question about whether AI could make travel planning genuinely easier. It ends as a working system that, by the evidence of both performance metrics and user feedback, provides a meaningful improvement over the fragmented, search-based status quo. It is not finished---no real software of any ambition is ever truly finished---but it is functional, principled in its design, and provides a documented foundation for the next team that picks up the work.
+
+The convergence of capable language models, graph-based agent orchestration frameworks, and modern web infrastructure has created a very specific window of opportunity for conversational AI applications that were not feasible even two or three years ago. We built Roameo in that window, and we hope that the documentation provided in this report makes it easier for others to build in it too.
+
+\vspace{2cm}
+\begin{center}
+\textit{``The world is a book, and those who do not travel read only one page.''}\\[0.3cm]
+--- Saint Augustine of Hippo
+\end{center}
+
+\clearpage
+\thispagestyle{mainstyle}
+\addcontentsline{toc}{chapter}{Geo Tag Photos}
+
+\begin{center}
+{\Large\bfseries GEO TAG PHOTOS}
+\end{center}
+
+\vspace{1cm}
+\noindent{\large\bfseries Hands-on project discussion with Guide}
+
+\vspace{0.8cm}
+\begin{center}
+\safeimage[width=0.8\textwidth]{geo1.png}
+
+\vspace{1cm}
+
+\safeimage[width=0.8\textwidth]{geo2.png}
+\end{center}
+
+
+
+%--- References ---------------------------------------------
+
+%=============================================================
+%  REFERENCES
+%=============================================================
+\chapter{References}
+\chaptercontentheading{References}
+
+\begingroup
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.45\baselineskip}
+
+\refentry{1}{Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A.\ N., Kaiser, \L., \& Polosukhin, I.\ (2017). Attention is all you need. \textit{Advances in Neural Information Processing Systems}, 30, 5998--6008.}
+\refentry{2}{Brown, T., Mann, B., Ryder, N., Subbiah, M., Kaplan, J.\ D., Dhariwal, P., \ldots{} \& Amodei, D.\ (2020). Language models are few-shot learners. \textit{Advances in Neural Information Processing Systems}, 33, 1877--1901.}
+\refentry{3}{Ouyang, L., Wu, J., Jiang, X., Almeida, D., Wainwright, C., Mishkin, P., \ldots{} \& Lowe, R.\ (2022). Training language models to follow instructions with human feedback. \textit{Advances in Neural Information Processing Systems}, 35.}
+\refentry{4}{Shinn, N., Cassano, F., Labash, B., Gopinath, A., Narasimhan, K., \& Yao, S.\ (2023). Reflexion: Language agents with verbal reinforcement learning. \textit{Advances in Neural Information Processing Systems}, 36.}
+\refentry{5}{Yao, S., Zhao, J., Yu, D., Du, N., Shafran, I., Narasimhan, K., \& Cao, Y.\ (2022). ReAct: Synergising reasoning and acting in language models. In \textit{Proceedings of ICLR 2023}.}
+\refentry{6}{Chase, H.\ (2022). LangChain: Building applications with large language models. \textit{GitHub Repository}. \url{https://github.com/langchain-ai/langchain}}
+\refentry{7}{Zheng, Y., Zhang, R., Zhang, J., Ye, Y., Luo, Z., Feng, Z., \& Ma, Y.\ (2023). ChatRec: Towards interactive and explainable LLMs-augmented recommender system. \textit{arXiv preprint arXiv:2303.14524}.}
+\refentry{8}{Koren, Y., Bell, R., \& Volinsky, C.\ (2009). Matrix factorization techniques for recommender systems. \textit{Computer}, 42(8), 30--37.}
+\refentry{9}{Nielsen, J.\ (1993). \textit{Usability Engineering}. Academic Press.}
+\refentry{10}{Nance, D., \& Hazelwood, K.\ (2011). Connection pool overhead in database-backed web applications. In \textit{Proceedings of the 2011 MobiSys Workshop on Mobile Cloud Computing \& Services}.}
+\refentry{11}{Artillery.io.\ (2024). \textit{Artillery --- Cloud-scale load testing}. \url{https://www.artillery.io}}
+\refentry{12}{Google Maps Platform.\ (2024). \textit{Places API (New) documentation}. \url{https://developers.google.com/maps/documentation/places/web-service/overview}}
+\refentry{13}{LangChain AI.\ (2024). \textit{LangGraph: Build stateful, multi-actor applications with LLMs}. \url{https://langchain-ai.github.io/langgraph/}}
+
+\endgroup
+
+
+
+%--- Appendix -----------------------------------------------
+
+%=============================================================
+%  APPENDIX
+%=============================================================
+\appendix
+
+\chapter{Appendices}
+\chaptercontentheading{Appendices}
+\section{Current Repository Code Extracts}
+
+The appendix below uses current repository excerpts instead of older illustrative samples. This keeps the report aligned to the modernized Roameo runtime and removes short outdated blocks that were wasting pages.
+
+\subsection{Turn Runner}
+
+\begin{lstlisting}[language=TypeScript, caption={Current turn runner logic: message persistence, streaming bootstrap, and planning-state control}, label={lst:turnrunner_current_a}]
+private async executeTurn(
+  session: SessionSnapshot,
+  userId: string | undefined,
+  input: SendMessageInput
+): Promise<void> {
+  const turnId = randomUUID();
+  const settings = input.providerSettings || session.providerSettings;
+
+  const userMessage: ConversationMessage = {
+    id: randomUUID(),
+    sessionId: session.id,
+    role: "user",
+    content: input.content,
+    createdAt: new Date().toISOString(),
+    meta: {}
+  };
+
+  await this.repository.saveMessage(userMessage);
+  this.streamHub.emit(session.id, {
+    type: "message.committed",
+    data: userMessage
+  });
+
+  this.streamHub.emit(session.id, {
+    type: "turn.started",
+    data: {
+      sessionId: session.id,
+      turnId,
+      providerSettings: settings
+    }
+  });
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=TypeScript, caption={Current turn runner logic: itinerary planning, streaming, snapshot commit, and failure recovery}, label={lst:turnrunner_current_b}]
+const narrative = await answerConversationally(
+  this.providerService,
+  await getResolvedProvider(),
+  nextSession,
+  input.content,
+  resolution,
+  research,
+  plan,
+  planningContext
+);
+
+const responseBlocks = buildResponseBlocks({
+  session: nextSession,
+  resolution,
+  research,
+  plan,
+  narrative,
+  planningContext
+});
+
+nextSession = (await this.repository.updateSession(nextSession.id, {
+  title: deriveSessionTitle(nextSession, resolution, plan),
+  providerSettings: settings,
+  memory: {
+    ...nextSession.memory,
+    planningState: createPlanningState(nextSession.memory.planningState, {
+      status: "ready",
+      stage: "ready",
+      retryable: true
+    })
+  }
+})) || nextSession;
+
+this.streamHub.emit(session.id, {
+  type: "session.snapshot",
+  data: nextSession
+});
+\end{lstlisting}
+
+\subsection{Session Repository}
+
+\begin{lstlisting}[language=TypeScript, caption={Current session repository: canonical session creation and loading}, label={lst:sessionrepo_current_a}]
+async createSession(
+  userId: string | undefined,
+  input: CreateSessionInput = {}
+): Promise<SessionSnapshot> {
+  const id = randomUUID();
+  const snapshot = buildSessionSnapshot(id, userId, input);
+  this.memorySessions.set(id, snapshot);
+
+  if (this.client) {
+    await this.client.from("travel_sessions").insert({
+      id,
+      user_id: userId,
+      title: snapshot.title,
+      provider_settings: snapshot.providerSettings,
+      memory: snapshot.memory,
+      created_at: snapshot.createdAt,
+      updated_at: snapshot.updatedAt
+    });
+  }
+  return snapshot;
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=TypeScript, caption={Current session repository: plan persistence, updates, and saved POIs}, label={lst:sessionrepo_current_b}]
+async savePlan(
+  sessionId: string,
+  plan: PlanSnapshot,
+  poiCatalog: PoiCatalog
+): Promise<void> {
+  await this.client!.from("session_plan_snapshots").insert({
+    id: randomUUID(),
+    session_id: sessionId,
+    version: plan.version,
+    snapshot: plan,
+    created_at: now()
+  });
+
+  await this.client!.from("session_poi_catalogs").upsert(
+    { session_id: sessionId, catalog: poiCatalog, updated_at: now() },
+    { onConflict: "session_id" }
+  );
+}
+
+async setSavedPoi(sessionId: string, poiId: string, saved: boolean) {
+  if (saved) {
+    await this.client!.from("session_saved_pois").upsert({
+      session_id: sessionId,
+      poi_id: poiId,
+      created_at: now()
+    });
+  }
+}
+\end{lstlisting}
+
+\subsection{Travel Tools Service}
+
+\begin{lstlisting}[language=TypeScript, caption={Current travel tools logic: discovery focus and Google Places type filtering}, label={lst:traveltools_current_a}]
+const GOOGLE_PLACE_TYPE_FILTER: Record<"stay" | "restaurant" | "attraction", string> = {
+  stay: "lodging",
+  restaurant: "restaurant",
+  attraction: "tourist_attraction"
+};
+
+const discoveryQueries: Record<
+  DiscoveryFocus,
+  Partial<Record<"stay" | "restaurant" | "attraction", string[]>>
+> = {
+  general: {
+    stay: ["boutique hotels", "best stays", "top resorts"],
+    restaurant: ["best local restaurants", "popular dining spots"],
+    attraction: ["top tourist attractions", "best places to visit"]
+  },
+  restaurants: {
+    restaurant: ["famous local restaurant", "vegetarian restaurant", "premium restaurant"]
+  }
+};
+\end{lstlisting}
+
+\begin{lstlisting}[language=TypeScript, caption={Current travel tools logic: route estimates and planning context enrichment}, label={lst:traveltools_current_b}]
+async getWeatherSummary(
+  destination: string,
+  dateContext: DateContext
+): Promise<DateWeatherSummary> {
+  // open-meteo request and advisory generation
+}
+
+async getEventSummary(
+  destination: string,
+  dateContext: DateContext
+): Promise<EventSummary> {
+  // tavily-backed event summary generation
+}
+
+async getHolidaySummary(
+  destination: string,
+  dateContext: DateContext
+): Promise<EventSummary> {
+  // holiday lookup and normalization into advisories
+}
+\end{lstlisting}
+
+\subsection{Environment Configuration}
+
+\begin{lstlisting}[language=TypeScript, caption={Current environment validation and model/runtime configuration}, label={lst:env_current}]
+const EnvSchema = z.object({
+  NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+  PORT: z.string().optional(),
+  GEMINI_API_KEY: z.string().optional(),
+  GEMINI_MODEL_FAST: z.string().default("gemini-2.5-flash"),
+  GEMINI_MODEL_BALANCED: z.string().default("gemini-2.5-flash"),
+  GEMINI_MODEL_DEEP: z.string().default("gemini-2.5-pro"),
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_MODEL_FAST: z.string().default("gpt-5.4-mini"),
+  OPENAI_MODEL_BALANCED: z.string().default("gpt-5.4-mini"),
+  OPENAI_MODEL_DEEP: z.string().default("gpt-5.4"),
+  GOOGLE_MAPS_API_KEY: z.string().optional(),
+  TAVILY_API_KEY: z.string().optional(),
+  SUPABASE_URL: z.string().optional(),
+  SUPABASE_ANON_KEY: z.string().optional(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().optional()
+});
+\end{lstlisting}
+
+\subsection{Frontend Streaming Path}
+
+\begin{lstlisting}[language=TypeScript, caption={Current frontend streaming logic using authenticated SSE}, label={lst:frontend_ws_current}]
+export function connectWs(
+  sessionId: string,
+  onEvent: (event: WsEvent) => void,
+  callbacks: StreamCallbacks = {}
+) {
+  const controller = new AbortController();
+
+  const connect = async () => {
+    const token = await callbacks.getAccessToken?.();
+    const headers = new Headers({ Accept: "text/event-stream" });
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+
+	    const response = await fetch(
+	      `${BACKEND_URL}/api/sessions/${encodeURIComponent(sessionId)}/stream`,
+	      {
+	        method: "GET",
+	        headers,
+	        credentials: "include",
+	        signal: controller.signal
+	      }
+	    );
+    // parse SSE chunks and update the session store
+  };
+}
+\end{lstlisting}
+
+\subsection{Canonical Runtime Database Schema}
+
+\begin{lstlisting}[language=SQL, caption={Current canonical runtime schema used by the session-based architecture}, label={lst:db_schema_current}]
+create table if not exists public.travel_sessions (
+  id text primary key,
+  user_id uuid references auth.users(id) on delete cascade,
+  title text not null default 'Untitled trip',
+  provider_settings jsonb not null,
+  memory jsonb not null,
+  destination_summary text,
+  total_days integer,
+  current_plan_version integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.session_messages (
+  id text primary key,
+  session_id text not null references public.travel_sessions(id) on delete cascade,
+  role text not null,
+  phase text,
+  content text not null,
+  meta jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+\end{lstlisting}
+
+\subsection{Illustrative Session Snapshot Event}
+
+\begin{lstlisting}[language=Python, caption={Illustrative \texttt{session.snapshot} event aligned to the current SSE-based runtime}, label={lst:api_resp1}]
+{
+  "type": "session.snapshot",
+  "data": {
+    "id": "session-uuid",
+    "title": "Goa, 3 days",
+    "providerSettings": {
+      "provider": "gemini",
+      "runMode": "balanced",
+      "keySource": "platform"
+    },
+    "memory": {
+      "destinationsDiscussed": ["Goa"],
+      "planningState": {
+        "status": "ready",
+        "stage": "ready"
+      }
+    },
+    "savedPoiIds": ["poi-1", "poi-2"]
+  }
+}
+\end{lstlisting}
+
+\subsection{Illustrative Trace Event}
+
+\begin{lstlisting}[language=Python, caption={Illustrative \texttt{trace.updated} event aligned to the current deterministic planning pipeline}, label={lst:ws_sample}]
+{
+  "type": "trace.updated",
+  "data": {
+    "id": "trace-uuid",
+    "sessionId": "session-uuid",
+    "turnId": "turn-uuid",
+    "agent": "intent-slot-resolver",
+    "status": "completed",
+    "label": "plan_trip",
+    "detail": "Resolved intent and slots",
+    "createdAt": "2026-04-06T12:00:00.000Z"
+  }
+}
+\end{lstlisting}
+
+\clearpage
+\thispagestyle{mainstyle}
+\addcontentsline{toc}{chapter}{CO-PO Mapping}
+
+\begin{center}
+{\large\bfseries CO-PO MAPPING}
+\end{center}
+\vspace{0.8cm}
+
+\noindent\textbf{Project Title:} ROAMEO: An Agentic Approach To Automated Travel Itinerary Optimization\\[0.2cm]
+\textbf{Batch No:} B1
+
+\vspace{0.7cm}
+\noindent\textbf{Student Names:}
+\begin{center}
+\begin{tabular}{@{}r l c l@{}}
+1. & \textbf{Desireddy Venkata Mahendra Reddy} & - & (22L31A4311) \\
+[0.25cm]
+2. & \textbf{Kuramdasu Yaswanth} & - & (22L31A4327) \\
+[0.25cm]
+3. & \textbf{Mayank Yadav} & - & (22L31A4331) \\
+[0.25cm]
+4. & \textbf{Polumati Ryan Ike} & - & (22L31A4344) \\
+\end{tabular}
+\end{center}
+
+\vspace{1.1cm}
+\noindent\textbf{Project Course Outcomes:}\\[0.25cm]
+\textbf{CO1:} Design and structure a multi-agent travel planning system using modern full-stack technologies, shared contracts, and deterministic orchestration principles. This includes defining how conversational input, itinerary generation, and map-based reasoning operate together inside one planning workspace.\\[0.45cm]
+\textbf{CO2:} Integrate external APIs and database services to generate grounded, persistent, and personalized trip recommendations. This includes working with travel tools, provider services, and session persistence mechanisms so that the generated plans remain consistent across user interactions.\\[0.45cm]
+\textbf{CO3:} Evaluate the performance, usability, and reliability of the implemented system using quantitative and qualitative measures. This includes analyzing latency, correctness of planning flow, and the effectiveness of the user-facing travel-planning experience.\\[0.45cm]
+\textbf{CO4:} Develop a user-centric planning interface that synchronizes conversational, spatial, and itinerary-based views. This outcome emphasizes how interface design, persistence, and live updates together improve the practicality of AI-assisted travel planning.\\[0.25cm]
+
+\clearpage
+\thispagestyle{mainstyle}
+
+\noindent{\large\bfseries CO-PO Mapping:}
+
+\vspace{0.45cm}
+\begin{center}
+\renewcommand{\arraystretch}{1.25}
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{|c|*{11}{c|}c|c|}
+\hline
+ & \textbf{PO} & \textbf{PO} & \textbf{PO} & \textbf{PO} & \textbf{PO} & \textbf{PO} & \textbf{PO} & \textbf{PO} & \textbf{PO} & \textbf{PO} & \textbf{PO} & \textbf{PSO} & \textbf{PSO} \\
+\hline
+ & \textbf{1} & \textbf{2} & \textbf{3} & \textbf{4} & \textbf{5} & \textbf{6} & \textbf{7} & \textbf{8} & \textbf{9} & \textbf{10} & \textbf{11} & \textbf{1} & \textbf{2} \\
+\hline
+\textbf{CO1} & 3 & 3 & 3 & 2 & 2 & 2 & 2 & 1 & 2 & 2 & 1 & 3 & 3 \\
+\hline
+\textbf{CO2} & 3 & 2 & 3 & 3 & 3 & 2 & 2 & 2 & 2 & 2 & 2 & 3 & 3 \\
+\hline
+\textbf{CO3} & 3 & 2 & 2 & 3 & 2 & 2 & 3 & 2 & 2 & 2 & 2 & 2 & 3 \\
+\hline
+\textbf{CO4} & 3 & 3 & 2 & 2 & 2 & 2 & 2 & 3 & 3 & 2 & 2 & 2 & 3 \\
+\hline
+\textbf{AVG} & 3 & 2.5 & 2.5 & 2.5 & 2.25 & 2 & 2.25 & 2 & 2.25 & 2 & 1.75 & 2.5 & 3 \\
+\hline
+\end{tabular}
+\end{center}
+
+\vspace{1.1cm}
+\noindent\textbf{Program Outcomes Description:}\\[0.25cm]
+\textbf{PO1:} Engineering knowledge\\
+\textbf{PO2:} Problem analysis\\
+\textbf{PO3:} Design/development of solutions\\
+\textbf{PO4:} Conduct investigations of complex problems\\
+\textbf{PO5:} Engineering Tool Usage\\
+\textbf{PO6:} The Engineer and The World\\
+\textbf{PO7:} Ethics\\
+\textbf{PO8:} Individual and Collaborative Team work\\
+\textbf{PO9:} Communication\\
+\textbf{PO10:} Project Management and Finance\\
+\textbf{PO11:} Life-Long Learning
+
+\vspace{2.0cm}
+\begin{minipage}[t]{0.45\textwidth}
+\raggedright
+\textbf{Team Leader Signature}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.45\textwidth}
+\raggedleft
+\textbf{Signature of the Project Guide}
+\end{minipage}
+\end{document}

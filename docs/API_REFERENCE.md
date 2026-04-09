@@ -2,7 +2,7 @@
 
 The canonical API surface lives in [Backend/src/api/router.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/api/router.ts).
 
-All authenticated endpoints require the current Supabase-backed user context.
+All authenticated session endpoints require the current Supabase-backed user context.
 
 ## Utility endpoints
 
@@ -52,19 +52,13 @@ Behavior:
 
 ### `GET /api/destination-image?q=<destination>`
 
-Fetches a high-quality destination cover image using Google Places API.
+Fetches a destination cover image using the backend destination image tool.
 
 Returns:
 
 ```json
-{ "imageUrl": "http://localhost:4000/api/proxy/photo?..." }
+{ "imageUrl": "https://.../api/proxy/photo?..." }
 ```
-
-Failures:
-
-- `400` for missing `q` parameter
-- `404` when no image is found
-- `502` for upstream API failures
 
 ## Session endpoints
 
@@ -109,7 +103,7 @@ Accepted body matches `sessionMutationSchema`:
 Behavior:
 
 - updates the session directly
-- emits a fresh `session.snapshot` stream event
+- emits a fresh `session.snapshot`
 
 ### `DELETE /api/sessions/:sessionId`
 
@@ -169,11 +163,29 @@ Behavior:
 
 - applies the mutation through `PlanMutationService`
 - emits `plan.updated` when a plan exists
-- always emits an updated `session.snapshot`
+- emits an updated `session.snapshot`
 
 Response:
 
 - updated `SessionSnapshot`
+
+## Discovery endpoint
+
+### `POST /api/sessions/:sessionId/discovery`
+
+Accepted body:
+
+- `destination?`
+- `category`: `stay | restaurant | attraction | all`
+
+Behavior:
+
+- resolves destination from the request or current session context
+- loads category-specific POIs into the canonical `poiCatalog`
+- merges results into the existing session catalog instead of replacing it
+- emits an updated `session.snapshot`
+
+This endpoint is used by the search surface and category hydration flows.
 
 ## Saved POI endpoints
 
@@ -227,14 +239,9 @@ Accepted body:
 - `providerSettings`
 - `preferences`
 
-Returns the updated settings payload.
+Returns updated saved settings.
 
 ### `PUT /api/me/credentials/:provider`
-
-Providers:
-
-- `gemini`
-- `openai`
 
 Accepted body:
 
@@ -242,16 +249,12 @@ Accepted body:
 
 Behavior:
 
-- encrypts the key
-- stores it as a user credential
-
-Response:
-
-- `204 No Content`
+- encrypts and stores the BYOK provider credential
+- returns `204`
 
 ## Stream events
 
-The shared stream schema is `streamEventSchema` in [packages/contracts/src/index.ts](/Users/yk0007/MyRepos/Roameo/packages/contracts/src/index.ts).
+The SSE stream emits schema-validated events.
 
 Current event types:
 
@@ -264,36 +267,15 @@ Current event types:
 - `turn.completed`
 - `turn.failed`
 
-## Canonical schemas
+## Internal agent tools
 
-Important request and response schemas in the contracts package:
+These are not public HTTP endpoints, but they are now a documented canonical tool surface for runtime agents:
 
-- `CreateSessionInput`
-- `SendMessageInput`
-- `PlanMutationInput`
-- `SessionMutation`
-- `UserSettingsUpdate`
-- `ProviderCredentialInput`
-- `SessionSnapshot`
-- `PlanSnapshot`
-- `ConversationMessage`
-- `AssistantResponseBlock`
-- `AgentTraceEvent`
-- `StreamEvent`
+- `getSessionSnapshot`
+- `updateTripHeader`
+- `editItinerary`
+- `updateSessionMemory`
+- `resetActiveTripContext`
+- `saveFollowUpContext`
 
-## Errors
-
-Validation uses Zod at the router boundary.
-
-Common error behavior:
-
-- `400` for invalid request payloads
-- `404` for unknown or unauthorized session resources
-- `500` for unexpected server failures
-- `503` for missing Google Maps configuration on helper endpoints
-
-Planning failures during turn execution are surfaced through:
-
-- updated planning state in the snapshot
-- fallback assistant message
-- `turn.failed` SSE event
+Implementation: [Backend/src/services/agent-tool-service.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/services/agent-tool-service.ts)

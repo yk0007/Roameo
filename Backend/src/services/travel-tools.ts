@@ -62,6 +62,24 @@ type DestinationGeo = {
   countryCode?: string;
 };
 
+const DISCOVERY_QUERY_LIMIT: Record<"stay" | "restaurant" | "attraction", number> = {
+  stay: 6,
+  restaurant: 8,
+  attraction: 6
+};
+
+const DISCOVERY_RESULT_LIMIT: Record<"stay" | "restaurant" | "attraction", number> = {
+  stay: 18,
+  restaurant: 24,
+  attraction: 24
+};
+
+const DISCOVERY_RADIUS_METERS: Record<"stay" | "restaurant" | "attraction", number> = {
+  stay: 35_000,
+  restaurant: 20_000,
+  attraction: 45_000
+};
+
 export type DiscoveryFocus =
   | "general"
   | "greeting"
@@ -90,9 +108,9 @@ const discoveryQueries: Record<
   Partial<Record<"stay" | "restaurant" | "attraction", string[]>>
 > = {
   general: {
-    stay: ["boutique hotels", "best stays"],
+    stay: ["boutique hotels", "best stays", "top resorts", "best guest houses"],
     restaurant: ["best local restaurants", "popular dining spots"],
-    attraction: ["top tourist attractions", "local highlights"]
+    attraction: ["top tourist attractions", "local highlights", "best places to visit", "scenic viewpoints"]
   },
   greeting: {
     attraction: ["best local highlights", "popular places to visit"]
@@ -130,13 +148,13 @@ const discoveryQueries: Record<
   },
   attractions: {
     // Type-filtered to `tourist_attraction` only
-    attraction: ["top tourist attraction", "best places to visit", "popular landmark"]
+    attraction: ["top tourist attraction", "best places to visit", "popular landmark", "must visit places", "scenic viewpoint", "nature attraction"]
   },
   culture: {
     attraction: ["cultural attraction", "heritage site", "museum"]
   },
   hotels: {
-    stay: ["best hotel", "boutique hotel", "popular accommodation"]
+    stay: ["best hotel", "boutique hotel", "popular accommodation", "top resort", "best guest house", "best stay near beach"]
   },
   day_trips: {
     attraction: ["best day trip from", "nearby scenic escape", "popular excursion"]
@@ -208,6 +226,33 @@ function sanitizePlaceType(
   return "attraction";
 }
 
+function mapPlaceToPoi(
+  place: any,
+  type: "stay" | "restaurant" | "attraction",
+  destination: string,
+  queryTag: string
+): Poi {
+  return {
+    id: place.place_id,
+    name: place.name,
+    type,
+    lat: place.geometry?.location?.lat,
+    lng: place.geometry?.location?.lng,
+    address: place.formatted_address || place.vicinity || undefined,
+    description: place.editorial_summary?.overview || undefined,
+    photoUrl: createPhotoUrl(place.photos?.[0]?.photo_reference),
+    website: undefined,
+    phone: undefined,
+    openingHours: place.opening_hours?.weekday_text || [],
+    rating: typeof place.rating === "number" ? place.rating : undefined,
+    priceLevel:
+      typeof place.price_level === "number" ? place.price_level : undefined,
+    source: "google_places" as const,
+    sourceId: place.place_id,
+    tags: [destination, queryTag]
+  };
+}
+
 export class TravelToolsService {
   async geocodeDestination(destination: string): Promise<DestinationGeo | null> {
     const apiKey = env.GOOGLE_MAPS_API_KEY;
@@ -247,7 +292,7 @@ export class TravelToolsService {
     destination: string,
     focus: DiscoveryFocus = "general"
   ): Promise<PlacesBucket> {
-    const [stays, restaurants, attractions] = await Promise.all([
+    let [stays, restaurants, attractions] = await Promise.all([
       this.searchPlacesByQueries(destination, "stay", toDiscoveryQueries(destination, focus, "stay")),
       this.searchPlacesByQueries(
         destination,
@@ -260,6 +305,29 @@ export class TravelToolsService {
         toDiscoveryQueries(destination, focus, "attraction")
       )
     ]);
+
+    if (focus === "hotels" && stays.length < 4) {
+      const fallbackStays = await this.searchPlacesByQueries(
+        destination,
+        "stay",
+        toDiscoveryQueries(destination, "general", "stay")
+      );
+      stays = Array.from(new Map([...stays, ...fallbackStays].map((poi) => [poi.id, poi] as const)).values());
+    }
+
+    if (
+      ["attractions", "culture", "beaches", "hidden_gems", "day_trips", "family"].includes(focus) &&
+      attractions.length < 6
+    ) {
+      const fallbackAttractions = await this.searchPlacesByQueries(
+        destination,
+        "attraction",
+        toDiscoveryQueries(destination, "general", "attraction")
+      );
+      attractions = Array.from(
+        new Map([...attractions, ...fallbackAttractions].map((poi) => [poi.id, poi] as const)).values()
+      );
+    }
 
     const items = [...stays, ...restaurants, ...attractions].reduce<
       PoiCatalog["items"]
@@ -305,8 +373,9 @@ export class TravelToolsService {
     // cross-category results (e.g. viewpoints for a restaurant query).
     const typeFilter = GOOGLE_PLACE_TYPE_FILTER[sanitizePlaceType(type)];
 
-    const results = await Promise.all(
-      queries.slice(0, type === "restaurant" ? 6 : 3).map(async (query) => {
+    const canonicalType = sanitizePlaceType(type);
+    const queryResults = await Promise.all(
+      queries.slice(0, DISCOVERY_QUERY_LIMIT[canonicalType]).map(async (query) => {
         const url = new URL(`${GOOGLE_PLACES_BASE}/textsearch/json`);
         url.searchParams.set("query", query);
         url.searchParams.set("type", typeFilter);
@@ -329,34 +398,38 @@ export class TravelToolsService {
           );
         }
 
-        return (data.results || []).map((place: any) => ({
-          id: place.place_id,
-          name: place.name,
-          // Always use the caller's canonical type — never derive from Google's types array
-          type: sanitizePlaceType(type),
-          lat: place.geometry?.location?.lat,
-          lng: place.geometry?.location?.lng,
-          address: place.formatted_address || undefined,
-          description: place.editorial_summary?.overview || undefined,
-          photoUrl: createPhotoUrl(place.photos?.[0]?.photo_reference),
-          website: undefined,
-          phone: undefined,
-          openingHours: place.opening_hours?.weekday_text || [],
-          rating: typeof place.rating === "number" ? place.rating : undefined,
-          priceLevel:
-            typeof place.price_level === "number" ? place.price_level : undefined,
-          source: "google_places" as const,
-          sourceId: place.place_id,
-          tags: [destination, query]
-        }));
+        return (data.results || []).map((place: any) =>
+          mapPlaceToPoi(place, canonicalType, destination, query)
+        );
       })
     );
 
+    let nearbyResults: Poi[] = [];
+    const geo = await this.geocodeDestination(destination);
+    if (geo) {
+      const nearbyUrl = new URL(`${GOOGLE_PLACES_BASE}/nearbysearch/json`);
+      nearbyUrl.searchParams.set("location", `${geo.lat},${geo.lng}`);
+      nearbyUrl.searchParams.set("radius", String(DISCOVERY_RADIUS_METERS[canonicalType]));
+      nearbyUrl.searchParams.set("type", typeFilter);
+      nearbyUrl.searchParams.set("keyword", destination);
+      nearbyUrl.searchParams.set("key", apiKey);
+
+      const nearbyResponse = await fetch(nearbyUrl.toString());
+      if (nearbyResponse.ok) {
+        const nearbyData = (await nearbyResponse.json()) as any;
+        if (!nearbyData.status || nearbyData.status === "OK" || nearbyData.status === "ZERO_RESULTS") {
+          nearbyResults = (nearbyData.results || []).map((place: any) =>
+            mapPlaceToPoi(place, canonicalType, destination, `nearby ${destination}`)
+          );
+        }
+      }
+    }
+
     return Array.from(
       new Map(
-        results.flat().map((poi) => [poi.id, poi] as const)
+        [...queryResults.flat(), ...nearbyResults].map((poi) => [poi.id, poi] as const)
       ).values()
-    ).slice(0, type === "restaurant" ? 18 : 8);
+    ).slice(0, DISCOVERY_RESULT_LIMIT[canonicalType]);
   }
 
   async getPlaceDetails(placeId: string): Promise<Partial<Poi>> {

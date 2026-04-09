@@ -1,6 +1,6 @@
 # Frontend Surface
 
-The frontend is intentionally a thin consumer of the canonical session snapshot and shared contracts.
+The frontend is a thin consumer of the canonical session snapshot and shared contracts.
 
 ## Main workspace
 
@@ -11,8 +11,8 @@ It is responsible for:
 - loading the current session snapshot
 - opening the live session stream
 - hydrating the Zustand store
-- deriving chat, trip, itinerary, map, and search models
-- rendering the left and right panel workspace
+- deriving trip, itinerary, map, and search models from the snapshot
+- rendering the split workspace
 
 ## Data flow
 
@@ -24,33 +24,54 @@ Key files:
 - [roameo-frontend/lib/session-view.ts](/Users/yk0007/MyRepos/Roameo/roameo-frontend/lib/session-view.ts)
 - [roameo-frontend/lib/types.ts](/Users/yk0007/MyRepos/Roameo/roameo-frontend/lib/types.ts)
 
-Responsibilities by layer:
+Current responsibilities:
 
 - `api.ts`: authenticated REST calls
-- `ws.ts`: SSE stream transport and chunk parsing
-- `session-store.ts`: live snapshot and stream-event merging
-- `session-view.ts`: derived view models and overview mutation construction
-- `types.ts`: frontend aliases over shared contracts plus display models
+- `ws.ts`: SSE stream transport
+- `session-store.ts`: live snapshot/event merge
+- `session-view.ts`: derived trip, search, itinerary, and map projections
+- `types.ts`: frontend aliases over shared contracts
 
-## Chat surface
+## Current projection rules
 
-Key files:
+### Chat
 
-- [roameo-frontend/components/chat-interface.tsx](/Users/yk0007/MyRepos/Roameo/roameo-frontend/components/chat-interface.tsx)
-- [roameo-frontend/components/structured-response-blocks.tsx](/Users/yk0007/MyRepos/Roameo/roameo-frontend/components/structured-response-blocks.tsx)
-- [roameo-frontend/components/agentic-status.tsx](/Users/yk0007/MyRepos/Roameo/roameo-frontend/components/agentic-status.tsx)
-- [roameo-frontend/components/inline-planning-status.tsx](/Users/yk0007/MyRepos/Roameo/roameo-frontend/components/inline-planning-status.tsx)
+- structured assistant rendering comes from shared `responseBlocks`
+- chat POI cards now receive the full canonical catalog, not just the current map slice
 
-Current rendering rules:
+### Search and saved
 
-- committed assistant messages render from shared `responseBlocks`
-- streamed text arrives through `message.delta` events and is merged into a draft message
-- planning traces render separately from the final assistant message
-- worker progress and planning status blocks can be hidden once a final itinerary block exists
+- search and saved views are derived from the canonical session catalog
+- category-specific discovery can hydrate more POIs into the catalog through `/api/sessions/:sessionId/discovery`
+
+### Itinerary tab
+
+- itinerary tab content is driven only by the canonical plan
+- it should not change on pure discovery turns unless the plan itself changed
+
+### Map
+
+- numbered route markers and polylines come only from itinerary-linked POIs
+- the rest of the canonical POI catalog can still appear as non-route markers
+- map hover cards render from the current canonical marker set
+
+## Right panel update behavior
+
+Files:
+
+- [roameo-frontend/components/right-panel.tsx](/Users/yk0007/MyRepos/Roameo/roameo-frontend/components/right-panel.tsx)
+- [roameo-frontend/components/map-view.tsx](/Users/yk0007/MyRepos/Roameo/roameo-frontend/components/map-view.tsx)
+- [roameo-frontend/components/itinerary-panel.tsx](/Users/yk0007/MyRepos/Roameo/roameo-frontend/components/itinerary-panel.tsx)
+
+Current rule:
+
+- `MapView` and `ItineraryPanel` are keyed by canonical plan version state
+- when the real plan changes, the right panel remounts its derived internal state
+- when only discovery changes, the itinerary should stay plan-only
 
 ## Header editing
 
-Key files:
+Files:
 
 - [roameo-frontend/components/top-navigation.tsx](/Users/yk0007/MyRepos/Roameo/roameo-frontend/components/top-navigation.tsx)
 - [roameo-frontend/components/trip-date-dialog.tsx](/Users/yk0007/MyRepos/Roameo/roameo-frontend/components/trip-date-dialog.tsx)
@@ -58,52 +79,26 @@ Key files:
 - [roameo-frontend/components/trip-travelers-dialog.tsx](/Users/yk0007/MyRepos/Roameo/roameo-frontend/components/trip-travelers-dialog.tsx)
 - [roameo-frontend/components/trip-budget-dialog.tsx](/Users/yk0007/MyRepos/Roameo/roameo-frontend/components/trip-budget-dialog.tsx)
 
-Current behaviors:
+Current behavior:
 
-- optimistic title and trip-metadata updates
-- destination editing with support for multi-stop destination arrays
-- date editing with flexibility support
-- traveler count editing
-- budget editing via normalized budget options
-- browser geolocation origin autofill through `/api/maps/reverse-geocode`
+- optimistic trip metadata updates
+- canonical `update_overview` mutations
+- date flexibility support
+- destination editing with multi-stop support
+- origin autofill from browser location + reverse geocode
 
-The frontend sends these changes through `update_overview` plan mutations built in `session-view.ts`.
+## Visual rule of thumb
 
-## Search, saved, and POI surfaces
+Keep frontend business logic thin.
 
-Key files:
+The backend/runtime decides:
 
-- [roameo-frontend/components/search-interface.tsx](/Users/yk0007/MyRepos/Roameo/roameo-frontend/components/search-interface.tsx)
-- [roameo-frontend/components/search-card.tsx](/Users/yk0007/MyRepos/Roameo/roameo-frontend/components/search-card.tsx)
-- [roameo-frontend/components/poi-card.tsx](/Users/yk0007/MyRepos/Roameo/roameo-frontend/components/poi-card.tsx)
-- [roameo-frontend/components/poi-detail-modal.tsx](/Users/yk0007/MyRepos/Roameo/roameo-frontend/components/poi-detail-modal.tsx)
-- [roameo-frontend/components/poi-type-icon.tsx](/Users/yk0007/MyRepos/Roameo/roameo-frontend/components/poi-type-icon.tsx)
-- [roameo-frontend/lib/poi-image-url.ts](/Users/yk0007/MyRepos/Roameo/roameo-frontend/lib/poi-image-url.ts)
+- what the active trip is
+- what the current domain is
+- whether the turn is itinerary-changing or discovery-only
 
-Current direction:
+The frontend should:
 
-- image-first POI cards
-- canonical save state from `savedPoiIds`
-- no-image fallbacks with POI-type-aware iconography
-- derived search categories from the session catalog, not ad hoc panel state
-
-## Map surface
-
-The canonical map component is [roameo-frontend/components/map-view.tsx](/Users/yk0007/MyRepos/Roameo/roameo-frontend/components/map-view.tsx).
-
-Current rules:
-
-- markers come from snapshot-derived canonical POIs
-- saved and itinerary selections come from canonical ids
-- routes are rendered with Google Maps `DirectionsService` and `DirectionsRenderer`
-- map-side filtering is local UI state only and must not become a second source of truth
-
-## Styling and tokens
-
-Global design tokens and base styling live in [roameo-frontend/app/globals.css](/Users/yk0007/MyRepos/Roameo/roameo-frontend/app/globals.css).
-
-Shared visual expectations:
-
-- keep typography, spacing, and panel rhythm aligned with existing tokens
-- preserve the warm, image-first travel product direction
-- avoid reintroducing sessionStorage-based itinerary recovery or duplicate backend contracts
+- render the snapshot
+- apply stream events
+- keep local UI state only for presentation and interaction

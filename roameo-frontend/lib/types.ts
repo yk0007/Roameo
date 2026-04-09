@@ -9,8 +9,7 @@ import type {
   SessionProviderSettings,
   SessionSnapshot,
   SessionSummary,
-  StreamEvent,
-  AgentTraceEvent
+  StreamEvent
 } from "@roameo/contracts";
 
 export type SessionId = string;
@@ -23,7 +22,7 @@ export type SessionPlanMutation = PlanMutationInput;
 export type ProviderSettings = SessionProviderSettings;
 export type WsEvent = StreamEvent;
 export type SessionPlanningState = PlanningState;
-export type { AgentTraceEvent, AssistantResponseBlock, DateFlexibility };
+export type { AssistantResponseBlock, DateFlexibility };
 
 
 export interface Activity {

@@ -13,6 +13,7 @@ interface PoiCardProps {
   poi: POI
   isSaved: boolean
   isItineraryItem?: boolean
+  isAddPending?: boolean
   onToggleSave: (poi: POI, next: boolean) => void
   onAddPoi: (poi: POI) => void
   onReplan: (poi: POI) => void
@@ -20,7 +21,7 @@ interface PoiCardProps {
 
 
 // Compact version for map hover cards
-export const CompactPoiCard = memo(function CompactPoiCard({ poi, isSaved, isItineraryItem, onToggleSave, onAddPoi, onReplan }: PoiCardProps) {
+export const CompactPoiCard = memo(function CompactPoiCard({ poi, isSaved, isItineraryItem, isAddPending, onToggleSave, onAddPoi, onReplan }: PoiCardProps) {
   const handleToggleSave = useCallback(() => {
     onToggleSave(poi, !isSaved)
   }, [poi, isSaved, onToggleSave])
@@ -33,6 +34,7 @@ export const CompactPoiCard = memo(function CompactPoiCard({ poi, isSaved, isIti
     onReplan(poi)
   }, [poi, onReplan])
   const imageUrl = resolvePoiImageUrl(poi.photoUrl) || "/placeholder.svg"
+  const addLabel = isItineraryItem ? "In Itinerary" : isAddPending ? "Adding..." : "Add to Itinerary"
   return (
     <motion.div 
       className="h-[218px] w-[248px] overflow-hidden rounded-[24px] border border-white/70 bg-white shadow-[0_18px_48px_rgba(15,23,42,0.18)]"
@@ -40,13 +42,13 @@ export const CompactPoiCard = memo(function CompactPoiCard({ poi, isSaved, isIti
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.2 }}
     >
-      <div className="relative">
+      <div className="relative overflow-hidden rounded-b-[20px]">
         <Image 
           src={imageUrl} 
           alt={poi.name} 
           width={400}
           height={160}
-          className="h-32 w-full object-cover"
+          className="h-32 w-full rounded-b-[20px] object-cover"
           quality={90}
           priority={true}
           sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
@@ -73,19 +75,22 @@ export const CompactPoiCard = memo(function CompactPoiCard({ poi, isSaved, isIti
             size="sm"
             onClick={handleAddPoi}
             disabled={isItineraryItem}
+            aria-busy={isAddPending}
             className={`h-7 px-3 text-xs rounded-full font-medium shadow-sm ${
               isItineraryItem
                 ? "bg-white/90 text-gray-700 hover:bg-white"
-                : "bg-white/90 text-gray-700 hover:bg-white"
+                : isAddPending
+                  ? "bg-white/90 text-gray-700 hover:bg-white"
+                  : "bg-white/90 text-gray-700 hover:bg-white"
             }`}
           >
             {isItineraryItem ? (
               <>
-                <Check className="w-3.5 h-3.5 mr-1 inline" /> In Itinerary
+                <Check className="w-3.5 h-3.5 mr-1 inline" /> {addLabel}
               </>
             ) : (
               <>
-                <PoiTypeIcon poi={poi} className="mr-1 inline h-3 w-3" /> Add to Itinerary
+                <PoiTypeIcon poi={poi} className="mr-1 inline h-3 w-3" /> {addLabel}
               </>
             )}
           </Button>

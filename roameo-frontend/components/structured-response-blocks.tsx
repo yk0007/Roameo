@@ -23,6 +23,7 @@ interface StructuredResponseBlocksProps {
   onToggleSave?: (poi: POI, nextSaved: boolean) => void;
   onAddPoi?: (poi: POI) => void;
   onReplan?: (poi: POI) => void;
+  pendingAddPoiIds?: Set<string>;
   hideProgressBlocks?: boolean;
 }
 
@@ -96,6 +97,7 @@ function cardRow(
   poiMap: Map<string, POI>,
   savedIds?: Set<string>,
   itineraryPoiIds?: Set<string>,
+  pendingAddPoiIds?: Set<string>,
   onToggleSave?: (poi: POI, nextSaved: boolean) => void,
   onAddPoi?: (poi: POI) => void,
   onReplan?: (poi: POI) => void
@@ -103,7 +105,6 @@ function cardRow(
   const items = Array.from(new Set(poiIds))
     .map((poiId) => poiMap.get(poiId))
     .filter((poi): poi is POI => Boolean(poi))
-    .slice(0, 4);
 
   if (!items.length) {
     return null;
@@ -118,6 +119,7 @@ function cardRow(
             poi={poi}
             isSaved={savedIds?.has(poi.id) ?? false}
             isItineraryItem={itineraryPoiIds?.has(poi.id) ?? false}
+            isAddPending={pendingAddPoiIds?.has(poi.id) ?? false}
             compact
             onToggleSave={(currentPoi, nextSaved) =>
               onToggleSave?.(currentPoi, nextSaved)
@@ -155,6 +157,7 @@ export function StructuredResponseBlocks({
   onToggleSave,
   onAddPoi,
   onReplan,
+  pendingAddPoiIds,
   hideProgressBlocks,
   onSlotAction
 }: StructuredResponseBlocksProps) {
@@ -429,6 +432,7 @@ export function StructuredResponseBlocks({
             poiMap,
             savedIds,
             itineraryPoiIds,
+            pendingAddPoiIds,
             onToggleSave,
             onAddPoi,
             onReplan
@@ -520,6 +524,7 @@ export function StructuredResponseBlocks({
             poiMap,
             savedIds,
             itineraryPoiIds,
+            pendingAddPoiIds,
             onToggleSave,
             onAddPoi,
             onReplan
@@ -555,6 +560,7 @@ export function StructuredResponseBlocks({
                     poiMap,
                     savedIds,
                     itineraryPoiIds,
+                    pendingAddPoiIds,
                     onToggleSave,
                     onAddPoi,
                     onReplan
@@ -599,6 +605,7 @@ export function StructuredResponseBlocks({
                     poi={poi}
                     isSaved={savedIds?.has(poi.id) ?? false}
                     isItineraryItem={itineraryPoiIds?.has(poi.id) ?? false}
+                    isAddPending={pendingAddPoiIds?.has(poi.id) ?? false}
                     compact
                     onToggleSave={(currentPoi: POI, nextSaved: boolean) =>
                       onToggleSave?.(currentPoi, nextSaved)
@@ -683,6 +690,7 @@ export function StructuredResponseBlocks({
             poiMap,
             savedIds,
             itineraryPoiIds,
+            pendingAddPoiIds,
             onToggleSave,
             onAddPoi,
             onReplan

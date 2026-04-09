@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import { Inter, Roboto_Mono, Pacifico, Prompt } from "next/font/google"
 import "./globals.css"
 import { Toaster } from "@/components/ui/toaster"
+import { RouteTransition, SiteMotionProvider } from "@/components/ui/site-motion"
 import { FloatingNavbarProvider } from "@/components/floating-navbar-provider"
 import { AppProviders } from "@/components/app-providers"
 
@@ -33,7 +34,10 @@ const prompt = Prompt({
 })
 
 export const metadata: Metadata = {
-  title: "Roameo - AI Travel Planner",
+  title: {
+    default: "Roameo",
+    template: "%s | Roameo",
+  },
   description: "Multi-agent AI travel planner that creates personalized, budget-aware itineraries",
   generator: "Roameo",
   icons: {
@@ -62,11 +66,15 @@ export default function RootLayout({
         <meta name="theme-color" content="#0f172a" />
       </head>
       <body
-        className="antialiased font-sans"
+        className="overflow-x-hidden antialiased font-sans"
         style={{ fontFamily: "var(--font-inter), ui-sans-serif, system-ui, sans-serif" }}
       >
         <AppProviders>
-          <FloatingNavbarProvider>{children}</FloatingNavbarProvider>
+          <SiteMotionProvider>
+            <FloatingNavbarProvider>
+              <RouteTransition>{children}</RouteTransition>
+            </FloatingNavbarProvider>
+          </SiteMotionProvider>
         </AppProviders>
         <Toaster />
       </body>

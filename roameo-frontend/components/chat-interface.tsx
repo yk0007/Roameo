@@ -18,7 +18,7 @@ import {
 import { CachedImage } from "./cached-image";
 import { CompactPoiCard } from "./poi-card";
 import { PoiTypeIcon } from "./poi-type-icon";
-import type { AgentTraceEvent, ChatMessage, POI, SessionPlanningState } from "@/lib/types";
+import type { ChatMessage, POI, SessionPlanningState } from "@/lib/types";
 
 function normalizeRenderableMessageContent(content: string) {
   return content
@@ -71,14 +71,11 @@ interface ChatInterfaceProps {
   onToggleSave?: (poi: POI, nextSaved: boolean) => void;
   onAddPoi?: (poi: POI) => void;
   onReplan?: (poi: POI) => void;
+  pendingAddPoiIds?: Set<string>;
   onPopulateInput?: (text: string) => void;
   onSlotAction?: (action: { field: string; value: string | number }, prompt: string) => void;
   inputValue?: string;
   onInputChange?: (value: string) => void;
-  /** Live agent trace events from the current session */
-  traces?: AgentTraceEvent[];
-  /** The currently active turn ID (streaming) */
-  activeTurnId?: string;
 }
 
 export function ChatInterface({
@@ -100,12 +97,11 @@ export function ChatInterface({
   onToggleSave,
   onAddPoi,
   onReplan,
+  pendingAddPoiIds,
   onPopulateInput,
   onSlotAction,
   inputValue: externalInputValue,
   onInputChange,
-  traces,
-  activeTurnId,
 }: ChatInterfaceProps) {
   const [inputValue, setInputValue] = useState(externalInputValue || "");
   const [showSuggestion, setShowSuggestion] = useState(false);
@@ -866,6 +862,7 @@ export function ChatInterface({
                       onToggleSave={onToggleSave}
                       onAddPoi={(poi) => onAddPoi?.(poi)}
                       onReplan={onReplan}
+                      pendingAddPoiIds={pendingAddPoiIds}
                       onSlotAction={onSlotAction}
                     />
                   </div>
@@ -1007,9 +1004,18 @@ export function ChatInterface({
                   </Avatar>
                   <div className="max-w-[calc(100%-44px)] flex-1 pt-1">
                     <AgenticStatus
-                      traces={traces}
-                      turnId={activeTurnId}
                       mode={planningActive ? "planning" : "general"}
+                      planningState={planningState}
+                      title={
+                        planningActive
+                          ? undefined
+                          : "Drafting response"
+                      }
+                      detail={
+                        planningActive
+                          ? undefined
+                          : "Writing a personalised answer..."
+                      }
                     />
                   </div>
                 </div>

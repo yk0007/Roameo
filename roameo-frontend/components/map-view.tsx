@@ -754,59 +754,47 @@ export default function MapView({
           e: google.maps.MapMouseEvent | null,
           isPersistent = false,
         ) => {
-          if (!mapInstance.current || !overlayRef.current) return;
-
-          const projection = overlayRef.current.getProjection();
-          if (!projection) return;
+          if (!mapInstance.current) return;
 
           // Fallback to marker position if event latLng is unavailable
           const eventLatLng = e?.latLng || marker.getPosition?.();
           if (!eventLatLng) return;
 
-          const pixel = projection.fromLatLngToContainerPixel(eventLatLng);
-          const mapDiv = mapInstance.current.getDiv();
-          const mapWidth = mapDiv.clientWidth;
-          const mapHeight = mapDiv.clientHeight;
+          let newPixelOffset = new window.google.maps.Size(0, -17);
+          const projection = overlayRef.current?.getProjection?.();
+          if (projection) {
+            const pixel = projection.fromLatLngToContainerPixel(eventLatLng);
+            const mapDiv = mapInstance.current.getDiv();
+            const mapWidth = mapDiv.clientWidth;
+            const mapHeight = mapDiv.clientHeight;
 
-          const cardWidth = HOVER_CARD_WIDTH;
-          const cardHeight = HOVER_CARD_HEIGHT;
-          const markerSize = 12;
-          const padding = 10;
+            const cardWidth = HOVER_CARD_WIDTH;
+            const cardHeight = HOVER_CARD_HEIGHT;
+            const markerSize = 12;
+            const padding = 10;
 
-          let newPixelOffset;
+            const fitsAbove = pixel.y - cardHeight - markerSize - padding > 0;
+            const fitsBelow =
+              pixel.y + cardHeight + markerSize + padding < mapHeight;
+            const fitsRight =
+              pixel.x + cardWidth + markerSize + padding < mapWidth;
+            const fitsLeft = pixel.x - cardWidth - markerSize - padding > 0;
 
-          // Check if card fits above the marker
-          const fitsAbove = pixel.y - cardHeight - markerSize - padding > 0;
-          // Check if card fits below the marker
-          const fitsBelow =
-            pixel.y + cardHeight + markerSize + padding < mapHeight;
-          // Check if card fits to the right
-          const fitsRight =
-            pixel.x + cardWidth + markerSize + padding < mapWidth;
-          // Check if card fits to the left
-          const fitsLeft = pixel.x - cardWidth - markerSize - padding > 0;
-
-          if (fitsAbove) {
-            // Show above (preferred)
-            newPixelOffset = new window.google.maps.Size(0, -markerSize - 5);
-          } else if (fitsBelow) {
-            // Show below
-            newPixelOffset = new window.google.maps.Size(0, markerSize + 5);
-          } else if (fitsRight) {
-            // Show to the right
-            newPixelOffset = new window.google.maps.Size(
-              markerSize + 5,
-              -cardHeight / 2,
-            );
-          } else if (fitsLeft) {
-            // Show to the left
-            newPixelOffset = new window.google.maps.Size(
-              -markerSize - 5,
-              -cardHeight / 2,
-            );
-          } else {
-            // Default fallback - show above even if it clips
-            newPixelOffset = new window.google.maps.Size(0, -markerSize - 5);
+            if (fitsAbove) {
+              newPixelOffset = new window.google.maps.Size(0, -markerSize - 5);
+            } else if (fitsBelow) {
+              newPixelOffset = new window.google.maps.Size(0, markerSize + 5);
+            } else if (fitsRight) {
+              newPixelOffset = new window.google.maps.Size(
+                markerSize + 5,
+                -cardHeight / 2,
+              );
+            } else if (fitsLeft) {
+              newPixelOffset = new window.google.maps.Size(
+                -markerSize - 5,
+                -cardHeight / 2,
+              );
+            }
           }
 
           infoWindow.setOptions({ pixelOffset: newPixelOffset });

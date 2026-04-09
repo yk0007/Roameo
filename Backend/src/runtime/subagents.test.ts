@@ -13,6 +13,14 @@ import {
 } from "./subagents.js";
 import type { SessionSnapshot } from "@roameo/contracts";
 
+function buildProviderStub(result: unknown) {
+  return {
+    generateObject: async () => result,
+    routerModels: () => undefined,
+    narrativeModels: () => undefined
+  } as any;
+}
+
 function makeSession(): SessionSnapshot {
   return {
     id: "session-1",
@@ -73,7 +81,6 @@ function makeSession(): SessionSnapshot {
     },
     messages: [],
     savedPoiIds: [],
-    traces: [],
     createdAt: "2026-04-01T00:00:00.000Z",
     updatedAt: "2026-04-01T00:00:00.000Z"
   };
@@ -150,7 +157,7 @@ test("resolveFastTurnResponse handles identity questions without the full pipeli
   assert.equal(fast.memory.planningState.status, "ready");
 });
 
-test("resolveDeterministicTurnIntent handles obvious restaurant discovery locally", () => {
+test("resolveDeterministicTurnIntent leaves explicit restaurant discovery to the semantic router", () => {
   const session = makeSession();
   session.memory.destinationsDiscussed = ["Goa"];
 
@@ -159,25 +166,19 @@ test("resolveDeterministicTurnIntent handles obvious restaurant discovery locall
     "show me some restaurants"
   );
 
-  assert.ok(resolution);
-  assert.equal(resolution.intent, "search_places");
-  assert.equal(resolution.questionFocus, "restaurants");
-  assert.deepEqual(resolution.destinations, ["Goa"]);
+  assert.equal(resolution, null);
 });
 
-test("resolveDeterministicTurnIntent handles obvious planning requests locally", () => {
+test("resolveDeterministicTurnIntent leaves explicit planning requests to the semantic router", () => {
   const resolution = resolveDeterministicTurnIntent(
     makeSession(),
     "plan trip to araku for 2 days"
   );
 
-  assert.ok(resolution);
-  assert.equal(resolution.intent, "plan_trip");
-  assert.equal(resolution.totalDays, 2);
-  assert.equal(resolution.destinations[0], "araku");
+  assert.equal(resolution, null);
 });
 
-test("resolveDeterministicTurnIntent keeps full itinerary prompts in planning mode", () => {
+test("resolveDeterministicTurnIntent leaves full itinerary prompts to the semantic router", () => {
   const resolution = resolveDeterministicTurnIntent(
     makeSession(),
     `Plan a family trip to shimla for 4 days. Include family-friendly activities, suitable accommodations, and child-safe attractions. Please provide a detailed itinerary with:
@@ -191,11 +192,7 @@ Important travel information and safety tips
 Budget estimates for different expense categories`
   );
 
-  assert.ok(resolution);
-  assert.equal(resolution.intent, "plan_trip");
-  assert.equal(resolution.destination, "shimla");
-  assert.equal(resolution.totalDays, 4);
-  assert.notEqual(resolution.questionFocus, "restaurants");
+  assert.equal(resolution, null);
 });
 
 test("researchPlanningDestinations keeps hospitality categories available for planning", async () => {
@@ -320,55 +317,51 @@ test("synthesizePlan upgrades generic meals and accommodation to real POIs", asy
   };
 
   const plan = await synthesizePlan(
-    {
-      async generateObject() {
-        return {
-          title: "Shimla family reset",
+    buildProviderStub({
+      title: "Shimla family reset",
+      destination: "Shimla",
+      destinations: ["Shimla"],
+      totalDays: 2,
+      travelerCount: 2,
+      notes: [],
+      destinationSegments: [],
+      days: [
+        {
+          day: 1,
+          title: "Soft arrival",
           destination: "Shimla",
-          destinations: ["Shimla"],
-          totalDays: 2,
-          travelerCount: 2,
-          notes: [],
-          destinationSegments: [],
-          days: [
+          activities: [
             {
-              day: 1,
-              title: "Soft arrival",
-              destination: "Shimla",
-              activities: [
-                {
-                  title: "The Ridge walk",
-                  poiId: attraction.id,
-                  startTime: "09:00",
-                  endTime: "10:30",
-                  notes: []
-                },
-                {
-                  title: "Lunch",
-                  startTime: "13:00",
-                  endTime: "14:00",
-                  notes: []
-                }
-              ]
+              title: "The Ridge walk",
+              poiId: attraction.id,
+              startTime: "09:00",
+              endTime: "10:30",
+              notes: []
             },
             {
-              day: 2,
-              title: "Garden day",
-              destination: "Shimla",
-              activities: [
-                {
-                  title: "Morning stroll",
-                  poiId: attraction.id,
-                  startTime: "09:00",
-                  endTime: "10:30",
-                  notes: []
-                }
-              ]
+              title: "Lunch",
+              startTime: "13:00",
+              endTime: "14:00",
+              notes: []
             }
           ]
-        };
-      }
-    } as any,
+        },
+        {
+          day: 2,
+          title: "Garden day",
+          destination: "Shimla",
+          activities: [
+            {
+              title: "Morning stroll",
+              poiId: attraction.id,
+              startTime: "09:00",
+              endTime: "10:30",
+              notes: []
+            }
+          ]
+        }
+      ]
+    }),
     {} as any,
     session,
     {
@@ -444,6 +437,65 @@ test("updateSessionMemory keeps pre-plan destination and duration in canonical m
   assert.ok(memory.acceptedDecisions.includes("Duration: 3 days"));
   assert.ok(memory.acceptedDecisions.includes("Travelers: 2"));
   assert.deepEqual(memory.destinationsDiscussed, ["Meghalaya"]);
+});
+
+test("updateSessionMemory replaces stale active trip context on an explicit new trip", () => {
+  const session = makeSession();
+  session.memory.destinationsDiscussed = ["Paris"];
+  session.memory.acceptedDecisions = [
+    "Destination: Paris",
+    "Duration: 5 days",
+    "Dates: 2026-04-10 to 2026-04-14"
+  ];
+
+  const memory = updateSessionMemory(
+    session,
+    {
+      intent: "plan_trip",
+      destination: "Araku",
+      destinations: ["Araku"],
+      totalDays: 2,
+      explicitNewTrip: true,
+      styles: [],
+      dateContext: {
+        inferredStartDate: "2026-05-01",
+        inferredEndDate: "2026-05-02",
+        flexibility: "exact",
+        derivedFrom: "explicit",
+        advisoryItems: []
+      }
+    },
+    "Planning Araku now."
+  );
+
+  assert.deepEqual(memory.destinationsDiscussed, ["Araku"]);
+  assert.ok(memory.acceptedDecisions.includes("Destination: Araku"));
+  assert.ok(!memory.acceptedDecisions.includes("Destination: Paris"));
+  assert.ok(memory.acceptedDecisions.includes("Duration: 2 days"));
+  assert.ok(!memory.acceptedDecisions.includes("Duration: 5 days"));
+});
+
+test("updateSessionMemory preserves multi-city destination sets for the active plan", () => {
+  const memory = updateSessionMemory(
+    makeSession(),
+    {
+      intent: "plan_trip",
+      destination: "Paris",
+      destinations: ["Paris", "Lyon"],
+      totalDays: 5,
+      explicitNewTrip: true,
+      styles: [],
+      dateContext: {
+        flexibility: "open_ended",
+        derivedFrom: "none",
+        advisoryItems: []
+      }
+    },
+    "Planning a France route."
+  );
+
+  assert.deepEqual(memory.destinationsDiscussed, ["Paris", "Lyon"]);
+  assert.ok(memory.acceptedDecisions.includes("Destination: Paris"));
 });
 
 test("buildResponseBlocks emits canonical itinerary presentation blocks", () => {
@@ -610,13 +662,11 @@ test("resolveTurnIntent upgrades natural follow-up edit requests into refine_tri
     }
   };
 
-  const providerService = {
-    generateObject: async () => ({
-      intent: "question",
-      destinations: [],
-      styles: []
-    })
-  } as any;
+  const providerService = buildProviderStub({
+    intent: "question",
+    destinations: [],
+    styles: []
+  });
 
   const resolution = await resolveTurnIntent(
     providerService,
@@ -637,13 +687,11 @@ test("resolveTurnIntent anchors broad greetings to the current local context", a
     }
   };
 
-  const providerService = {
-    generateObject: async () => ({
-      intent: "question",
-      destinations: [],
-      styles: []
-    })
-  } as any;
+  const providerService = buildProviderStub({
+    intent: "question",
+    destinations: [],
+    styles: []
+  });
 
   const resolution = await resolveTurnIntent(
     providerService,
@@ -658,13 +706,11 @@ test("resolveTurnIntent anchors broad greetings to the current local context", a
 });
 
 test("resolveTurnIntent classifies plan trip requests deterministically", async () => {
-  const providerService = {
-    generateObject: async () => ({
-      intent: "question",
-      destinations: [],
-      styles: []
-    })
-  } as any;
+  const providerService = buildProviderStub({
+    intent: "question",
+    destinations: [],
+    styles: []
+  });
 
   const resolution = await resolveTurnIntent(
     providerService,
@@ -679,13 +725,11 @@ test("resolveTurnIntent classifies plan trip requests deterministically", async 
 });
 
 test("resolveTurnIntent parses flexible date context from natural language", async () => {
-  const providerService = {
-    generateObject: async () => ({
-      intent: "question",
-      destinations: [],
-      styles: []
-    })
-  } as any;
+  const providerService = buildProviderStub({
+    intent: "question",
+    destinations: [],
+    styles: []
+  });
 
   const resolution = await resolveTurnIntent(
     providerService,
@@ -786,7 +830,7 @@ test("buildResponseBlocks emits discovery stories from canonical POIs", () => {
   });
 
   assert.ok(blocks.some((block) => block.type === "poi_story_list"));
-  assert.ok(!blocks.some((block) => block.type === "place_card_row"));
+  assert.ok(blocks.some((block) => block.type === "place_card_row"));
 });
 
 test("buildResponseBlocks emits categorized restaurant rows for food discovery", () => {
@@ -856,6 +900,68 @@ test("buildResponseBlocks emits categorized restaurant rows for food discovery",
   const grouped = blocks.find((block) => block.type === "categorized_place_rows");
   assert.ok(grouped && grouped.type === "categorized_place_rows");
   assert.ok(grouped.sections.length >= 2);
+});
+
+test("resolveDeterministicTurnIntent leaves generic places requests to the semantic router", () => {
+  const session = makeSession();
+  session.memory.destinationsDiscussed = ["Goa"];
+
+  const resolution = resolveDeterministicTurnIntent(session, "show me some places");
+
+  assert.equal(resolution, null);
+});
+
+test("buildResponseBlocks attraction discovery emits a horizontal attraction row", () => {
+  const session = makeSession();
+  session.poiCatalog.items["poi-3"] = {
+    id: "poi-3",
+    name: "RK Beach",
+    type: "attraction",
+    lat: 17.71,
+    lng: 83.32,
+    openingHours: [],
+    source: "google_places",
+    tags: ["Visakhapatnam"],
+    rating: 4.4
+  };
+
+  const blocks = buildResponseBlocks({
+    session,
+    resolution: {
+      intent: "search_places",
+      destination: "Visakhapatnam",
+      destinations: ["Visakhapatnam"],
+      styles: [],
+      questionFocus: "attractions",
+      dateContext: {
+        flexibility: "open_ended",
+        derivedFrom: "none",
+        advisoryItems: []
+      }
+    },
+    narrative: {
+      introTitle: "A few strong places are ready",
+      introBody: "Here are some good attractions to start with.",
+      leadText: "Start with these stronger scenic picks.",
+      promptChips: [],
+      clarifyingQuestions: []
+    },
+    research: {
+      destinations: ["Visakhapatnam"],
+      focus: "attractions",
+      catalog: session.poiCatalog,
+      grouped: {
+        stays: [],
+        restaurants: [session.poiCatalog.items["poi-2"]],
+        attractions: [session.poiCatalog.items["poi-1"], session.poiCatalog.items["poi-3"]]
+      },
+      facts: []
+    }
+  });
+
+  const row = blocks.find((block) => block.type === "place_card_row");
+  assert.ok(row && row.type === "place_card_row");
+  assert.deepEqual(new Set(row.poiIds), new Set(["poi-1", "poi-3"]));
 });
 
 test("buildResponseBlocks does not persist worker progress in final replies", () => {
@@ -995,13 +1101,11 @@ test("resolveTurnIntent resolves yes against pending stay follow-up context", as
     options: [{ domain: "stays", label: "Stay options", prompt: "Show me stay options" }]
   };
 
-  const providerService = {
-    generateObject: async () => ({
-      intent: "question",
-      destinations: [],
-      styles: []
-    })
-  } as any;
+  const providerService = buildProviderStub({
+    intent: "question",
+    destinations: [],
+    styles: []
+  });
 
   const resolution = await resolveTurnIntent(providerService, {} as any, session, "yes");
   assert.equal(resolution.intent, "search_places");
@@ -1019,15 +1123,182 @@ test("resolveTurnIntent resolves yes against pending restaurant follow-up contex
     options: [{ domain: "restaurants", label: "Restaurants", prompt: "Show me restaurants" }]
   };
 
-  const providerService = {
-    generateObject: async () => ({
+  const providerService = buildProviderStub({
+    intent: "question",
+    destinations: [],
+    styles: []
+  });
+
+  const resolution = await resolveTurnIntent(providerService, {} as any, session, "sure");
+  assert.equal(resolution.intent, "search_places");
+  assert.equal(resolution.questionFocus, "restaurants");
+  assert.equal(resolution.destination, "Goa");
+});
+
+test("resolveDeterministicTurnIntent lets an explicit stay request override restaurant follow-up context", () => {
+  const session = makeSession();
+  session.memory.pendingFollowUp = {
+    primaryDomain: "restaurants",
+    destination: "Goa",
+    poiIds: ["poi-2"],
+    categoryKeys: ["famous"],
+    options: [{ domain: "restaurants", label: "Restaurants", prompt: "Show me restaurants" }]
+  };
+  session.memory.destinationsDiscussed = ["Goa"];
+
+  const resolution = resolveDeterministicTurnIntent(session, "show me some stays");
+
+  assert.ok(resolution);
+  assert.equal(resolution.intent, "search_places");
+  assert.equal(resolution.questionFocus, "hotels");
+  assert.equal(resolution.followUpDomain, "stays");
+  assert.equal(resolution.stayMode, true);
+  assert.equal(resolution.destination, "Goa");
+});
+
+test("resolveTurnIntent lets an explicit restaurant request override stale attraction follow-up context", async () => {
+  const session = makeSession();
+  session.memory.pendingFollowUp = {
+    destination: "Goa",
+    categoryKeys: [],
+    poiIds: ["poi-1"],
+    options: [
+      { domain: "activities", label: "Add to itinerary", prompt: "Add to itinerary" },
+      { domain: "attractions", label: "More nature spots", prompt: "More nature spots" },
+      { domain: "dates", label: "Best time to visit", prompt: "Best time to visit" }
+    ]
+  };
+
+  const resolution = await resolveTurnIntent(
+    buildProviderStub({
       intent: "question",
       destinations: [],
       styles: []
-    })
-  } as any;
+    }),
+    {} as any,
+    session,
+    "show me some restaurants"
+  );
 
-  const resolution = await resolveTurnIntent(providerService, {} as any, session, "sure");
+  assert.equal(resolution.intent, "search_places");
+  assert.equal(resolution.questionFocus, "restaurants");
+  assert.equal(resolution.followUpAmbiguous, false);
+  assert.equal(resolution.destination, "Goa");
+});
+
+test("resolveTurnIntent lets an explicit hotel request override stale attraction follow-up context", async () => {
+  const session = makeSession();
+  session.memory.pendingFollowUp = {
+    destination: "Goa",
+    categoryKeys: [],
+    poiIds: ["poi-1"],
+    options: [
+      { domain: "activities", label: "Add to itinerary", prompt: "Add to itinerary" },
+      { domain: "attractions", label: "More nature spots", prompt: "More nature spots" },
+      { domain: "dates", label: "Best time to visit", prompt: "Best time to visit" }
+    ]
+  };
+
+  const resolution = await resolveTurnIntent(
+    buildProviderStub({
+      intent: "question",
+      destinations: [],
+      styles: []
+    }),
+    {} as any,
+    session,
+    "show me some hotels"
+  );
+
+  assert.equal(resolution.intent, "search_places");
+  assert.equal(resolution.questionFocus, "hotels");
+  assert.equal(resolution.stayMode, true);
+  assert.equal(resolution.followUpAmbiguous, false);
+  assert.equal(resolution.destination, "Goa");
+});
+
+test("resolveTurnIntent treats explicit stay requests as discovery, not itinerary edits", async () => {
+  const session = makeSession();
+  session.plan = {
+    schemaVersion: 1,
+    sessionId: "session-1",
+    version: 1,
+    title: "Goa trip",
+    destination: "Goa",
+    destinations: ["Goa"],
+    totalDays: 4,
+    travelerCount: 2,
+    notes: [],
+    destinationSegments: [],
+    days: [],
+    generatedAt: "2026-04-01T00:00:00.000Z",
+    lastUserIntent: "plan_trip"
+  };
+
+  const resolution = await resolveTurnIntent(
+    buildProviderStub({
+      intent: "refine_trip",
+      destinations: ["Goa"],
+      styles: []
+    }),
+    {} as any,
+    session,
+    "show me some stays"
+  );
+
+  assert.equal(resolution.intent, "search_places");
+  assert.equal(resolution.questionFocus, "hotels");
+  assert.equal(resolution.stayMode, true);
+});
+
+test("resolveTurnIntent treats explicit restaurant requests as discovery, not itinerary edits", async () => {
+  const session = makeSession();
+  session.plan = {
+    schemaVersion: 1,
+    sessionId: "session-1",
+    version: 1,
+    title: "Goa trip",
+    destination: "Goa",
+    destinations: ["Goa"],
+    totalDays: 4,
+    travelerCount: 2,
+    notes: [],
+    destinationSegments: [],
+    days: [],
+    generatedAt: "2026-04-01T00:00:00.000Z",
+    lastUserIntent: "plan_trip"
+  };
+
+  const resolution = await resolveTurnIntent(
+    buildProviderStub({
+      intent: "refine_trip",
+      destinations: ["Goa"],
+      styles: []
+    }),
+    {} as any,
+    session,
+    "show me some restaurants"
+  );
+
+  assert.equal(resolution.intent, "search_places");
+  assert.equal(resolution.questionFocus, "restaurants");
+});
+
+test("resolveTurnIntent treats food places as restaurant discovery", async () => {
+  const session = makeSession();
+  session.memory.destinationsDiscussed = ["Goa"];
+
+  const resolution = await resolveTurnIntent(
+    buildProviderStub({
+      intent: "question",
+      destinations: [],
+      styles: []
+    }),
+    {} as any,
+    session,
+    "show me some food places"
+  );
+
   assert.equal(resolution.intent, "search_places");
   assert.equal(resolution.questionFocus, "restaurants");
   assert.equal(resolution.destination, "Goa");
@@ -1043,13 +1314,11 @@ test("resolveTurnIntent refines restaurant category from follow-up text", async 
     options: [{ domain: "restaurants", label: "Restaurants", prompt: "Show me restaurants" }]
   };
 
-  const providerService = {
-    generateObject: async () => ({
-      intent: "question",
-      destinations: [],
-      styles: []
-    })
-  } as any;
+  const providerService = buildProviderStub({
+    intent: "question",
+    destinations: [],
+    styles: []
+  });
 
   const resolution = await resolveTurnIntent(providerService, {} as any, session, "show me cheaper ones");
   assert.equal(resolution.intent, "search_places");
@@ -1068,15 +1337,87 @@ test("resolveTurnIntent asks to clarify ambiguous follow-up branches", async () 
     ]
   };
 
-  const providerService = {
-    generateObject: async () => ({
-      intent: "question",
-      destinations: [],
-      styles: []
-    })
-  } as any;
+  const providerService = buildProviderStub({
+    intent: "question",
+    destinations: [],
+    styles: []
+  });
 
   const resolution = await resolveTurnIntent(providerService, {} as any, session, "yes");
   assert.equal(resolution.intent, "question");
   assert.equal(resolution.questionFocus, "followup_clarify");
+});
+
+test("buildResponseBlocks stay discovery never emits restaurant carousels", () => {
+  const session = makeSession();
+  const stay = {
+    id: "stay-1",
+    name: "Goa Palm Retreat",
+    type: "stay" as const,
+    lat: 15.5,
+    lng: 73.8,
+    openingHours: [],
+    source: "google_places" as const,
+    tags: ["Goa"]
+  };
+  const restaurant = {
+    id: "restaurant-1",
+    name: "Maka Zai Goan Restaurant",
+    type: "restaurant" as const,
+    lat: 15.51,
+    lng: 73.81,
+    openingHours: [],
+    source: "google_places" as const,
+    tags: ["Goa"]
+  };
+
+  session.poiCatalog.items[stay.id] = stay;
+  session.poiCatalog.items[restaurant.id] = restaurant;
+
+  const blocks = buildResponseBlocks({
+    session,
+    resolution: {
+      intent: "search_places",
+      destination: "Goa",
+      destinations: ["Goa"],
+      styles: [],
+      questionFocus: "hotels",
+      stayMode: true,
+      dateContext: {
+        flexibility: "open_ended",
+        derivedFrom: "none",
+        advisoryItems: []
+      }
+    },
+    narrative: {
+      introTitle: "Your Goa stay options",
+      introBody: "Goa has a good mix of stays for this trip.",
+      leadText: "Here are the strongest stay picks first.",
+      promptChips: [],
+      clarifyingQuestions: []
+    },
+    research: {
+      destinations: ["Goa"],
+      focus: "hotels",
+      catalog: {
+        version: 1,
+        items: {
+          [stay.id]: stay,
+          [restaurant.id]: restaurant
+        }
+      },
+      grouped: {
+        stays: [stay],
+        restaurants: [restaurant],
+        attractions: []
+      },
+      facts: []
+    }
+  });
+
+  assert.ok(blocks.some((block) => block.type === "stay_recommendation_list"));
+  assert.ok(!blocks.some((block) => block.type === "categorized_place_rows"));
+  const row = blocks.find((block) => block.type === "place_card_row");
+  assert.ok(row && row.type === "place_card_row");
+  assert.deepEqual(row.poiIds, [stay.id]);
 });

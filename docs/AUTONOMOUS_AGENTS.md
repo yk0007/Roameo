@@ -1,240 +1,177 @@
 # Autonomous Agents Architecture
 
-Roameo’s backend turn execution is a deterministic, typed pipeline. Most of the “agents” are plain TypeScript functions coordinated by `TurnRunner`; the LLM is used only where free-form interpretation or synthesis is required.
+Roameo’s canonical agent model is a router-first runtime with deterministic tool execution and snapshot-based state commits.
+
+The product goal is:
+
+- semantic understanding by model
+- explicit tool planning and execution in code
+- one canonical session state
+- no parallel truth systems for chat, itinerary, map, or saved POIs
 
 ## Core principle
 
-- deterministic orchestration in code
-- shared contracts at the boundaries
-- live tool-backed grounding for POIs, weather, events, and holidays
-- one session snapshot updated at the end of the turn
+Most of the “agents” are plain TypeScript stages coordinated by [Backend/src/runtime/turn-runner.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/runtime/turn-runner.ts).
 
-## Per-turn pipeline
+LLMs are used where meaning or synthesis is genuinely needed:
 
-1. `resolveTurnIntent()`
-Intent resolver. Uses a structured model call to classify the message, normalize destinations, and infer date context.
+- turn understanding / routing
+- narrative generation
+- structured itinerary synthesis for plan/refine turns
 
-2. `shouldResearchResolution()`
-Pure predicate that decides whether POI research should run.
+Everything else should stay deterministic:
 
-3. `researchDestinations()`
-Runs Google Places research and optional Tavily deep research into a canonical `PoiCatalog`.
+- provider resolution
+- tool selection and execution
+- itinerary mutation
+- memory updates
+- POI catalog persistence
+- stream-event emission
 
-4. `getWeatherSummary()`, `getEventSummary()`, `getHolidaySummary()`
-Date-context enrichment using Open-Meteo, Tavily, and Nager.Date.
+## Current per-turn pipeline
 
-5. `synthesizePlan()`
-Structured planner call used only for `plan_trip` and `refine_trip` turns.
+1. Persist user message.
+2. Run fast conversational short-circuit only for trivial non-travel turns.
+3. Resolve turn intent and semantic focus with `resolveTurnIntent()`.
+4. Decide whether discovery/research is required.
+5. Run destination discovery and date/event/weather enrichment when required.
+6. For `plan_trip` / `refine_trip`, synthesize a structured plan and enrich logistics.
+7. Run deterministic feasibility and transit passes.
+8. Generate the final assistant narrative and structured blocks.
+9. Derive and persist the next follow-up context.
+10. Update canonical session memory and emit final snapshot events.
 
-6. `enrichPlanLogistics()`
-Backfills travel times with Google Directions and computes day and trip budgets.
+## Current role split
 
-7. `criticizeAndRefinePlan()`
-Pure in-memory feasibility pass that trims obviously overloaded plans and fills accommodation gaps.
+### 1. Conversational fast path
 
-8. `transitAdvisor()`
-Pure heuristic pass that emits inter-city transit suggestions for multi-destination trips.
+File: [Backend/src/runtime/subagents.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/runtime/subagents.ts)
 
-9. `answerConversationally()` plus `buildResponseBlocks()`
-Creates the final assistant text and canonical response blocks.
+`resolveFastTurnResponse()` handles:
 
-10. `updateSessionMemory()` plus final repository update
-Commits the accepted result back into the session snapshot and marks planning as ready.
+- greetings
+- acknowledgements
+- identity / capability questions
+- simple small talk
 
-## LLM call pattern
+These turns skip the heavy planning pipeline and update memory directly.
 
-Normal turns use exactly two model calls:
+### 2. Semantic router
 
-- intent resolution
-- narration
+File: [Backend/src/runtime/subagents.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/runtime/subagents.ts)
 
-Planning turns use a third model call:
+`resolveTurnIntent()` is the primary travel understanding layer.
 
-- structured itinerary synthesis
+Current model routing:
 
-That means `plan_trip` and `refine_trip` turns are the only ones that perform three provider calls.
+- router / understanding: `gemma-4-31b-it`
+- fallback: `gemini-2.5-flash`
 
-## Agent responsibilities
+The router is responsible for:
 
-### Intent Resolver
+- intent
+- active domain
+- destination scope
+- date context
+- traveler count
+- style cues
+- whether the turn is a new trip, refinement, or discovery
 
-File: `Backend/src/runtime/subagents.ts`
+The runtime still keeps minimal deterministic guards for:
 
-`resolveTurnIntent()` returns a `TurnResolution` with:
+- trivial fast-path conversation
+- shorthand follow-ups like `yes` / `that one`
+- fail-fast state validation
 
-- `intent`
-- `destination` and `destinations`
-- `origin`
-- `totalDays`
-- `travelerCount`
-- `budgetNote`
-- `styles`
-- `questionFocus`
-- `stayMode`
-- `dateContext`
-
-The result is finalized against session context before the rest of the pipeline runs.
-
-### Research Gate
-
-File: `Backend/src/runtime/subagents.ts`
-
-`shouldResearchResolution()` prevents unnecessary discovery work. It typically runs for:
-
-- `plan_trip`
-- `refine_trip`
-- `search_places`
-- question turns that are really place-discovery requests
-
-### Discovery Agent
+### 3. Discovery and grounding
 
 Files:
 
-- `Backend/src/runtime/subagents.ts`
-- `Backend/src/services/travel-tools.ts`
+- [Backend/src/runtime/subagents.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/runtime/subagents.ts)
+- [Backend/src/services/travel-tools.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/services/travel-tools.ts)
 
-`researchDestinations()` calls `searchPlacesForDestination()`, which fans out into typed Google Places searches for:
+Canonical data grounding remains direct:
 
-- stays
-- restaurants
-- attractions
+- Google Places for POIs
+- Google Geocoding
+- Google Directions / Maps
+- Open-Meteo
+- Tavily
+- Nager.Date
 
-Every `searchPlacesByQueries()` request applies a strict Google Places `type` filter:
+Current rule:
 
-- stay -> `lodging`
-- restaurant -> `restaurant`
-- attraction -> `tourist_attraction`
+- direct Places/Maps is the canonical POI truth
+- model-based Maps grounding is useful as future semantic reranking/expansion, not as the canonical catalog source
 
-This category isolation is part of the canonical behavior and prevents cross-category bleed.
+### 4. Itinerary synthesis
 
-For planning turns, discovery can also run `deepWebResearch()` when `TAVILY_API_KEY` is configured.
+File: [Backend/src/runtime/subagents.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/runtime/subagents.ts)
 
-### Date Context Agent
+`synthesizePlan()` uses structured planning output plus deterministic hospitality repair:
 
-File: `Backend/src/services/travel-tools.ts`
+- real stay assignment for overnight days
+- restaurant-linked meal stops when the request implies food/cuisine support
+- no fabricated POIs outside the catalog
 
-The date context agent is a grouped set of direct integrations:
+Current model routing:
 
-- `getWeatherSummary()` -> Open-Meteo
-- `getEventSummary()` -> Tavily
-- `getHolidaySummary()` -> Nager.Date
+- narrative / plan synthesis: `gemini-flash-latest`
+- fallback: `gemini-2.5-flash`
 
-These functions populate the `PlanningContext` consumed by narration and block rendering.
+### 5. Internal agent tools
 
-### Itinerary Planner
+File: [Backend/src/services/agent-tool-service.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/services/agent-tool-service.ts)
 
-File: `Backend/src/runtime/subagents.ts`
+Current first-class internal tools:
 
-`synthesizePlan()` is the structured planning call. It receives the current session, resolved intent, and researched catalog, then produces a validated `PlanSnapshot`.
+- `getSessionSnapshot`
+- `updateTripHeader`
+- `editItinerary`
+- `updateSessionMemory`
+- `resetActiveTripContext`
+- `saveFollowUpContext`
 
-Important rules enforced by prompt plus normalization:
+These are the canonical mutation primitives the agent system should build on.
 
-- use provided POI ids only
-- create feasible day counts
-- preserve destination structure
-- include accommodation when available
-- do not fabricate unknown POIs
+They intentionally route through:
 
-### Logistics Enricher
+- [Backend/src/services/session-repository.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/services/session-repository.ts)
+- [Backend/src/services/plan-mutation-service.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/services/plan-mutation-service.ts)
 
-File: `Backend/src/runtime/subagents.ts`
+so state writes stay centralized.
 
-`enrichPlanLogistics()`:
+## Context management rules
 
-- computes travel times between adjacent POIs with Google Directions
-- stores `travelTimeMinutesFromPrevious`
-- computes day budgets
-- computes trip-total budget
+Roameo’s agent system must maintain and invalidate context at the session level.
 
-### Feasibility Critic
+Current invariants:
 
-File: `Backend/src/runtime/subagents.ts`
+- explicit new-trip requests replace stale active-trip context
+- multi-city trips preserve the full active destination set
+- explicit new discovery asks override stale follow-up context
+- itinerary and map route updates happen only when the canonical plan changes
+- discovery POIs accumulate in the session catalog across turns instead of being overwritten
 
-`criticizeAndRefinePlan()` is a pure post-processing pass. It currently:
+Important current helpers:
 
-- trims days above 5 activities
-- flags transfer legs above 120 minutes
-- lightens the last day if overloaded
-- fills missing accommodation on multi-day trips when a stay exists
+- `updateSessionMemory()`
+- `derivePendingFollowUpContext()`
+- `resetActiveTripContext()` in `AgentToolService`
 
-Each critique is emitted as a trace event by the turn runner.
+## What “autonomous” means here
 
-### Transit Advisor
+For Roameo, autonomous should mean:
 
-File: `Backend/src/runtime/subagents.ts`
+- understands the current user intent from the whole conversation
+- selects the right tool plan
+- modifies canonical session state only through approved tool surfaces
+- re-reads the session after tool execution
+- narrates the result from the updated canonical state
 
-`transitAdvisor()` runs for multi-destination plans and emits heuristic inter-city guidance. The output is trace-only today; it does not mutate the saved plan.
+It should not mean:
 
-Current mode selection is heuristic:
-
-- major hub routes bias toward flight
-- hill-station routes bias toward train
-- otherwise default toward drive
-
-### Narrator
-
-File: `Backend/src/runtime/subagents.ts`
-
-`answerConversationally()` creates the assistant prose. `buildResponseBlocks()` deterministically turns the narrative, planning context, and plan/catalog state into shared structured blocks.
-
-Common emitted blocks include:
-
-- `trip_intro`
-- `lead`
-- `capabilities_overview`
-- `featured_poi`
-- `poi_story_list`
-- `place_card_row`
-- `itinerary_template`
-- `stay_recommendation_list`
-- `assistant_prompt_chips`
-- `worker_progress`
-- `date_advisory`
-- `event_window_summary`
-
-### Session Commit
-
-Files:
-
-- `Backend/src/runtime/subagents.ts`
-- `Backend/src/runtime/turn-runner.ts`
-
-At commit time, the runtime:
-
-- persists the assistant message
-- updates session memory
-- sets `planningState.status = "ready"` and `stage = "ready"`
-- persists the final session snapshot
-- emits `turn.completed`
-
-On failure it preserves the last accepted trip state, marks planning unavailable, commits a fallback assistant message, and emits `turn.failed`.
-
-## Trace model
-
-The turn runner emits traces through `trace.updated` SSE events. Current agent labels include:
-
-- `lead`
-- `intent-slot-resolver`
-- `discovery-search-agent`
-- `stay-search-agent`
-- `date-context-agent`
-- `events-culture-agent`
-- `itinerary-planner`
-- `feasibility-validator`
-- `feasibility-critic`
-- `transit-advisor`
-- `narrator`
-
-The frontend consumes these traces as live planning feedback.
-
-## Deterministic mutation path
-
-Not all trip updates require a full conversational turn. `PlanMutationService` handles direct mutations such as:
-
-- add/remove POI
-- move activity
-- regenerate day
-- rebalance trip
-- update overview
-
-`update_overview` only regenerates the itinerary when the destination structure or trip length changes. Pure metadata/date shifts reuse the current plan and rerun logistics.
+- uncontrolled freeform state mutation
+- parallel business logic paths
+- hidden non-canonical frontend-only state
+- inventing route/POI truth outside the catalog

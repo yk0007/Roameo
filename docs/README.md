@@ -11,12 +11,15 @@ Recommended reading order:
 5. [FRONTEND_SURFACE.md](/Users/yk0007/MyRepos/Roameo/docs/FRONTEND_SURFACE.md)
 6. [OPERATIONS_AND_TESTING.md](/Users/yk0007/MyRepos/Roameo/docs/OPERATIONS_AND_TESTING.md)
 
-Quick reference:
+What changed recently in the canonical system:
 
-- [AGENTS.md](/Users/yk0007/MyRepos/Roameo/docs/AGENTS.md)
+- semantic router-first travel understanding
+- explicit agent tool surface for session and itinerary mutations
+- active-trip context invalidation for real new-trip requests
+- merged POI catalogs across discovery turns
+- right-panel remounting on canonical plan changes
+- map projection split between itinerary-linked routes and broader discovery POIs
 
-Supporting notes:
+Supporting note:
 
 - [PERFORMANCE_OPTIMIZATIONS.md](/Users/yk0007/MyRepos/Roameo/PERFORMANCE_OPTIMIZATIONS.md)
-
-Older compatibility notes that duplicated canonical docs were removed so this folder stays focused on the live architecture.

@@ -11,6 +11,7 @@ interface RightPanelProps {
   onViewChange: (view: "map" | "itinerary") => void
   trip: any
   itinerary?: Itinerary
+  planVersionKey?: string
   mapData?: { pois: any[]; routes: Array<{ from: [number, number]; to: [number, number]; polyline?: string }> }
   onClose: () => void
   planningState?: SessionPlanningState
@@ -27,6 +28,7 @@ export function RightPanel({
   onViewChange,
   trip,
   itinerary,
+  planVersionKey = "no-plan",
   mapData,
   onClose,
   planningState,
@@ -100,6 +102,7 @@ export function RightPanel({
       <div className="relative h-full flex-1 overflow-hidden rounded-l-[24px] bg-transparent">
         <div className="h-full">
           <MapView
+            key={`map-${planVersionKey}`}
             mapData={mapData || { pois: [], routes: [] }}
             savedIds={savedIds}
             itinerary={itinerary}
@@ -115,6 +118,7 @@ export function RightPanel({
         {activeView === "itinerary" && (
           <div className="absolute inset-0 z-40 overflow-y-auto bg-white/40 backdrop-blur-xl border-l border-white/20">
             <ItineraryPanel 
+              key={`itinerary-${planVersionKey}`}
               itinerary={itinerary} 
               trip={trip}
               savedIds={savedIds}

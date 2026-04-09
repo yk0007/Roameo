@@ -30,6 +30,7 @@ The active routes cover:
 - session CRUD
 - message submission
 - plan mutations
+- discovery loading
 - SSE stream subscription
 - saved POI updates
 - user settings
@@ -42,16 +43,16 @@ The active routes cover:
 Per turn it:
 
 1. persists the user message
-2. resolves provider settings and credentials
-3. marks planning state as running
-4. emits trace events
-5. runs the deterministic planning pipeline
+2. marks planning state as running
+3. runs fast-path conversation when appropriate
+4. resolves turn meaning with the semantic router
+5. executes discovery / enrichment / planning tools as needed
 6. persists plan and catalog updates when applicable
 7. persists the assistant message
-8. updates memory and final planning state
+8. updates memory and follow-up context
 9. emits final snapshot and turn events
 
-### Business logic
+### Runtime behavior layer
 
 [Backend/src/runtime/subagents.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/runtime/subagents.ts) is the main behavior layer for:
 
@@ -65,6 +66,22 @@ Per turn it:
 - narrative generation
 - structured response block assembly
 - memory updates
+- follow-up context derivation
+
+### Internal tool layer
+
+[Backend/src/services/agent-tool-service.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/services/agent-tool-service.ts) is the first-class internal tool surface for autonomous agents.
+
+Current canonical internal tools:
+
+- read session snapshot
+- update trip header / overview
+- edit itinerary
+- update session memory
+- reset active trip context
+- save or clear follow-up context
+
+### Direct integrations
 
 [Backend/src/services/travel-tools.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/services/travel-tools.ts) contains the direct external integrations for:
 
@@ -90,7 +107,11 @@ The canonical persisted model includes:
 - `user_provider_settings`
 - `user_provider_credentials`
 
-If Supabase is not configured, the backend falls back to in-memory storage for local development.
+Important current behavior:
+
+- POI catalogs are merged across discovery turns instead of replaced
+- plan saves also preserve the broader session catalog
+- if Supabase is not configured, the backend falls back to in-memory storage for local development
 
 ### Plan mutations
 
@@ -105,11 +126,7 @@ Supported mutations:
 - `rebalance_trip`
 - `update_overview`
 
-`update_overview` is the path used by the header editors. It:
-
-- updates title, origin, dates, travelers, and budget
-- preserves the current itinerary when only metadata/date shifts change
-- regenerates the plan when destinations or total day count materially change
+`update_overview` is the path used by the header editors.
 
 ## Canonical frontend path
 
@@ -135,8 +152,6 @@ Supporting files:
 
 The product uses SSE over `GET /api/sessions/:sessionId/stream`.
 
-The frontend helper is still named `connectWs()`, but the implementation in [roameo-frontend/lib/ws.ts](/Users/yk0007/MyRepos/Roameo/roameo-frontend/lib/ws.ts) uses `fetch()` against the SSE endpoint, not a WebSocket connection.
-
 Current stream events:
 
 - `session.snapshot`
@@ -148,38 +163,35 @@ Current stream events:
 - `turn.completed`
 - `turn.failed`
 
-## Shared contracts
+## Current context invariants
 
-The contracts package is the only authoritative schema source for:
+The canonical runtime now enforces:
 
-- providers and run modes
-- preferences and provider settings
-- planning state and date context
-- POIs and POI catalogs
-- plan snapshots
-- conversation messages
-- structured response blocks
-- traces
-- stream events
-- API payloads
+- explicit new-trip requests replace stale active trip context
+- multi-city trips preserve the active destination set
+- explicit new discovery asks override stale follow-up branches
+- itinerary tab content is driven only by the canonical plan
+- itinerary map routes are driven only by itinerary-linked POIs
+- map markers may still include other discovered canonical POIs without turning them into itinerary routes
 
-Avoid mirrored frontend/backend copies for those business concepts.
+## Map and itinerary projection rules
 
-## Map and route rendering
+Current frontend projection rules:
 
-The canonical map component is [roameo-frontend/components/map-view.tsx](/Users/yk0007/MyRepos/Roameo/roameo-frontend/components/map-view.tsx).
+- itinerary tab shows itinerary-derived data only
+- map routes and numbered markers come from itinerary-linked POIs only
+- the broader canonical POI catalog can still appear on the map as non-itinerary markers
+- right-panel map and itinerary views remount on canonical plan-version changes so stale internal state is discarded
 
-Important implementation note: the current map still renders routes through the Google Maps JavaScript Directions APIs (`DirectionsService` and `DirectionsRenderer`). Do not document a Routes API migration as completed until the code actually changes.
+## Provider settings and model routing
 
-## Provider settings and BYOK
-
-Provider resolution is handled in [Backend/src/services/provider-service.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/services/provider-service.ts).
+Provider resolution lives in [Backend/src/services/provider-service.ts](/Users/yk0007/MyRepos/Roameo/Backend/src/services/provider-service.ts).
 
 Current guarantees:
 
 - Gemini and OpenAI are first-class providers
-- each provider has `fast`, `balanced`, and `deep` model picks
-- session settings and user defaults are canonical backend state
+- each provider keeps `fast`, `balanced`, and `deep` defaults
+- Gemini task-specific model lists are available for router and narrative work
 - users can store encrypted provider keys
 - run-time provider resolution chooses platform or BYOK credentials per request
 
@@ -190,4 +202,4 @@ The repository still contains older code under paths such as:
 - `Backend/src/agents/*`
 - `Backend/src/graph/*`
 
-These are not the canonical product path. New behavior should land in the session runtime, direct integrations, shared contracts, and snapshot-driven frontend.
+These are not the canonical extension path. New behavior should land in the session runtime, internal tool layer, direct integrations, shared contracts, and snapshot-driven frontend.

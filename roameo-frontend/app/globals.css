@@ -38,6 +38,11 @@
     --sidebar-border: #eadac7;
     --sidebar-ring: rgba(187, 106, 28, 0.22);
     --font-inter: "Inter";
+    --motion-duration-fast: 220ms;
+    --motion-duration-base: 420ms;
+    --motion-duration-slow: 680ms;
+    --motion-ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+    --motion-ease-swift: cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   .dark {
@@ -79,6 +84,11 @@
     --sidebar-ring: rgba(8, 145, 178, 0.5);
     /* Updated font variables to use Inter instead of Source Sans Pro */
     --font-inter: "Inter";
+    --motion-duration-fast: 220ms;
+    --motion-duration-base: 420ms;
+    --motion-duration-slow: 680ms;
+    --motion-ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+    --motion-ease-swift: cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   @theme inline {
@@ -132,6 +142,8 @@
     background-image:
       radial-gradient(circle at top left, rgba(255, 240, 223, 0.9), transparent 28%),
       linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0));
+    min-height: 100vh;
+    overflow-x: hidden;
   }
 
   /* Custom font overrides for specific classes */
@@ -160,6 +172,27 @@
   /* Added smooth scrolling behavior globally */
   html {
     scroll-behavior: smooth;
+  }
+
+  a,
+  button,
+  input,
+  textarea,
+  select,
+  [role="button"] {
+    transition:
+      transform var(--motion-duration-fast) var(--motion-ease-swift),
+      opacity var(--motion-duration-fast) var(--motion-ease-swift),
+      background-color var(--motion-duration-base) var(--motion-ease-smooth),
+      border-color var(--motion-duration-base) var(--motion-ease-smooth),
+      color var(--motion-duration-base) var(--motion-ease-smooth),
+      box-shadow var(--motion-duration-base) var(--motion-ease-smooth);
+  }
+
+  a:hover,
+  button:hover,
+  [role="button"]:hover {
+    transform: translateY(-1px);
   }
 
   ::selection {
@@ -291,5 +324,26 @@
   @keyframes shimmer {
     0% { background-position: 200% center; }
     100% { background-position: -200% center; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+
+    a:hover,
+    button:hover,
+    [role="button"]:hover {
+      transform: none;
+    }
   }
 }

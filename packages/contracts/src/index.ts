@@ -539,26 +539,6 @@ export const conversationMessageSchema = z.object({
 });
 export type ConversationMessage = z.infer<typeof conversationMessageSchema>;
 
-export const agentTraceStatusSchema = z.enum([
-  "queued",
-  "running",
-  "completed",
-  "failed"
-]);
-export type AgentTraceStatus = z.infer<typeof agentTraceStatusSchema>;
-
-export const agentTraceEventSchema = z.object({
-  id: z.string(),
-  sessionId: z.string(),
-  turnId: z.string(),
-  agent: z.string(),
-  status: agentTraceStatusSchema,
-  label: z.string(),
-  detail: z.string().optional(),
-  createdAt: z.string()
-});
-export type AgentTraceEvent = z.infer<typeof agentTraceEventSchema>;
-
 export const sessionSnapshotSchema = z.object({
   id: z.string(),
   userId: z.string().optional(),
@@ -569,7 +549,6 @@ export const sessionSnapshotSchema = z.object({
   poiCatalog: poiCatalogSchema.default({ version: 1, items: {} }),
   messages: z.array(conversationMessageSchema).default([]),
   savedPoiIds: z.array(z.string()).default([]),
-  traces: z.array(agentTraceEventSchema).default([]),
   createdAt: z.string(),
   updatedAt: z.string()
 });
@@ -629,10 +608,6 @@ export const streamEventSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("message.committed"),
     data: conversationMessageSchema
-  }),
-  z.object({
-    type: z.literal("trace.updated"),
-    data: agentTraceEventSchema
   }),
   z.object({
     type: z.literal("plan.updated"),

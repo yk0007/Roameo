@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { DashboardTripCard, type DashboardTripSummary } from "@/components/dashboard-trip-card"
+import { EntranceMotion, SectionReveal } from "@/components/ui/site-motion"
 import { ArrowRight, User, LogOut, Github, Heart, ExternalLink } from "lucide-react"
 import { DotDistortionShaderBg } from "@/components/ui/dot-distortion-shader-bg"
 import { BUDGET_OPTIONS } from "@/lib/budget-options"
@@ -260,7 +261,7 @@ export default function Dashboard() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f2f3f4] px-6">
-        <div className="flex items-center gap-4 rounded-full bg-white px-6 py-4 shadow-[0_18px_42px_rgba(15,23,42,0.08)]">
+        <EntranceMotion className="flex items-center gap-4 rounded-full bg-white px-6 py-4 shadow-[0_18px_42px_rgba(15,23,42,0.08)]">
           <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-black">
             <div className="h-2.5 w-2.5 rounded-full bg-white"></div>
           </div>
@@ -273,7 +274,7 @@ export default function Dashboard() {
             <div className="h-2 w-2 rounded-full bg-black/55 animate-pulse [animation-delay:120ms]"></div>
             <div className="h-2 w-2 rounded-full bg-black/25 animate-pulse [animation-delay:240ms]"></div>
           </div>
-        </div>
+        </EntranceMotion>
 
         <style jsx>{`
           @keyframes fade-in {
@@ -367,8 +368,9 @@ export default function Dashboard() {
         ) : null}
       </AnimatePresence>
 
-      <header className="px-4 pb-8 pt-8 sm:px-6 lg:px-8">
-        <div className="mx-auto flex max-w-6xl items-center justify-between">
+      <EntranceMotion delay={0.04} disabled={isFromChat}>
+        <header className="px-4 pb-8 pt-8 sm:px-6 lg:px-8">
+          <div className="mx-auto flex max-w-6xl items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-black">
               <div className="h-2 w-2 rounded-full bg-white"></div>
@@ -434,10 +436,12 @@ export default function Dashboard() {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        </div>
-      </header>
+          </div>
+        </header>
+      </EntranceMotion>
 
-      <section className="relative px-4 pb-[230px] pt-2 sm:px-6 lg:px-8">
+      <SectionReveal delay={0.08} disabled={isFromChat}>
+        <section className="relative px-4 pb-[230px] pt-2 sm:px-6 lg:px-8">
         <div 
           className="relative mx-auto h-[400px] max-w-6xl overflow-hidden border-[10px] border-white bg-cover bg-center shadow-[0_28px_80px_rgba(15,23,42,0.16)]"
           style={{
@@ -665,17 +669,19 @@ export default function Dashboard() {
             </Button>
           </div>
         </motion.div>
-      </section>
+        </section>
+      </SectionReveal>
 
       {/* Your Trips Section */}
-      <section className={`px-4 pb-16 pt-8 sm:px-6 lg:px-8 ${
-        isFromChat 
-          ? 'translate-y-0 opacity-100'
-          : `transition-all duration-1000 transform ${
-              tripsVisible ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0'
-            }`
-      }`}>
-        <div className="mx-auto max-w-6xl">
+      <SectionReveal disabled={isFromChat}>
+        <section className={`px-4 pb-16 pt-8 sm:px-6 lg:px-8 ${
+          isFromChat 
+            ? 'translate-y-0 opacity-100'
+            : `transition-all duration-1000 transform ${
+                tripsVisible ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0'
+              }`
+        }`}>
+          <div className="mx-auto max-w-6xl">
         <h2 className="mb-10 text-2xl font-semibold tracking-[-0.04em] text-gray-900">
           Your Trips
         </h2>
@@ -712,8 +718,9 @@ export default function Dashboard() {
             </Button>
           </div>
         )}
-        </div>
-      </section>
+          </div>
+        </section>
+      </SectionReveal>
 
       {/* Footer */}
       {/* Font imports and custom CSS for animations */}
